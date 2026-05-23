@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DELPA Gestión PRO — Sistema comercial para tiendas de ropa</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background: #0d0d0d; color: #fff; }
+  header { background: #0d0d0d; border-bottom: 2px solid #e91e8c; padding: 20px 40px; display: flex; align-items: center; gap: 20px; }
+  header h1 { font-size: 28px; color: #fff; }
+  header span { color: #e91e8c; font-size: 13px; }
+  .hero { text-align: center; padding: 80px 40px; background: linear-gradient(180deg, #0d0d0d 0%, #1a0a12 100%); border-bottom: 1px solid #333; }
+  .hero h2 { font-size: 42px; margin-bottom: 20px; }
+  .hero h2 span { color: #e91e8c; }
+  .hero p { font-size: 18px; color: #aaa; max-width: 600px; margin: 0 auto 30px; line-height: 1.7; }
+  .badge { display: inline-block; background: #e91e8c; color: #fff; padding: 8px 24px; border-radius: 30px; font-size: 14px; font-weight: bold; }
+  .features { padding: 60px 40px; max-width: 1000px; margin: 0 auto; }
+  .features h3 { font-size: 28px; text-align: center; margin-bottom: 40px; color: #e91e8c; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .card { background: #1a1a1a; border: 1px solid #333; border-radius: 16px; padding: 24px; }
+  .card h4 { color: #e91e8c; margin-bottom: 10px; font-size: 16px; }
+  .card p { color: #aaa; font-size: 14px; line-height: 1.6; }
+  .privacy { background: #111; border-top: 1px solid #333; padding: 60px 40px; max-width: 800px; margin: 0 auto; }
+  .privacy h3 { font-size: 24px; color: #e91e8c; margin-bottom: 20px; }
+  .privacy h4 { font-size: 16px; color: #fff; margin: 20px 0 8px; }
+  .privacy p { color: #aaa; font-size: 14px; line-height: 1.7; margin-bottom: 10px; }
+  footer { text-align: center; padding: 30px; border-top: 1px solid #333; color: #555; font-size: 13px; }
+  footer a { color: #e91e8c; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>DELPA Gestión PRO</h1>
+    <span>Sistema comercial para tiendas de indumentaria</span>
+  </div>
+</header>
+
+<section class="hero">
+  <h2>El sistema de gestión más <span>completo</span> para tu local</h2>
+  <p>Stock por talle, ventas, facturación AFIP, caja, clientes, proveedores y backup automático en Google Drive. Todo en un solo programa para Windows.</p>
+  <span class="badge">Versión 1.3 — Windows 10/11</span>
+</section>
+
+<section class="features">
+  <h3>Módulos incluidos</h3>
+  <div class="grid">
+    <div class="card"><h4>Stock por talle y color</h4><p>Control de inventario por talle (34 al 50, XS-XXL o personalizado), con alertas de stock mínimo y fotos de productos.</p></div>
+    <div class="card"><h4>Ventas y facturación AFIP</h4><p>Ventas rápidas con lector de código de barras. Facturación electrónica oficial con CAE automático conectado a ARCA/AFIP.</p></div>
+    <div class="card"><h4>Caja diaria</h4><p>Apertura y cierre de caja con desglose por medio de pago. Informe completo enviado por email automáticamente al cerrar.</p></div>
+    <div class="card"><h4>Clientes y cuentas corrientes</h4><p>Base de datos de clientes con historial de compras, cuentas corrientes, cumpleaños y ranking de mejores clientas.</p></div>
+    <div class="card"><h4>Proveedores y compras</h4><p>Gestión de proveedores con historial de compras, deuda pendiente y pagos parciales.</p></div>
+    <div class="card"><h4>Backup en Google Drive</h4><p>Copia de seguridad automática al cerrar el programa. Restauración con un click desde cualquier PC.</p></div>
+    <div class="card"><h4>Reportes avanzados</h4><p>Ventas por período, ranking de productos, rentabilidad por artículo, desglose por medio de pago. Exportable a CSV.</p></div>
+    <div class="card"><h4>Sucursales</h4><p>Gestión de múltiples locales con stock independiente y transferencias entre sucursales.</p></div>
+  </div>
+</section>
+
+<div style="border-top: 1px solid #333;"></div>
+
+<section class="privacy" id="privacidad">
+  <h3>Política de Privacidad</h3>
+  <p>Última actualización: 23 de mayo de 2026</p>
+
+  <h4>1. Información general</h4>
+  <p>DELPA Gestión PRO es una aplicación de escritorio para Windows destinada a la gestión comercial de tiendas de indumentaria. Esta política describe cómo la aplicación utiliza los servicios de Google.</p>
+
+  <h4>2. Uso de Google Drive</h4>
+  <p>DELPA Gestión PRO solicita acceso a Google Drive únicamente para realizar copias de seguridad automáticas de la base de datos local del usuario. Los archivos se guardan en una carpeta llamada "DELPA-Backup" dentro del Google Drive del propio usuario. La aplicación no accede a ningún otro archivo del usuario, no comparte datos con terceros y no transmite información a servidores externos.</p>
+
+  <h4>3. Datos que se almacenan</h4>
+  <p>Todos los datos comerciales (productos, ventas, clientes, proveedores) se almacenan localmente en la PC del usuario. DELPA Gestión PRO no recopila ni transmite datos personales a ningún servidor externo.</p>
+
+  <h4>4. Permisos de Google</h4>
+  <p>La aplicación solicita únicamente el permiso necesario para crear y leer archivos en Google Drive del usuario (scope: drive.file). No solicita acceso a Gmail, Calendario ni ningún otro servicio de Google.</p>
+
+  <h4>5. Seguridad</h4>
+  <p>Los tokens de autenticación de Google se almacenan de forma segura en el dispositivo local del usuario y no se comparten con terceros.</p>
+
+  <h4>6. Contacto</h4>
+  <p>Para consultas sobre esta política de privacidad: <a href="mailto:delpa555@gmail.com">delpa555@gmail.com</a></p>
+</section>
+
+<section class="privacy" id="condiciones">
+  <h3>Condiciones del Servicio</h3>
+  <p>Última actualización: 23 de mayo de 2026</p>
+
+  <h4>1. Aceptación</h4>
+  <p>Al instalar y usar DELPA Gestión PRO, el usuario acepta estas condiciones de uso.</p>
+
+  <h4>2. Licencia de uso</h4>
+  <p>El usuario recibe una licencia personal, no transferible, para instalar y usar el software en sus equipos. Queda prohibida la redistribución, modificación o ingeniería inversa del software sin autorización expresa.</p>
+
+  <h4>3. Responsabilidad</h4>
+  <p>El usuario es responsable del uso correcto del sistema, incluyendo la configuración de AFIP y la veracidad de los datos ingresados. El desarrollador no se responsabiliza por errores derivados de un uso incorrecto.</p>
+
+  <h4>4. Contacto</h4>
+  <p>Para consultas: <a href="mailto:delpa555@gmail.com">delpa555@gmail.com</a></p>
+</section>
+
+<footer>
+  <p>© 2026 DELPA Gestión PRO — <a href="#privacidad">Política de Privacidad</a> · <a href="#condiciones">Condiciones del Servicio</a> · <a href="mailto:delpa555@gmail.com">delpa555@gmail.com</a></p>
+</footer>
+
+</body>
+</html>
