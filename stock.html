@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de Stock — DELPA</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#070707;--surface:#111;--card:#161616;--border:#222;--accent:#00c853;--text:#e4e4e7;--muted:#71717a;--danger:#ef4444}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100dvh}
+
+  /* ── PIN screen ── */
+  #pin-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:24px;gap:24px}
+  #pin-screen h1{font-size:22px;font-weight:700;letter-spacing:-0.3px}
+  #pin-screen p{font-size:13px;color:var(--muted)}
+  #pin-dots{display:flex;gap:12px;margin:8px 0}
+  .pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);transition:background .15s,border-color .15s}
+  .pin-dot.filled{background:var(--accent);border-color:var(--accent)}
+  #pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:220px}
+  .pad-btn{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:20px;font-weight:600;padding:18px 0;border-radius:12px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .1s,transform .08s}
+  .pad-btn:active{background:#222;transform:scale(0.95)}
+  .pad-btn.delete{font-size:16px;color:var(--muted)}
+  #pin-error{color:var(--danger);font-size:13px;min-height:18px;text-align:center}
+  #stored-url-section{display:flex;flex-direction:column;gap:8px;width:100%;max-width:320px}
+  #stored-url-section label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  #stock-url-input{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:12px;padding:10px 12px;border-radius:10px;width:100%;font-family:monospace}
+  #save-url-btn{background:var(--accent);color:#000;font-size:13px;font-weight:600;padding:10px 0;border-radius:10px;border:none;cursor:pointer;width:100%}
+
+  /* ── App screen ── */
+  #app-screen{display:none;flex-direction:column;min-height:100dvh}
+  .app-header{padding:16px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+  .app-header h2{font-size:16px;font-weight:700}
+  .app-header small{font-size:11px;color:var(--muted);display:block;margin-top:2px}
+  .search-bar{padding:12px 16px;background:var(--bg)}
+  .search-bar input{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);font-size:15px;padding:10px 14px;border-radius:12px;outline:none}
+  .search-bar input:focus{border-color:var(--accent)}
+  #category-filter{display:flex;gap:6px;padding:0 16px 10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #category-filter::-webkit-scrollbar{display:none}
+  .cat-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:12px;padding:6px 14px;border-radius:20px;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .cat-btn.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:600}
+  #product-list{padding:8px 16px 32px;display:flex;flex-direction:column;gap:10px;flex:1}
+  .product-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .product-header{display:flex;align-items:center;gap:12px;padding:12px}
+  .product-thumb{width:52px;height:52px;border-radius:8px;object-fit:cover;background:var(--surface);flex-shrink:0}
+  .product-thumb.no-img{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--border)}
+  .product-info{flex:1;min-width:0}
+  .product-name{font-size:14px;font-weight:600;line-height:1.3}
+  .product-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .product-price{font-size:16px;font-weight:700;color:var(--accent);text-align:right;white-space:nowrap}
+  .sizes-row{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}
+  .size-badge{font-size:12px;font-weight:600;padding:4px 10px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text)}
+  .size-badge.low{border-color:#92400e;color:#fbbf24;background:#451a03/30}
+  .size-badge.out{border-color:#333;color:var(--muted);text-decoration:line-through;opacity:.5}
+  .size-stock{font-size:10px;color:var(--muted);margin-left:2px;font-weight:400}
+  #empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+  #loading-state{text-align:center;padding:60px 20px;color:var(--muted)}
+  .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .logout-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:6px}
+  .logout-btn:hover{color:var(--danger)}
+  .header-row{display:flex;align-items:center;justify-content:space-between}
+  .updated-tag{font-size:10px;color:var(--muted);margin-top:1px}
+</style>
+</head>
+<body>
+
+<!-- ── PIN screen ── -->
+<div id="pin-screen">
+  <div style="text-align:center">
+    <div style="font-size:36px;margin-bottom:8px">🏪</div>
+    <h1>Consulta de Stock</h1>
+    <p>Ingresá el PIN para continuar</p>
+  </div>
+
+  <div id="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+
+  <div id="pin-pad">
+    <button class="pad-btn" onclick="padPress('1')">1</button>
+    <button class="pad-btn" onclick="padPress('2')">2</button>
+    <button class="pad-btn" onclick="padPress('3')">3</button>
+    <button class="pad-btn" onclick="padPress('4')">4</button>
+    <button class="pad-btn" onclick="padPress('5')">5</button>
+    <button class="pad-btn" onclick="padPress('6')">6</button>
+    <button class="pad-btn" onclick="padPress('7')">7</button>
+    <button class="pad-btn" onclick="padPress('8')">8</button>
+    <button class="pad-btn" onclick="padPress('9')">9</button>
+    <button class="pad-btn" onclick="padPress('')" style="visibility:hidden"></button>
+    <button class="pad-btn" onclick="padPress('0')">0</button>
+    <button class="pad-btn delete" onclick="padDelete()">⌫</button>
+  </div>
+
+  <p id="pin-error"></p>
+
+  <!-- URL config (shown only if not stored yet) -->
+  <div id="stored-url-section">
+    <label>URL del stock (Drive)</label>
+    <input id="stock-url-input" type="url" placeholder="https://drive.google.com/uc?export=download&id=..." />
+    <button id="save-url-btn" onclick="saveUrl()">Guardar URL</button>
+    <p style="font-size:11px;color:var(--muted);text-align:center">Esta URL la encontrás en Configuración → Pagos & Drive</p>
+  </div>
+</div>
+
+<!-- ── App screen ── -->
+<div id="app-screen">
+  <div class="app-header">
+    <div class="header-row">
+      <div>
+        <h2>Stock disponible</h2>
+        <div class="updated-tag" id="updated-label">—</div>
+      </div>
+      <button class="logout-btn" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="search-bar">
+    <input type="search" id="search-input" placeholder="Buscar producto, marca, color..." oninput="renderList()" />
+  </div>
+
+  <div id="category-filter"></div>
+
+  <div id="product-list">
+    <div id="loading-state"><div class="spinner"></div>Cargando stock...</div>
+    <div id="empty-state" style="display:none">Sin resultados</div>
+  </div>
+</div>
+
+<script>
+let allProducts = []
+let activeCat = ''
+let pinInput = ''
+let correctPin = ''
+let stockData = null
+
+const LS_URL_KEY = 'delpa_stock_url'
+const LS_PIN_KEY = 'delpa_stock_pin_session'
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+;(function init() {
+  const stored = localStorage.getItem(LS_URL_KEY)
+  if (stored) {
+    document.getElementById('stock-url-input').value = stored
+    document.getElementById('stored-url-section').style.display = 'flex'
+  }
+  // Check if we have a session pin
+  const session = sessionStorage.getItem(LS_PIN_KEY)
+  if (session) {
+    correctPin = session
+    showApp()
+    return
+  }
+})()
+
+// ── URL persistence ──────────────────────────────────────────────────────────
+function saveUrl() {
+  const url = document.getElementById('stock-url-input').value.trim()
+  if (!url) return alert('Ingresá la URL')
+  localStorage.setItem(LS_URL_KEY, url)
+  alert('URL guardada')
+}
+
+// ── PIN pad ───────────────────────────────────────────────────────────────────
+function padPress(d) {
+  if (d === '' || pinInput.length >= 4) return
+  pinInput += d
+  updateDots()
+  if (pinInput.length === 4) setTimeout(checkPin, 120)
+}
+
+function padDelete() {
+  pinInput = pinInput.slice(0, -1)
+  updateDots()
+  document.getElementById('pin-error').textContent = ''
+}
+
+function updateDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < pinInput.length)
+  }
+}
+
+async function checkPin() {
+  // We need to load the JSON first to validate the PIN
+  const url = localStorage.getItem(LS_URL_KEY) || document.getElementById('stock-url-input').value.trim()
+  if (!url) {
+    document.getElementById('pin-error').textContent = 'Guardá la URL del stock primero'
+    pinInput = ''; updateDots(); return
+  }
+
+  try {
+    // Try fetching with a cache-busting param
+    const resp = await fetch(url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now(), {
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    stockData = await resp.json()
+    if (stockData.pin && stockData.pin !== pinInput) {
+      document.getElementById('pin-error').textContent = 'PIN incorrecto'
+      pinInput = ''; updateDots(); return
+    }
+    correctPin = pinInput
+    sessionStorage.setItem(LS_PIN_KEY, correctPin)
+    showApp()
+  } catch (e) {
+    document.getElementById('pin-error').textContent = 'Error al cargar: ' + e.message
+    pinInput = ''; updateDots()
+  }
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function showApp() {
+  document.getElementById('pin-screen').style.display = 'none'
+  document.getElementById('app-screen').style.display = 'flex'
+  if (stockData) {
+    loadStock(stockData)
+  } else {
+    fetchStock()
+  }
+}
+
+async function fetchStock() {
+  const url = localStorage.getItem(LS_URL_KEY) || ''
+  if (!url) { logout(); return }
+  try {
+    const resp = await fetch(url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now())
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    stockData = await resp.json()
+    loadStock(stockData)
+  } catch (e) {
+    document.getElementById('loading-state').innerHTML = '<p style="color:var(--danger)">Error: ' + e.message + '</p>'
+  }
+}
+
+function loadStock(data) {
+  allProducts = data.products || []
+
+  // Updated label
+  if (data.updatedAt) {
+    const d = new Date(data.updatedAt)
+    document.getElementById('updated-label').textContent = 'Actualizado: ' + d.toLocaleString('es-AR', { hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })
+  }
+
+  // Build categories
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))]
+  const cf = document.getElementById('category-filter')
+  cf.innerHTML = ''
+  const allBtn = document.createElement('button')
+  allBtn.className = 'cat-btn active'
+  allBtn.textContent = 'Todos'
+  allBtn.onclick = () => { activeCat = ''; document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active')); allBtn.classList.add('active'); renderList() }
+  cf.appendChild(allBtn)
+  cats.forEach(cat => {
+    const btn = document.createElement('button')
+    btn.className = 'cat-btn'
+    btn.textContent = cat
+    btn.onclick = () => { activeCat = cat; document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); renderList() }
+    cf.appendChild(btn)
+  })
+
+  document.getElementById('loading-state').style.display = 'none'
+  renderList()
+}
+
+function renderList() {
+  const q = (document.getElementById('search-input')?.value || '').toLowerCase()
+  const list = document.getElementById('product-list')
+
+  let filtered = allProducts
+  if (activeCat) filtered = filtered.filter(p => p.category === activeCat)
+  if (q) filtered = filtered.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.brand || '').toLowerCase().includes(q) ||
+    (p.color || '').toLowerCase().includes(q) ||
+    (p.category || '').toLowerCase().includes(q)
+  )
+
+  const empty = document.getElementById('empty-state')
+  const loading = document.getElementById('loading-state')
+
+  // Remove existing cards
+  list.querySelectorAll('.product-card').forEach(el => el.remove())
+
+  if (filtered.length === 0) {
+    empty.style.display = 'block'
+    loading.style.display = 'none'
+    return
+  }
+  empty.style.display = 'none'
+  loading.style.display = 'none'
+
+  filtered.forEach(p => {
+    const card = document.createElement('div')
+    card.className = 'product-card'
+
+    const totalStock = p.sizes.reduce((s, sz) => s + (sz.stock || 0), 0)
+
+    // Header
+    const hdr = document.createElement('div')
+    hdr.className = 'product-header'
+
+    const thumb = document.createElement(p.image ? 'img' : 'div')
+    thumb.className = 'product-thumb' + (p.image ? '' : ' no-img')
+    if (p.image) { thumb.src = p.image; thumb.alt = p.name }
+    else thumb.textContent = '📦'
+
+    const info = document.createElement('div')
+    info.className = 'product-info'
+    info.innerHTML = `<div class="product-name">${escHtml(p.name)}</div>
+      <div class="product-sub">${[p.brand, p.color].filter(Boolean).join(' · ') || '&nbsp;'}</div>
+      <div class="product-sub" style="margin-top:2px;color:var(--muted)">Stock total: ${totalStock}</div>`
+
+    const price = document.createElement('div')
+    price.className = 'product-price'
+    price.textContent = '$' + Number(p.price).toLocaleString('es-AR')
+
+    hdr.appendChild(thumb)
+    hdr.appendChild(info)
+    hdr.appendChild(price)
+    card.appendChild(hdr)
+
+    // Sizes
+    if (p.sizes.length > 0) {
+      const row = document.createElement('div')
+      row.className = 'sizes-row'
+      p.sizes.forEach(sz => {
+        const badge = document.createElement('span')
+        const stock = sz.stock || 0
+        badge.className = 'size-badge' + (stock === 0 ? ' out' : stock <= 2 ? ' low' : '')
+        badge.innerHTML = escHtml(sz.size) + `<span class="size-stock">(${stock})</span>`
+        row.appendChild(badge)
+      })
+      card.appendChild(row)
+    }
+
+    list.appendChild(card)
+  })
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function logout() {
+  sessionStorage.removeItem(LS_PIN_KEY)
+  location.reload()
+}
+</script>
+</body>
+</html>
