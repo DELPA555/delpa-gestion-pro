@@ -39,6 +39,7 @@ npm-debug.log*
 
 # Credenciales y certificados sensibles
 main/credentials*.json
+main/ipc/gd-credentials.js
 main/*.crt
 main/*.key
 main/*.pem

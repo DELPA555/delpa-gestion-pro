@@ -7,8 +7,15 @@ const http = require('http')
 const zlib = require('zlib')
 const { pipeline } = require('stream/promises')
 
-const CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || ''
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
+let CLIENT_ID = '', CLIENT_SECRET = ''
+try {
+  const creds = require('./gd-credentials')
+  CLIENT_ID     = creds.CLIENT_ID     || ''
+  CLIENT_SECRET = creds.CLIENT_SECRET || ''
+} catch {
+  CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || ''
+  CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
+}
 const REDIRECT_PORT = 42813
 const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}`
 const SCOPES = [
