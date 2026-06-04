@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Minus, Square, X, Maximize2, Cloud, CloudOff, Sun, Moon, ShieldAlert } from 'lucide-react'
+import { Minus, Square, X, Maximize2, Cloud, CloudOff, Sun, Moon, ShieldAlert, ArrowUpCircle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 
 function formatClock() {
@@ -10,11 +11,13 @@ function formatClock() {
 }
 
 export default function TitleBar() {
-  const [maximized, setMaximized] = useState(false)
-  const [clock, setClock] = useState(formatClock())
+  const [maximized,    setMaximized]    = useState(false)
+  const [clock,        setClock]        = useState(formatClock())
   const [businessName, setBusinessName] = useState('DELPA Gestión PRO')
-  const [syncStatus, setSyncStatus] = useState({ connected: null, lastBackupAt: null })
-  const [licenseInfo, setLicenseInfo] = useState(null)
+  const [syncStatus,   setSyncStatus]   = useState({ connected: null, lastBackupAt: null })
+  const [licenseInfo,  setLicenseInfo]  = useState(null)
+  const [updateInfo,   setUpdateInfo]   = useState(null) // { updateAvailable, latestVersion }
+  const navigate = useNavigate()
 
   useEffect(() => {
     api.license.status().then(s => setLicenseInfo(s)).catch(() => {})
@@ -54,13 +57,32 @@ export default function TitleBar() {
     return () => clearInterval(id)
   }, [])
 
+  // Verificar actualizaciones en background (una vez al arrancar)
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.updater.checkManual()
+        if (res?.ok && res.updateAvailable) setUpdateInfo(res)
+      } catch {}
+    }, 12000) // 12s después de arrancar
+    return () => clearTimeout(t)
+  }, [])
+
+  // También escuchar el evento del auto-updater
+  useEffect(() => {
+    const unsub = window.electron.on('updater:status', ({ type, version }) => {
+      if (type === 'available' || type === 'downloading') {
+        setUpdateInfo(prev => prev || { updateAvailable: true, latestVersion: version })
+      }
+    })
+    return unsub
+  }, [])
+
   useEffect(() => {
     loadName()
     loadSync()
     const unsubSettings = window.electron.on('settings:changed', loadName)
-    // On sync:status event, refetch from API to guarantee state is fresh
     const unsubSync = window.electron.on('sync:status', () => { loadSync() })
-    // Poll every 30s so the icon stays accurate without relying solely on push events
     const pollId = setInterval(loadSync, 30_000)
     return () => { unsubSettings(); unsubSync(); clearInterval(pollId) }
   }, [loadName, loadSync])
@@ -150,6 +172,19 @@ export default function TitleBar() {
                 : <Cloud size={13} className="text-zinc-600" />
           }
         </div>
+
+        {/* Botón actualización disponible */}
+        {updateInfo?.updateAvailable && (
+          <button
+            onClick={() => navigate('/configuracion')}
+            title={`Nueva versión v${updateInfo.latestVersion} disponible — click para actualizar`}
+            className="relative w-10 h-9 flex items-center justify-center text-accent hover:bg-accent/10 transition-colors"
+          >
+            <ArrowUpCircle size={14} />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent animate-ping" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent" />
+          </button>
+        )}
 
         <button
           onClick={toggleTheme}

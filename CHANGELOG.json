@@ -1,4 +1,19 @@
 {
+  "v1.1.4": {
+    "fecha": "2026-06-04",
+    "mejoras": [
+      "Fiscal: todos los cálculos de Monotributo/IVA ahora solo usan facturas con CAE real de AFIP",
+      "Libro IVA Ventas: nueva columna con N° de comprobante AFIP y CAE",
+      "Control Monotributo: aclaración visible 'Solo facturas electrónicas con CAE'",
+      "Dashboard Monotributo: muestra cantidad de facturas electrónicas consideradas",
+      "Configuración → Actualizaciones: botón manual para buscar actualizaciones",
+      "Header: punto rosa parpadeante cuando hay nueva versión disponible",
+      "Changelog de la nueva versión se muestra en el panel de actualizaciones"
+    ],
+    "correcciones": [
+      "Fix fiscal: las ventas sin CAE ya no inflan el límite de Monotributo"
+    ]
+  },
   "v1.1.3": {
     "fecha": "2026-06-04",
     "mejoras": [

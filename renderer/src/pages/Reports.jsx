@@ -76,6 +76,11 @@ function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, f
         <div className="py-10 flex justify-center"><div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"/></div>
       ) : fiscalSubTab === 'ventas' && ivaVentas ? (
         <div className="space-y-3">
+          {/* Aclaración CAE */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-accent/5 border border-accent/20 rounded-lg text-xs text-accent/80">
+            <Receipt size={12} className="shrink-0" />
+            Solo se muestran comprobantes con CAE emitido por AFIP ({ivaVentas.ventas.length} facturas electrónicas)
+          </div>
           <div className="grid grid-cols-3 gap-3">
             {[['Neto gravado',ivaVentas.totalNeto,'text-white'],['IVA débito',ivaVentas.totalIva,'text-amber-400'],['Total ventas',ivaVentas.totalTotal,'text-accent']].map(([l,v,c])=>(
               <div key={l} className="bg-card border border-border rounded-xl px-4 py-3">
@@ -93,24 +98,32 @@ function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, f
           </button>
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border bg-surface"
-              style={{ gridTemplateColumns: '1fr 1fr 1fr 2fr 1fr 1fr 1fr' }}>
-              <span>Fecha</span><span>N°</span><span>Tipo</span><span>Cliente</span>
-              <span className="text-right">Neto</span><span className="text-right">IVA</span><span className="text-right">Total</span>
+              style={{ gridTemplateColumns: '80px 80px 60px 1.5fr 0.8fr 0.8fr 0.8fr 1.2fr' }}>
+              <span>Fecha</span><span>N° comp.</span><span>Tipo</span><span>Cliente</span>
+              <span className="text-right">Neto</span><span className="text-right">IVA</span>
+              <span className="text-right">Total</span><span className="text-right">CAE</span>
             </div>
-            <div className="divide-y divide-border max-h-[360px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {ivaVentas.ventas.map((r,i) => (
                 <div key={i} className="row-alt grid items-center px-4 py-2 text-xs"
-                  style={{ gridTemplateColumns: '1fr 1fr 1fr 2fr 1fr 1fr 1fr' }}>
+                  style={{ gridTemplateColumns: '80px 80px 60px 1.5fr 0.8fr 0.8fr 0.8fr 1.2fr' }}>
                   <span className="text-zinc-400">{r.fecha}</span>
-                  <span className="text-zinc-400 font-mono">{r.numero||'—'}</span>
-                  <span className="text-zinc-500">{r.tipo}</span>
+                  <span className="text-zinc-400 font-mono text-[10px]">
+                    {r.pto_venta && r.cbte_nro
+                      ? `${r.pto_venta}-${String(r.cbte_nro).padStart(8,'0')}`
+                      : (r.numero || '—')}
+                  </span>
+                  <span className="text-zinc-500 text-[10px]">{r.tipo}</span>
                   <span className="text-white truncate pr-2">{r.cliente}</span>
                   <span className="text-right tabular-nums text-zinc-300">{formatCurrency(r.neto)}</span>
                   <span className="text-right tabular-nums text-amber-400">{formatCurrency(r.iva)}</span>
                   <span className="text-right tabular-nums text-white font-medium">{formatCurrency(r.total)}</span>
+                  <span className="text-right font-mono text-[9px] text-zinc-500 truncate" title={r.cae}>
+                    {r.cae ? r.cae.slice(-8) : '—'}
+                  </span>
                 </div>
               ))}
-              {!ivaVentas.ventas.length && <div className="py-8 text-center text-zinc-600 text-sm">Sin ventas en el período</div>}
+              {!ivaVentas.ventas.length && <div className="py-8 text-center text-zinc-600 text-sm">Sin facturas electrónicas en el período</div>}
             </div>
           </div>
         </div>
@@ -188,6 +201,13 @@ function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, f
 
       ) : fiscalSubTab === 'monotributo' && mono12m ? (
         <div className="space-y-4">
+          {/* Aclaración: solo CAE */}
+          {mono12m.soloCae && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-accent/5 border border-accent/20 rounded-lg text-xs text-accent/80">
+              <Receipt size={12} className="shrink-0" />
+              Solo se consideran facturas electrónicas con CAE emitido por AFIP
+            </div>
+          )}
           <div className="bg-card border border-border rounded-xl p-4">
             <h3 className="text-sm font-medium text-white mb-1">Control Monotributo — Categoría {mono12m.categoria}</h3>
             <p className="text-xs text-zinc-500 mb-4">Límite anual: {formatCurrency(mono12m.limiteAnual)} · Límite mensual: {formatCurrency(mono12m.limiteMensual)}</p>

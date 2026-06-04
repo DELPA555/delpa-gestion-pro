@@ -39,26 +39,29 @@ ipcMain.handle('fiscal:stats', () => {
   const month= String(now.getMonth() + 1).padStart(2, '0')
   const ym   = `${year}-${month}`
 
-  // Ventas del mes (usamos sales + invoices de AFIP)
+  // ── Solo ventas con CAE real de AFIP ──────────────────────────────────────
+  const CAE_FILTER = "AND cae IS NOT NULL AND cae != '' AND TRIM(cae) != ''"
+
   const mesVentas = db.prepare(`
-    SELECT COALESCE(SUM(total),0) as total
+    SELECT COALESCE(SUM(total),0) as total, COUNT(*) as qty
     FROM sales WHERE voided=0
       AND strftime('%Y-%m', created_at, 'localtime') = ?
+      ${CAE_FILTER}
   `).get(ym)
 
-  // Ventas del año
   const anioVentas = db.prepare(`
-    SELECT COALESCE(SUM(total),0) as total
+    SELECT COALESCE(SUM(total),0) as total, COUNT(*) as qty
     FROM sales WHERE voided=0
       AND strftime('%Y', created_at, 'localtime') = ?
+      ${CAE_FILTER}
   `).get(String(year))
 
-  // Últimos 12 meses para proyección
   const meses12 = db.prepare(`
     SELECT strftime('%Y-%m', created_at, 'localtime') as mes,
-           COALESCE(SUM(total),0) as total
+           COALESCE(SUM(total),0) as total, COUNT(*) as qty
     FROM sales WHERE voided=0
       AND created_at >= date('now','localtime','-12 months')
+      ${CAE_FILTER}
     GROUP BY mes ORDER BY mes
   `).all()
 
@@ -68,6 +71,9 @@ ipcMain.handle('fiscal:stats', () => {
     anio:    year,
     facturadoMes:  mesVentas.total,
     facturadoAnio: anioVentas.total,
+    facturasMes:   mesVentas.qty  || 0,
+    facturasAnio:  anioVentas.qty || 0,
+    soloCae: true,  // flag para que el frontend sepa que son solo facturas con CAE
   }
 
   if (cfg.regimen === 'MONO') {
@@ -134,23 +140,27 @@ ipcMain.handle('fiscal:ivaVentas', (_, { from, to } = {}) => {
   const cfg = getSettings(db)
   const alicuota = cfg.ivaAlicuota / 100
 
-  // Comprobantes locales de DELPA
+  // Solo comprobantes con CAE real de AFIP
   const ventas = db.prepare(`
     SELECT s.id, date(s.created_at,'localtime') as fecha,
            s.sale_number as numero,
+           COALESCE(s.cbte_nro, '') as cbte_nro,
+           COALESCE(s.pto_venta, '') as pto_venta,
            COALESCE(c.name,'Consumidor Final') as cliente,
            s.total,
            CASE WHEN s.voucher_type IN ('A','facturaA') THEN ROUND(s.total / (1 + ?), 2) ELSE s.total END as neto,
            CASE WHEN s.voucher_type IN ('A','facturaA') THEN ROUND(s.total - ROUND(s.total / (1 + ?), 2), 2) ELSE 0 END as iva,
            COALESCE(s.cae,'') as cae,
-           COALESCE(s.voucher_type,'ticket') as tipo
+           COALESCE(s.voucher_type,'factura') as tipo
     FROM sales s
     LEFT JOIN clients c ON c.id = s.client_id
-    WHERE s.voided = 0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
+    WHERE s.voided = 0
+      AND date(s.created_at,'localtime') BETWEEN ? AND ?
+      AND s.cae IS NOT NULL AND s.cae != '' AND TRIM(s.cae) != ''
     ORDER BY s.created_at
   `).all(alicuota, alicuota, f, t)
 
-  // Comprobantes AFIP sincronizados
+  // Comprobantes AFIP sincronizados desde fiscal_comprobantes
   const afipCbtes = db.prepare(`
     SELECT fecha, tipo_cbte, pto_vta || '-' || printf('%08d',nro_cbte) as numero,
            cuit_receptor as cliente,
@@ -160,11 +170,11 @@ ipcMain.handle('fiscal:ivaVentas', (_, { from, to } = {}) => {
     ORDER BY fecha, nro_cbte
   `).all(f, t)
 
-  const totalNeto = ventas.reduce((s, r) => s + r.neto, 0)
-  const totalIva  = ventas.reduce((s, r) => s + r.iva,  0)
-  const totalTotal= ventas.reduce((s, r) => s + r.total, 0)
+  const totalNeto  = ventas.reduce((s, r) => s + r.neto,  0)
+  const totalIva   = ventas.reduce((s, r) => s + r.iva,   0)
+  const totalTotal = ventas.reduce((s, r) => s + r.total, 0)
 
-  return { ventas, afipCbtes, totalNeto, totalIva, totalTotal, desde: f, hasta: t }
+  return { ventas, afipCbtes, totalNeto, totalIva, totalTotal, desde: f, hasta: t, soloCae: true }
 })
 
 // ── fiscal:ivaCompras ────────────────────────────────────────────────────────
@@ -239,12 +249,14 @@ ipcMain.handle('fiscal:monotributo12m', () => {
   const cfg = getSettings(db)
   const limAnual = MONO_CATEGORIAS[cfg.monoCategoria] ?? MONO_CATEGORIAS['C']
 
+  // Solo facturas con CAE real de AFIP
   const meses = db.prepare(`
     SELECT strftime('%Y-%m', created_at,'localtime') as mes,
            COALESCE(SUM(total),0) as facturado,
            COUNT(*) as operaciones
     FROM sales WHERE voided=0
       AND created_at >= date('now','localtime','-12 months')
+      AND cae IS NOT NULL AND cae != '' AND TRIM(cae) != ''
     GROUP BY mes ORDER BY mes
   `).all()
 
@@ -254,6 +266,7 @@ ipcMain.handle('fiscal:monotributo12m', () => {
     limiteMensual: limAnual / 12,
     categoria: cfg.monoCategoria,
     categorias: MONO_CATEGORIAS,
+    soloCae: true,  // para mostrar aclaración en el frontend
   }
 })
 

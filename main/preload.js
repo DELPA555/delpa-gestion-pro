@@ -56,6 +56,7 @@ const CHANNELS = [
   'mp:createPos', 'mp:getPos', 'mp:createOrder', 'mp:pollOrder', 'mp:cancelOrder',
   'stockentry:list', 'stockentry:get', 'stockentry:create',
   'egreso:list', 'egreso:get', 'egreso:create', 'egreso:updateStatus', 'egreso:pdf',
+  'updater:checkManual', 'updater:openReleasePage', 'updater:downloadAndInstall', 'updater:getCurrentVersion',
   'remito:list', 'remito:get', 'remito:create', 'remito:updateStatus', 'remito:delete',
   'fixedcosts:list', 'fixedcosts:create', 'fixedcosts:update', 'fixedcosts:delete', 'fixedcosts:total',
   'weeklySummary:send',

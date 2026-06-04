@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import QRCodeLib from 'qrcode'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen } from 'lucide-react'
+import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
@@ -21,7 +21,8 @@ const TABS = [
   { id: 'mercadopago',  label: 'Mercado Pago',   Icon: QrCode },
   { id: 'usuarios',     label: 'Usuarios',       Icon: UserCog },
   { id: 'gastosfijos',  label: 'Gastos Fijos',   Icon: DollarSign },
-  { id: 'licencia',     label: 'Licencia',       Icon: ShieldAlert },
+  { id: 'licencia',       label: 'Licencia',       Icon: ShieldAlert },
+  { id: 'actualizaciones', label: 'Actualizaciones', Icon: ArrowUpCircle },
 ]
 
 const inputCls = 'input-field w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 no-drag'
@@ -2004,6 +2005,182 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
           </div>
         </div>
       )}
+
+      {/* ── Tab: Actualizaciones ── */}
+      {tab === 'actualizaciones' && <TabActualizaciones inputCls={inputCls} />}
+
     </motion.div>
+  )
+}
+
+// ── Tab Actualizaciones ────────────────────────────────────────────────────────
+
+function TabActualizaciones({ inputCls }) {
+  const [currentVersion, setCurrentVersion] = useState('...')
+  const [checking,  setChecking]  = useState(false)
+  const [result,    setResult]    = useState(null)      // resultado de checkManual
+  const [downloading, setDownloading] = useState(false)
+
+  useEffect(() => {
+    api.updater.getCurrentVersion().then(v => setCurrentVersion(v)).catch(() => {})
+  }, [])
+
+  const checkNow = async () => {
+    setChecking(true)
+    setResult(null)
+    try {
+      const res = await api.updater.checkManual()
+      setResult(res)
+    } catch (e) {
+      setResult({ ok: false, error: e.message || 'Error desconocido', currentVersion })
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const doDownload = async () => {
+    setDownloading(true)
+    try {
+      const r = await api.updater.downloadAndInstall()
+      if (!r?.ok) toast.error(r?.error || 'Error al iniciar descarga')
+      else toast.success('Descargando actualización...')
+    } catch (e) {
+      toast.error(e.message || 'Error')
+    } finally {
+      setDownloading(false) }
+  }
+
+  const openGitHub = () => {
+    if (result?.releaseUrl) api.updater.openReleasePage(result.releaseUrl)
+  }
+
+  // Escuchar progreso de descarga del auto-updater
+  const [downloadPct, setDownloadPct] = useState(null)
+  useEffect(() => {
+    const unsubProg = window.electron.on('updater:progress', ({ percent }) => setDownloadPct(Math.round(percent)))
+    const unsubStat = window.electron.on('updater:status', ({ type }) => {
+      if (type === 'downloaded') setDownloadPct(100)
+    })
+    return () => { unsubProg(); unsubStat() }
+  }, [])
+
+  return (
+    <div className="max-w-md space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+          <ArrowUpCircle size={15} className="text-accent" />
+          Actualizaciones de DELPA
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Verificá si hay una nueva versión disponible y actualizá desde acá.
+        </p>
+      </div>
+
+      {/* Versión actual */}
+      <div className="p-4 bg-surface border border-border rounded-xl flex items-center justify-between">
+        <div>
+          <p className="text-xs text-zinc-500 mb-0.5">Versión instalada</p>
+          <p className="text-lg font-bold text-white font-mono">v{currentVersion}</p>
+        </div>
+        <button
+          onClick={checkNow}
+          disabled={checking}
+          className="no-drag flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg text-zinc-300 hover:text-white hover:border-accent transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={13} className={checking ? 'animate-spin' : ''} />
+          {checking ? 'Buscando...' : 'Buscar actualizaciones'}
+        </button>
+      </div>
+
+      {/* Resultado de la verificación */}
+      {result && (
+        <div className={cn('p-4 rounded-xl border space-y-3', result.ok
+          ? result.updateAvailable
+            ? 'bg-accent/5 border-accent/30'
+            : 'bg-green-500/5 border-green-500/20'
+          : 'bg-red-500/5 border-red-500/20'
+        )}>
+          {!result.ok ? (
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="text-red-400 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-300">No se pudo verificar</p>
+                <p className="text-xs text-red-500 mt-0.5">{result.error}</p>
+              </div>
+            </div>
+          ) : result.updateAvailable ? (
+            <>
+              <div className="flex items-center gap-2">
+                <ArrowUpCircle size={15} className="text-accent shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    Nueva versión disponible: <span className="text-accent font-bold">v{result.latestVersion}</span>
+                  </p>
+                  {result.publishedAt && (
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Publicada: {new Date(result.publishedAt).toLocaleDateString('es-AR')}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Notas de la versión */}
+              {result.releaseBody && (
+                <div className="bg-black/20 rounded-lg p-3 max-h-40 overflow-y-auto">
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Novedades</p>
+                  <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">
+                    {result.releaseBody.slice(0, 800)}{result.releaseBody.length > 800 ? '...' : ''}
+                  </pre>
+                </div>
+              )}
+
+              {/* Barra de progreso de descarga */}
+              {downloadPct !== null && (
+                <div>
+                  <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                    <span>Descargando...</span>
+                    <span>{downloadPct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${downloadPct}%` }} />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={doDownload}
+                  disabled={downloading || downloadPct !== null}
+                  className="no-drag flex-1 btn-primary flex items-center justify-center gap-2 py-2 text-sm rounded-lg disabled:opacity-50"
+                >
+                  <Download size={14} />
+                  {downloadPct !== null ? `Descargando ${downloadPct}%...` : downloading ? 'Iniciando...' : 'Actualizar ahora'}
+                </button>
+                <button
+                  onClick={openGitHub}
+                  className="no-drag flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors"
+                >
+                  <ExternalLink size={13} /> Ver en GitHub
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <CheckCircle size={15} className="text-green-400 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-green-300">DELPA está actualizado</p>
+                <p className="text-xs text-zinc-500 mt-0.5">v{result.currentVersion} es la versión más reciente</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Info */}
+      <div className="p-3 bg-white/[0.02] border border-border rounded-xl text-xs text-zinc-600 space-y-1">
+        <p>Las actualizaciones se descargan automáticamente al iniciar DELPA cuando hay conexión a internet.</p>
+        <p>Si la descarga automática no funciona, usá el botón <span className="text-zinc-400">"Actualizar ahora"</span> de arriba.</p>
+      </div>
+    </div>
   )
 }

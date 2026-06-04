@@ -222,6 +222,12 @@ export const api = {
     get:    (id) => inv('stockentry:get', id),
     create: (d)  => inv('stockentry:create', d),
   },
+  updater: {
+    checkManual:          () =>      inv('updater:checkManual'),
+    openReleasePage:      (url) =>   inv('updater:openReleasePage', url),
+    downloadAndInstall:   () =>      inv('updater:downloadAndInstall'),
+    getCurrentVersion:    () =>      inv('updater:getCurrentVersion'),
+  },
   egreso: {
     list:         (p)  => inv('egreso:list', p),
     get:          (id) => inv('egreso:get', id),

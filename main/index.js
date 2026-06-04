@@ -71,6 +71,7 @@ app.whenReady().then(() => {
   require('./ipc/remitos')
   require('./ipc/fixedcosts')
   require('./ipc/stockegresos')
+  require('./ipc/updater-manual')
   require('./ipc/backup')
   require('./ipc/fiscal')
   require('./ipc/changelog')

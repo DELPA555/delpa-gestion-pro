@@ -436,6 +436,13 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Aclaración: solo CAE */}
+              {fiscalStats.soloCae && (
+                <div className="text-[10px] text-zinc-600 text-right">
+                  Basado en {fiscalStats.facturasAnio || 0} factura{fiscalStats.facturasAnio !== 1 ? 's' : ''} electrónica{fiscalStats.facturasAnio !== 1 ? 's' : ''} con CAE
+                </div>
+              )}
+
               {/* Proyección y alertas */}
               {fiscalStats.proyeccionMes && (
                 <div className="text-xs text-zinc-500 bg-zinc-800/50 rounded-lg px-3 py-2">
