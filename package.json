@@ -68,7 +68,8 @@
     "publish": {
       "provider": "github",
       "owner": "DELPA555",
-      "repo": "delpa-gestion-pro"
+      "repo": "delpa-gestion-pro",
+      "releaseType": "release"
     },
     "asar": true,
     "asarUnpack": [
