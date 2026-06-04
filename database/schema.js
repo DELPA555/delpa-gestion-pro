@@ -488,6 +488,24 @@ function createTables(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_waitlist_status ON waitlist(status);
 
+    CREATE TABLE IF NOT EXISTS fiscal_comprobantes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo_cbte INTEGER NOT NULL,
+      pto_vta INTEGER NOT NULL,
+      nro_cbte INTEGER NOT NULL,
+      fecha TEXT NOT NULL,
+      cuit_receptor TEXT DEFAULT '',
+      imp_neto REAL DEFAULT 0,
+      imp_iva REAL DEFAULT 0,
+      imp_total REAL DEFAULT 0,
+      cae TEXT DEFAULT '',
+      cae_fch_vto TEXT DEFAULT '',
+      fuente TEXT DEFAULT 'afip',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tipo_cbte, pto_vta, nro_cbte)
+    );
+    CREATE INDEX IF NOT EXISTS idx_fiscal_fecha ON fiscal_comprobantes(fecha);
+
     CREATE TABLE IF NOT EXISTS price_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL,

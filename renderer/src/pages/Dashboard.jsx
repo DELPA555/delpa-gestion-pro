@@ -4,7 +4,7 @@ import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe } from 'lucide-react'
+import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { SkeletonCard } from '@/components/shared/SkeletonLoader'
@@ -111,11 +111,12 @@ export default function Dashboard() {
   const [monthlyProfit,    setMonthlyProfit]    = useState(null)
   const [monthComparison,  setMonthComparison]  = useState(null)
   const [categoryComp,     setCategoryComp]     = useState([])
+  const [fiscalStats,      setFiscalStats]      = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [s, t, p, l, cb, bdays, bmsg, wc, hm, mp, mc, cc] = await Promise.all([
+      const [s, t, p, l, cb, bdays, bmsg, wc, hm, mp, mc, cc, fs] = await Promise.all([
         api.dashboard.stats(),
         api.dashboard.salesTrend(),
         api.dashboard.salesByPayment(),
@@ -128,11 +129,13 @@ export default function Dashboard() {
         api.dashboard.monthlyProfit(),
         api.dashboard.monthComparison(),
         api.dashboard.categoryComparison(),
+        api.fiscal.stats().catch(() => null),
       ])
       setStats(s)
       setMonthlyProfit(mp)
       setMonthComparison(mc)
       setCategoryComp(cc || [])
+      setFiscalStats(fs)
       setTrend(t.map(d => ({ ...d, day: d.day.slice(5) })))
       setByPayment(p.map(it => ({ ...it, fill: PAYMENT_COLORS[it.payment_method] || '#6b7280' })))
       setLowStock(l)
@@ -356,6 +359,119 @@ export default function Dashboard() {
               <Bar dataKey="Semana anterior" fill="#3f3f3f" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </motion.div>
+      )}
+
+      {/* ── Widget Fiscal ── */}
+      {fiscalStats && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.38 }}
+          className={`bg-card border rounded-xl p-4 ${
+            fiscalStats.alertaAnio === 'roja' ? 'border-red-500/40' :
+            fiscalStats.alertaAnio === 'amarilla' ? 'border-amber-500/40' :
+            'border-border'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Receipt size={15} className="text-accent" />
+            <h3 className="text-sm font-medium text-white">
+              Control fiscal — {fiscalStats.regimen === 'MONO' ? `Monotributo Cat. ${fiscalStats.monoCategoria}` : 'Responsable Inscripto'}
+            </h3>
+            {(fiscalStats.alertaAnio === 'roja' || fiscalStats.alertaMes === 'roja') && (
+              <span className="ml-auto text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">⚠ Límite cerca</span>
+            )}
+            {(fiscalStats.alertaAnio === 'amarilla' || fiscalStats.alertaMes === 'amarilla') && !fiscalStats.alertaAnio?.includes('roja') && (
+              <span className="ml-auto text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">80% del límite</span>
+            )}
+          </div>
+
+          {fiscalStats.regimen === 'MONO' ? (
+            <div className="space-y-4">
+              {/* Este mes */}
+              <div>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-zinc-400">Facturado este mes</span>
+                  <span className="font-medium text-white tabular-nums">
+                    {formatCurrency(fiscalStats.facturadoMes)}
+                    <span className="text-zinc-600 ml-1">/ {formatCurrency(fiscalStats.limiteMes)}</span>
+                  </span>
+                </div>
+                <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      fiscalStats.pctMes >= 95 ? 'bg-red-500' :
+                      fiscalStats.pctMes >= 80 ? 'bg-amber-400' : 'bg-accent'
+                    }`}
+                    style={{ width: `${Math.min(100, fiscalStats.pctMes)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] mt-1 text-zinc-600">
+                  <span>{fiscalStats.pctMes.toFixed(1)}% utilizado</span>
+                  <span>Disponible: {formatCurrency(fiscalStats.disponibleMes)}</span>
+                </div>
+              </div>
+
+              {/* Este año */}
+              <div>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-zinc-400">Facturado este año</span>
+                  <span className="font-medium text-white tabular-nums">
+                    {formatCurrency(fiscalStats.facturadoAnio)}
+                    <span className="text-zinc-600 ml-1">/ {formatCurrency(fiscalStats.limiteAnual)}</span>
+                  </span>
+                </div>
+                <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      fiscalStats.pctAnio >= 95 ? 'bg-red-500' :
+                      fiscalStats.pctAnio >= 80 ? 'bg-amber-400' : 'bg-green-500'
+                    }`}
+                    style={{ width: `${Math.min(100, fiscalStats.pctAnio)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] mt-1 text-zinc-600">
+                  <span>{fiscalStats.pctAnio.toFixed(1)}% del límite anual</span>
+                  <span>Libre: {formatCurrency(fiscalStats.disponibleAnio)}</span>
+                </div>
+              </div>
+
+              {/* Proyección y alertas */}
+              {fiscalStats.proyeccionMes && (
+                <div className="text-xs text-zinc-500 bg-zinc-800/50 rounded-lg px-3 py-2">
+                  📅 Al ritmo actual, superarías el límite en <strong className="text-white">{fiscalStats.proyeccionMes}</strong>
+                </div>
+              )}
+              {fiscalStats.pctAnio >= 95 && (
+                <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  ⚠ Superaste el 95% del límite anual. Considerá recategorizar o consultar a tu contador.
+                </div>
+              )}
+            </div>
+          ) : (
+            // Responsable Inscripto — posición IVA
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'IVA Débito', value: formatCurrency(fiscalStats.debitoFiscal),  color: 'text-red-400',   icon: TrendingDown },
+                { label: 'IVA Crédito', value: formatCurrency(fiscalStats.creditoFiscal), color: 'text-green-400', icon: TrendingUp },
+                {
+                  label: fiscalStats.posicionIva >= 0 ? 'A pagar' : 'A favor',
+                  value: formatCurrency(Math.abs(fiscalStats.posicionIva)),
+                  color: fiscalStats.posicionIva >= 0 ? 'text-amber-400' : 'text-green-400',
+                  icon: fiscalStats.posicionIva >= 0 ? TrendingDown : TrendingUp,
+                },
+              ].map(({ label, value, color, icon: Icon }) => (
+                <div key={label} className="bg-surface rounded-xl p-3">
+                  <p className="text-[10px] text-zinc-500 mb-1">{label}</p>
+                  <p className={`text-lg font-bold tabular-nums ${color}`}>{value}</p>
+                </div>
+              ))}
+              <div className="col-span-3 text-[10px] text-zinc-600 px-1">
+                Vencimiento DDJJ IVA aprox.: <span className="text-zinc-400">{fiscalStats.vencimientoDDJJ}</span>
+                {' · '}Alícuota: {fiscalStats.ivaAlicuota}%
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
 

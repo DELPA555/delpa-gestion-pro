@@ -1,0 +1,35 @@
+{
+  "v1.1.1": {
+    "fecha": "2026-06-03",
+    "mejoras": [
+      "Módulo fiscal completo: control de Monotributo y Responsable Inscripto",
+      "Widget Dashboard: barra de progreso vs límite mensual/anual del Monotributo",
+      "Widget Dashboard: posición de IVA para Responsables Inscriptos",
+      "Reportes → Fiscal: Libro IVA Ventas y Compras, Posición mensual, Control Monotributo",
+      "Sincronización de comprobantes emitidos con AFIP (WSFE)",
+      "Alertas automáticas al superar el 80% del límite de facturación",
+      "Configuración fiscal ampliada: categoría Monotributo, alícuota IVA",
+      "Modal '¿Qué hay de nuevo?' al instalar una versión nueva"
+    ],
+    "correcciones": [
+      "Fix bug inventario: inventory:increment faltaba en whitelist del preload",
+      "Módulo App Móvil eliminado completamente",
+      "Google Drive: credenciales movidas a archivo local gitignoreado"
+    ]
+  },
+  "v1.1.0": {
+    "fecha": "2026-06-03",
+    "mejoras": [
+      "Ranking de productos por temporada con comparativa vs período anterior",
+      "Análisis de colores: torta y tabla de ventas por color",
+      "Reporte de deudas con semáforo y botón WhatsApp directo",
+      "Comparativa mensual en Dashboard: este mes vs mes anterior por día",
+      "Backup cifrado con AES-256 (sin internet, guarda en escritorio)",
+      "Historial de precios: registro automático y gráfico de evolución"
+    ],
+    "correcciones": [
+      "Fix bug inventario: inventory:increment faltaba en whitelist del preload",
+      "Módulo App Móvil eliminado completamente"
+    ]
+  }
+}

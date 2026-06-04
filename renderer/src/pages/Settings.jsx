@@ -203,7 +203,7 @@ export default function Settings() {
   const [gdStatus, setGdStatus] = useState({ connected: false, email: null, lastBackupAt: null, notConfigured: false })
   const [gdLoading, setGdLoading] = useState(false)
   const [sucursales, setSucursales] = useState([])
-  const [afipForm, setAfipForm] = useState({ afip_env: 'testing', afip_punto_venta: '1', afip_cond_fiscal: 'RI' })
+  const [afipForm, setAfipForm] = useState({ afip_env: 'testing', afip_punto_venta: '1', afip_cond_fiscal: 'RI', mono_categoria: 'C', iva_alicuota: '21' })
   const [afipStatus, setAfipStatus] = useState(null)
   const [afipTesting, setAfipTesting] = useState(false)
   const [afipSaving, setAfipSaving] = useState(false)
@@ -299,6 +299,8 @@ export default function Settings() {
         afip_env:           all.afip_env           || 'testing',
         afip_punto_venta:   all.afip_punto_venta   || '1',
         afip_cond_fiscal:   all.afip_cond_fiscal   || 'RI',
+        mono_categoria:     all.mono_categoria     || 'C',
+        iva_alicuota:       all.iva_alicuota       || '21',
       })
       setBarcodeScanner(all.barcode_scanner === '1')
     } catch {}
@@ -999,18 +1001,58 @@ export default function Settings() {
             <p className="text-xs text-zinc-600 mt-1">Número de punto de venta habilitado en AFIP (generalmente 1 o 2).</p>
           </div>
 
-          {/* Condición fiscal */}
+          {/* Condición fiscal / Régimen */}
           <div>
-            <label className={labelCls}>Condición fiscal del emisor</label>
+            <label className={labelCls}>Régimen fiscal</label>
             <select
               className={inputCls}
               value={afipForm.afip_cond_fiscal}
               onChange={e => setAfipForm(p => ({ ...p, afip_cond_fiscal: e.target.value }))}
             >
+              <option value="MONO">Monotributista (emite Factura C)</option>
               <option value="RI">Responsable Inscripto (emite A y B)</option>
-              <option value="MONO">Monotributista (emite C)</option>
             </select>
           </div>
+
+          {/* Monotributo — categoría */}
+          {afipForm.afip_cond_fiscal === 'MONO' && (
+            <div className="p-4 bg-surface border border-border rounded-xl space-y-3">
+              <p className="text-xs font-semibold text-zinc-300">Configuración Monotributo</p>
+              <div>
+                <label className={labelCls}>Categoría actual</label>
+                <select className={inputCls} value={afipForm.mono_categoria}
+                  onChange={e => setAfipForm(p => ({ ...p, mono_categoria: e.target.value }))}>
+                  {[
+                    ['A', '$2.960.000'], ['B', '$4.440.000'], ['C', '$6.210.000'],
+                    ['D', '$8.520.000'], ['E', '$10.720.000'], ['F', '$13.420.000'],
+                    ['G', '$16.870.000'], ['H', '$21.885.000'], ['I', '$26.260.000'],
+                    ['J', '$31.260.000'], ['K', '$36.760.000'],
+                  ].map(([cat, lim]) => (
+                    <option key={cat} value={cat}>Categoría {cat} — límite anual {lim}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-zinc-600 mt-1">
+                  Límite mensual: ${(({'A':2960000,'B':4440000,'C':6210000,'D':8520000,'E':10720000,'F':13420000,'G':16870000,'H':21885000,'I':26260000,'J':31260000,'K':36760000}[afipForm.mono_categoria]??6210000)/12).toLocaleString('es-AR',{maximumFractionDigits:0})}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Responsable Inscripto — alícuota IVA */}
+          {afipForm.afip_cond_fiscal === 'RI' && (
+            <div className="p-4 bg-surface border border-border rounded-xl space-y-3">
+              <p className="text-xs font-semibold text-zinc-300">Configuración Responsable Inscripto</p>
+              <div>
+                <label className={labelCls}>Alícuota de IVA (%)</label>
+                <select className={inputCls} value={afipForm.iva_alicuota}
+                  onChange={e => setAfipForm(p => ({ ...p, iva_alicuota: e.target.value }))}>
+                  <option value="21">21% (alícuota general)</option>
+                  <option value="10.5">10.5% (alícuota diferencial)</option>
+                  <option value="27">27% (servicios públicos)</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Info certificado */}
           <div className="p-3 bg-white/[0.03] border border-border rounded-xl text-xs text-zinc-500 space-y-1">

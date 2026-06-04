@@ -71,6 +71,8 @@ app.whenReady().then(() => {
   require('./ipc/remitos')
   require('./ipc/fixedcosts')
   require('./ipc/backup')
+  require('./ipc/fiscal')
+  require('./ipc/changelog')
   const { performBackup } = require('./ipc/googledrive')
   const { scheduleWeeklySummary } = require('./ipc/weeklySummary')
 

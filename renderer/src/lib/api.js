@@ -252,6 +252,18 @@ export const api = {
     create:  (password) => inv('backup:create',  { password }),
     restore: (password) => inv('backup:restore', { password }),
   },
+  fiscal: {
+    stats:          ()  => inv('fiscal:stats'),
+    ivaVentas:      (p) => inv('fiscal:ivaVentas',      p),
+    ivaCompras:     (p) => inv('fiscal:ivaCompras',     p),
+    posicion:       ()  => inv('fiscal:posicion'),
+    monotributo12m: ()  => inv('fiscal:monotributo12m'),
+    syncComprobantes: (p) => inv('afip:syncComprobantes', p),
+  },
+  app: {
+    changelog:         () => inv('app:changelog'),
+    markChangelogSeen: () => inv('app:markChangelogSeen'),
+  },
   tn: {
     connect:        ()    => inv('tn:connect'),
     status:         ()    => inv('tn:status'),

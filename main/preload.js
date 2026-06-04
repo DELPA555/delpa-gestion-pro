@@ -64,6 +64,9 @@ const CHANNELS = [
   'dashboard:monthComparison', 'dashboard:categoryComparison',
   'backup:create', 'backup:restore',
   'products:priceHistory',
+  'fiscal:stats', 'fiscal:ivaVentas', 'fiscal:ivaCompras', 'fiscal:posicion', 'fiscal:monotributo12m',
+  'afip:syncComprobantes',
+  'app:changelog', 'app:markChangelogSeen',
 ]
 
 contextBridge.exposeInMainWorld('electron', {

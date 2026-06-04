@@ -113,6 +113,77 @@ function SessionTimeoutWatcher() {
   return null
 }
 
+// ── Modal Changelog / "¿Qué hay de nuevo?" ───────────────────────────────────
+
+function ChangelogModal() {
+  const [entry, setEntry]  = useState(null)
+  const [ver,   setVer]    = useState('')
+  const [open,  setOpen]   = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api.app.changelog().then(res => {
+        if (res?.show) { setEntry(res.entry); setVer(res.version); setOpen(true) }
+      }).catch(() => {})
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [])
+
+  const cerrar = () => {
+    setOpen(false)
+    api.app.markChangelogSeen().catch(() => {})
+  }
+
+  if (!open || !entry) return null
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="px-6 py-5 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent text-lg">🎉</div>
+            <div>
+              <h2 className="font-bold text-white text-base">¿Qué hay de nuevo en v{ver}?</h2>
+              {entry.fecha && <p className="text-xs text-zinc-500">{entry.fecha}</p>}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 max-h-72 overflow-y-auto space-y-4">
+          {entry.mejoras?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-accent uppercase tracking-wider mb-2">✨ Mejoras</p>
+              <ul className="space-y-1.5">
+                {entry.mejoras.map((m, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                    <span className="text-accent mt-0.5 shrink-0">→</span>{m}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {entry.correcciones?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">🔧 Correcciones</p>
+              <ul className="space-y-1.5">
+                {entry.correcciones.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-zinc-400">
+                    <span className="text-green-500 mt-0.5 shrink-0">✓</span>{c}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-border flex justify-end">
+          <button onClick={cerrar}
+            className="btn-primary no-drag px-6 py-2.5 rounded-xl text-sm font-semibold">
+            Entendido 👍
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AppContent() {
   const { user, loading, logout } = useAuth()
   const [licenseInfo, setLicenseInfo] = useState(null) // null = checking
@@ -172,6 +243,7 @@ function AppContent() {
     <SetupWizard>
     <HashRouter>
       <SessionTimeoutWatcher />
+      <ChangelogModal />
       <Layout licenseInfo={licenseInfo}>
         <AnimatedRoutes />
       </Layout>

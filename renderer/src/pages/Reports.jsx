@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend,
 } from 'recharts'
-import { BarChart3, RefreshCw, Download, Package, Users, Printer, TrendingDown, TrendingUp, MessageCircle, Clock, Search } from 'lucide-react'
+import { BarChart3, RefreshCw, Download, Package, Users, Printer, TrendingDown, TrendingUp, MessageCircle, Clock, Search, Receipt, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
@@ -23,6 +23,220 @@ const TT = ({ active, payload, label }) => {
     <div className="bg-card border border-border rounded-lg px-3 py-2 text-sm shadow-xl">
       <p className="text-zinc-400 text-xs mb-1">{label}</p>
       {payload.map((p, i) => <p key={i} className="font-semibold" style={{ color: p.color }}>{formatCurrency(p.value)}</p>)}
+    </div>
+  )
+}
+
+// ── Componente FiscalTab ──────────────────────────────────────────────────────
+
+function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, fiscalTo, setFiscalTo, loadFiscal, fiscalLoading, ivaVentas, ivaCompras, posicionFiscal, mono12m, syncing, setSyncing, inputCls }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 flex-wrap">
+        {[
+          { id: 'ventas',      label: 'Libro IVA Ventas' },
+          { id: 'compras',     label: 'Libro IVA Compras' },
+          { id: 'posicion',    label: 'Posición Fiscal' },
+          { id: 'monotributo', label: 'Control Monotributo' },
+        ].map(st => (
+          <button key={st.id} onClick={() => setFiscalSubTab(st.id)}
+            className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+              fiscalSubTab === st.id ? 'bg-accent text-black' : 'bg-surface text-zinc-400 hover:text-white border border-border')}>
+            {st.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <input type="date" value={fiscalFrom} onChange={e => setFiscalFrom(e.target.value)} className={inputCls} />
+        <span className="text-zinc-600">→</span>
+        <input type="date" value={fiscalTo} onChange={e => setFiscalTo(e.target.value)} className={inputCls} />
+        <button onClick={loadFiscal} disabled={fiscalLoading}
+          className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+          <RefreshCw size={13} className={fiscalLoading ? 'animate-spin' : ''} /> Actualizar
+        </button>
+        {fiscalSubTab === 'ventas' && (
+          <button onClick={async () => {
+            setSyncing(true)
+            try {
+              const { api: apiMod } = await import('@/lib/api')
+              const res = await apiMod.fiscal.syncComprobantes({})
+              if (res?.ok) { toast.success(`${res.sincronizados} comprobantes sincronizados`); loadFiscal() }
+              else toast.error(res?.error || 'Error al sincronizar con AFIP')
+            } finally { setSyncing(false) }
+          }} disabled={syncing}
+            className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-accent transition-colors disabled:opacity-50">
+            <Receipt size={13} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar AFIP'}
+          </button>
+        )}
+      </div>
+
+      {fiscalLoading ? (
+        <div className="py-10 flex justify-center"><div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"/></div>
+      ) : fiscalSubTab === 'ventas' && ivaVentas ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            {[['Neto gravado',ivaVentas.totalNeto,'text-white'],['IVA débito',ivaVentas.totalIva,'text-amber-400'],['Total ventas',ivaVentas.totalTotal,'text-accent']].map(([l,v,c])=>(
+              <div key={l} className="bg-card border border-border rounded-xl px-4 py-3">
+                <p className="text-xs text-zinc-500 mb-1">{l}</p>
+                <p className={`text-xl font-bold tabular-nums ${c}`}>{formatCurrency(v)}</p>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => {
+            const rows = ivaVentas.ventas.map(r => [r.fecha,r.numero||'',r.tipo,r.cliente,r.neto.toFixed(2),r.iva.toFixed(2),r.total.toFixed(2),r.cae||''].join(','))
+            const csv = ['Fecha,Número,Tipo,Cliente,Neto,IVA,Total,CAE',...rows].join('\n')
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download=`iva_ventas_${fiscalFrom}_${fiscalTo}.csv`; a.click()
+          }} disabled={!ivaVentas.ventas.length} className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors disabled:opacity-50">
+            <Download size={13}/> CSV para contador
+          </button>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border bg-surface"
+              style={{ gridTemplateColumns: '1fr 1fr 1fr 2fr 1fr 1fr 1fr' }}>
+              <span>Fecha</span><span>N°</span><span>Tipo</span><span>Cliente</span>
+              <span className="text-right">Neto</span><span className="text-right">IVA</span><span className="text-right">Total</span>
+            </div>
+            <div className="divide-y divide-border max-h-[360px] overflow-y-auto">
+              {ivaVentas.ventas.map((r,i) => (
+                <div key={i} className="row-alt grid items-center px-4 py-2 text-xs"
+                  style={{ gridTemplateColumns: '1fr 1fr 1fr 2fr 1fr 1fr 1fr' }}>
+                  <span className="text-zinc-400">{r.fecha}</span>
+                  <span className="text-zinc-400 font-mono">{r.numero||'—'}</span>
+                  <span className="text-zinc-500">{r.tipo}</span>
+                  <span className="text-white truncate pr-2">{r.cliente}</span>
+                  <span className="text-right tabular-nums text-zinc-300">{formatCurrency(r.neto)}</span>
+                  <span className="text-right tabular-nums text-amber-400">{formatCurrency(r.iva)}</span>
+                  <span className="text-right tabular-nums text-white font-medium">{formatCurrency(r.total)}</span>
+                </div>
+              ))}
+              {!ivaVentas.ventas.length && <div className="py-8 text-center text-zinc-600 text-sm">Sin ventas en el período</div>}
+            </div>
+          </div>
+        </div>
+
+      ) : fiscalSubTab === 'compras' && ivaCompras ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            {[['Neto compras',ivaCompras.totalNeto,'text-white'],['IVA crédito',ivaCompras.totalIva,'text-green-400'],['Total compras',ivaCompras.totalTotal,'text-accent']].map(([l,v,c])=>(
+              <div key={l} className="bg-card border border-border rounded-xl px-4 py-3">
+                <p className="text-xs text-zinc-500 mb-1">{l}</p>
+                <p className={`text-xl font-bold tabular-nums ${c}`}>{formatCurrency(v)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border bg-surface"
+              style={{ gridTemplateColumns: '1fr 3fr 1fr 1fr 1fr' }}>
+              <span>Fecha</span><span>Proveedor</span>
+              <span className="text-right">Neto</span><span className="text-right">IVA</span><span className="text-right">Total</span>
+            </div>
+            <div className="divide-y divide-border max-h-[360px] overflow-y-auto">
+              {ivaCompras.compras.map((r,i) => (
+                <div key={i} className="row-alt grid items-center px-4 py-2 text-xs"
+                  style={{ gridTemplateColumns: '1fr 3fr 1fr 1fr 1fr' }}>
+                  <span className="text-zinc-400">{r.fecha}</span>
+                  <span className="text-white truncate pr-2">{r.proveedor}</span>
+                  <span className="text-right tabular-nums text-zinc-300">{formatCurrency(r.neto)}</span>
+                  <span className="text-right tabular-nums text-green-400">{formatCurrency(r.iva)}</span>
+                  <span className="text-right tabular-nums text-white font-medium">{formatCurrency(r.total)}</span>
+                </div>
+              ))}
+              {!ivaCompras.compras.length && <div className="py-8 text-center text-zinc-600 text-sm">Sin compras en el período</div>}
+            </div>
+          </div>
+        </div>
+
+      ) : fiscalSubTab === 'posicion' ? (
+        <div className="space-y-3">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h3 className="text-sm font-medium text-white mb-4">Posición de IVA mensual — últimos 12 meses</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={posicionFiscal} margin={{ left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false}
+                  tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip content={<TT />} />
+                <Bar dataKey="debito"  name="Débito fiscal"  fill="#f59e0b" radius={[3,3,0,0]} />
+                <Bar dataKey="credito" name="Crédito fiscal" fill="#22c55e" radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border bg-surface"
+              style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr' }}>
+              <span>Mes</span><span className="text-right">Ventas</span><span className="text-right">Débito</span>
+              <span className="text-right">Crédito</span><span className="text-right">Posición</span>
+            </div>
+            <div className="divide-y divide-border">
+              {posicionFiscal.map(r => (
+                <div key={r.mes} className="row-alt grid items-center px-4 py-2.5 text-sm"
+                  style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr' }}>
+                  <span className="text-zinc-300 font-mono text-xs">{r.mes}</span>
+                  <span className="text-right text-zinc-300 tabular-nums text-xs">{formatCurrency(r.ventas)}</span>
+                  <span className="text-right text-amber-400 tabular-nums text-xs">{formatCurrency(r.debito)}</span>
+                  <span className="text-right text-green-400 tabular-nums text-xs">{formatCurrency(r.credito)}</span>
+                  <span className={cn('text-right font-semibold tabular-nums text-xs', r.posicion >= 0 ? 'text-red-400' : 'text-green-400')}>
+                    {r.posicion >= 0 ? 'A pagar' : 'A favor'}: {formatCurrency(Math.abs(r.posicion))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      ) : fiscalSubTab === 'monotributo' && mono12m ? (
+        <div className="space-y-4">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h3 className="text-sm font-medium text-white mb-1">Control Monotributo — Categoría {mono12m.categoria}</h3>
+            <p className="text-xs text-zinc-500 mb-4">Límite anual: {formatCurrency(mono12m.limiteAnual)} · Límite mensual: {formatCurrency(mono12m.limiteMensual)}</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={mono12m.meses} margin={{ left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false}
+                  tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip content={<TT />} />
+                <Legend wrapperStyle={{ fontSize: 11, color: '#6b7280' }} />
+                <Line type="monotone" dataKey="facturado" name="Facturado" stroke="#e91e8c" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey={() => mono12m.limiteMensual} name="Límite mensual" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border bg-surface"
+              style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr' }}>
+              <span>Mes</span><span className="text-right">Ops.</span><span className="text-right">Facturado</span>
+              <span className="text-right">Límite mes</span><span className="text-right">Uso %</span>
+            </div>
+            <div className="divide-y divide-border">
+              {[...mono12m.meses].reverse().map(r => {
+                const pct = mono12m.limiteMensual > 0 ? r.facturado / mono12m.limiteMensual * 100 : 0
+                return (
+                  <div key={r.mes} className="row-alt grid items-center px-4 py-2.5 text-sm"
+                    style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr' }}>
+                    <span className="text-zinc-300 font-mono text-xs">{r.mes}</span>
+                    <span className="text-right text-zinc-400 text-xs tabular-nums">{r.operaciones}</span>
+                    <span className="text-right text-white tabular-nums">{formatCurrency(r.facturado)}</span>
+                    <span className="text-right text-zinc-500 text-xs tabular-nums">{formatCurrency(mono12m.limiteMensual)}</span>
+                    <span className={cn('text-right text-xs font-semibold tabular-nums', pct>=95?'text-red-400':pct>=80?'text-amber-400':'text-green-400')}>
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <button onClick={() => {
+            const rows = mono12m.meses.map(r=>[r.mes,r.operaciones,r.facturado.toFixed(2),mono12m.limiteMensual.toFixed(2),(r.facturado/mono12m.limiteMensual*100).toFixed(1)+'%'].join(','))
+            const csv = ['Mes,Operaciones,Facturado,Límite Mensual,Uso %',...rows].join('\n')
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download='monotributo_control.csv'; a.click()
+          }} className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors">
+            <Download size={13}/> Exportar para el contador
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -83,6 +297,17 @@ export default function Reports() {
 
   // Categorías para filtros
   const [categories, setCategories] = useState([])
+
+  // Fiscal tab
+  const [fiscalSubTab,   setFiscalSubTab]   = useState('ventas')
+  const [fiscalFrom,     setFiscalFrom]     = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
+  const [fiscalTo,       setFiscalTo]       = useState(defaultTo())
+  const [ivaVentas,      setIvaVentas]      = useState(null)
+  const [ivaCompras,     setIvaCompras]     = useState(null)
+  const [posicionFiscal, setPosicionFiscal] = useState([])
+  const [mono12m,        setMono12m]        = useState(null)
+  const [fiscalLoading,  setFiscalLoading]  = useState(false)
+  const [syncing,        setSyncing]        = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -240,6 +465,21 @@ export default function Reports() {
   useEffect(() => { if (tab === 'deudas')     loadDebt()    }, [tab, loadDebt])
   useEffect(() => { if (tab === 'precios')    loadPH()      }, [tab, loadPH])
 
+  const loadFiscal = useCallback(async () => {
+    setFiscalLoading(true)
+    try {
+      const [v, c, p, m] = await Promise.all([
+        api.fiscal.ivaVentas({ from: fiscalFrom, to: fiscalTo }),
+        api.fiscal.ivaCompras({ from: fiscalFrom, to: fiscalTo }),
+        api.fiscal.posicion(),
+        api.fiscal.monotributo12m(),
+      ])
+      setIvaVentas(v); setIvaCompras(c); setPosicionFiscal(p); setMono12m(m)
+    } finally { setFiscalLoading(false) }
+  }, [fiscalFrom, fiscalTo])
+
+  useEffect(() => { if (tab === 'fiscal') loadFiscal() }, [tab, loadFiscal])
+
   const inputCls = 'input-field bg-card border border-border rounded-lg px-3 py-2 text-sm text-white no-drag'
 
   const filteredArt = artData.filter(r =>
@@ -264,6 +504,7 @@ export default function Reports() {
           { id: 'colores',    label: 'Colores' },
           { id: 'deudas',     label: 'Deudas' },
           { id: 'precios',    label: 'Historial precios' },
+          { id: 'fiscal',     label: '⚖ Fiscal' },
           { id: 'comisiones', label: 'Comisiones' },
         ].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
@@ -274,7 +515,18 @@ export default function Reports() {
         ))}
       </div>
 
-      {tab === 'comisiones' ? (
+      {tab === 'fiscal' ? (
+        <FiscalTab
+          fiscalSubTab={fiscalSubTab} setFiscalSubTab={setFiscalSubTab}
+          fiscalFrom={fiscalFrom} setFiscalFrom={setFiscalFrom}
+          fiscalTo={fiscalTo} setFiscalTo={setFiscalTo}
+          loadFiscal={loadFiscal} fiscalLoading={fiscalLoading}
+          ivaVentas={ivaVentas} ivaCompras={ivaCompras}
+          posicionFiscal={posicionFiscal} mono12m={mono12m}
+          syncing={syncing} setSyncing={setSyncing}
+          inputCls={inputCls}
+        />
+      ) : tab === 'comisiones' ? (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <input type="date" value={commFrom} onChange={e => setCommFrom(e.target.value)} className={inputCls} />
