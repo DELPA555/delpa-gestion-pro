@@ -70,6 +70,7 @@ app.whenReady().then(() => {
   require('./ipc/waitlist')
   require('./ipc/remitos')
   require('./ipc/fixedcosts')
+  require('./ipc/stockegresos')
   require('./ipc/backup')
   require('./ipc/fiscal')
   require('./ipc/changelog')

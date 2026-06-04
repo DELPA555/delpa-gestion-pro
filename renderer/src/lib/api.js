@@ -222,6 +222,13 @@ export const api = {
     get:    (id) => inv('stockentry:get', id),
     create: (d)  => inv('stockentry:create', d),
   },
+  egreso: {
+    list:         (p)  => inv('egreso:list', p),
+    get:          (id) => inv('egreso:get', id),
+    create:       (d)  => inv('egreso:create', d),
+    updateStatus: (d)  => inv('egreso:updateStatus', d),
+    pdf:          (id) => inv('egreso:pdf', id),
+  },
   senas: {
     list:         (p) => inv('senas:list', p),
     pending:      ()  => inv('senas:pending'),

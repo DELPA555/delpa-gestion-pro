@@ -462,6 +462,33 @@ function createTables(db) {
       delivered_at DATETIME
     );
 
+    CREATE TABLE IF NOT EXISTS stock_egresos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      number TEXT UNIQUE NOT NULL,
+      supplier_id INTEGER,
+      supplier_name TEXT DEFAULT '',
+      date TEXT NOT NULL,
+      reason TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      total_amount REAL DEFAULT 0,
+      total_units INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','sent','confirmed')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS stock_egreso_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      egreso_id INTEGER NOT NULL REFERENCES stock_egresos(id) ON DELETE CASCADE,
+      product_id INTEGER,
+      product_name TEXT DEFAULT '',
+      size TEXT DEFAULT '',
+      color TEXT DEFAULT '',
+      quantity INTEGER NOT NULL DEFAULT 1,
+      cost_price REAL DEFAULT 0,
+      subtotal REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_egreso_items_egreso ON stock_egreso_items(egreso_id);
+
     CREATE TABLE IF NOT EXISTS fixed_costs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

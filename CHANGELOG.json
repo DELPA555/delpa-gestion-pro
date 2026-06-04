@@ -1,4 +1,16 @@
 {
+  "v1.1.2": {
+    "fecha": "2026-06-04",
+    "mejoras": [
+      "Nuevo módulo Egreso de Mercadería: devoluciones a proveedor con número correlativo EGR-YYYY-XXXX",
+      "Formulario de egreso con búsqueda de productos, selección de talle/color y precio de costo",
+      "Descuento automático de stock al confirmar el egreso",
+      "Generación de PDF profesional con logo, datos del negocio, tabla detallada y campos de firma",
+      "Estados: Pendiente → Enviado → Confirmado por proveedor",
+      "Integración con WhatsApp para notificar al proveedor"
+    ],
+    "correcciones": []
+  },
   "v1.1.1": {
     "fecha": "2026-06-03",
     "mejoras": [

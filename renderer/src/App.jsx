@@ -24,6 +24,7 @@ import Sucursales from './pages/Sucursales'
 import Inventory from './pages/Inventory'
 import Senas from './pages/Senas'
 import StockEntry from './pages/StockEntry'
+import StockEgreso from './pages/StockEgreso'
 import Remitos from './pages/Remitos'
 import SetupWizard from './pages/SetupWizard'
 import { api } from './lib/api'
@@ -78,6 +79,7 @@ function AnimatedRoutes() {
           <Route path="/sucursales"   element={<PageErrorBoundary><Sucursales /></PageErrorBoundary>} />
           <Route path="/inventario"   element={<PageErrorBoundary><Inventory /></PageErrorBoundary>} />
           <Route path="/ingreso"      element={<PageErrorBoundary><StockEntry /></PageErrorBoundary>} />
+          <Route path="/egresos"      element={<PageErrorBoundary><StockEgreso /></PageErrorBoundary>} />
           <Route path="/configuracion" element={<PageErrorBoundary><Settings /></PageErrorBoundary>} />
           <Route path="/remitos"      element={<PageErrorBoundary><Remitos /></PageErrorBoundary>} />
         </>}
