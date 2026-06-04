@@ -1,4 +1,17 @@
 {
+  "v1.1.3": {
+    "fecha": "2026-06-04",
+    "mejoras": [
+      "Egreso de Mercadería: buscador de productos con autocompletado real del sistema",
+      "Selector de talles carga automáticamente todos los talles del producto con stock actual",
+      "Validación de cantidad: advertencia visual si supera el stock disponible",
+      "Talles con stock 0 se muestran en gris como advertencia"
+    ],
+    "correcciones": [
+      "Fix: el buscador de productos ahora muestra resultados reales (antes no buscaba correctamente)",
+      "Fix: talles se cargan desde la base de datos al seleccionar el producto"
+    ]
+  },
   "v1.1.2": {
     "fecha": "2026-06-04",
     "mejoras": [

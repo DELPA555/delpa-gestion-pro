@@ -26,19 +26,30 @@ const STATUS_CFG = {
   confirmed: { label: 'Confirmado proveedor',  cls: 'bg-green-500/10 text-green-400 border-green-500/20' },
 }
 
-// ── Fila de producto ──────────────────────────────────────────────────────────
+// ── Fila de producto (rediseñada con talles reales + stock) ───────────────────
 
 function ItemRow({ item, index, onUpdate, onRemove }) {
-  const [search, setSearch]   = useState(item.product_name || '')
-  const [results, setResults] = useState([])
-  const [open,    setOpen]    = useState(false)
-  const ref = useRef(null)
+  const [search,   setSearch]   = useState(item.product_name || '')
+  const [results,  setResults]  = useState([])
+  const [open,     setOpen]     = useState(false)
+  const [sizes,    setSizes]    = useState([])   // todos los talles del producto con su stock
+  const dropRef = useRef(null)
 
+  // ── Cerrar dropdown al click fuera ─────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // ── Búsqueda con debounce ───────────────────────────────────────────────────
   const doSearch = useCallback(async (q) => {
-    if (q.length < 2) { setResults([]); return }
+    if (q.length < 2) { setResults([]); setOpen(false); return }
     try {
       const res = await api.products.search(q)
-      setResults(res?.products || [])
+      // products:search devuelve sizes con stock>0; para el egreso traemos TODOS
+      // usando products:get cuando el user elige el producto
+      setResults(res || [])
       setOpen(true)
     } catch {}
   }, [])
@@ -48,82 +59,173 @@ function ItemRow({ item, index, onUpdate, onRemove }) {
     return () => clearTimeout(t)
   }, [search, doSearch])
 
-  const pick = (p) => {
+  // ── Cargar talles completos del producto seleccionado ──────────────────────
+  const loadSizes = useCallback(async (productId) => {
+    try {
+      const full = await api.products.get(productId)
+      // sizes incluye todos los talles con stock (incluso 0)
+      setSizes(full?.sizes || [])
+    } catch { setSizes([]) }
+  }, [])
+
+  // ── Seleccionar producto del dropdown ──────────────────────────────────────
+  const pick = async (p) => {
+    setSearch(p.name)
+    setResults([])
+    setOpen(false)
+    // Cargar talles reales
+    await loadSizes(p.id)
     onUpdate(index, {
       product_id:   p.id,
       product_name: p.name,
       color:        p.color || '',
       cost_price:   p.cost || 0,
+      size:         '',      // resetear talle al cambiar producto
+      stock_actual: 0,
     })
-    setSearch(p.name)
-    setResults([])
-    setOpen(false)
   }
 
-  const subtotal = (Number(item.quantity) || 0) * (Number(item.cost_price) || 0)
+  // ── Al cambiar talle, actualizar stock_actual y ajustar cantidad ───────────
+  const handleSizeChange = (size) => {
+    const sizeRow = sizes.find(s => s.size === size)
+    const stockActual = sizeRow?.stock ?? 0
+    onUpdate(index, { size, stock_actual: stockActual })
+  }
+
+  const stockActual = item.stock_actual ?? (sizes.find(s => s.size === item.size)?.stock ?? null)
+  const qty         = Number(item.quantity) || 0
+  const stockWarn   = stockActual !== null && qty > stockActual
+  const subtotal    = qty * (Number(item.cost_price) || 0)
 
   return (
-    <div className="grid items-center gap-2 p-3 bg-surface border border-border rounded-xl"
-      style={{ gridTemplateColumns: '2fr 80px 100px 110px 110px 36px' }}>
-      {/* Producto */}
-      <div className="relative" ref={ref}>
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+    <div className={cn(
+      'p-3 bg-surface border rounded-xl space-y-2.5 transition-colors',
+      stockWarn ? 'border-amber-500/40' : 'border-border'
+    )}>
+      {/* Fila 1: búsqueda de producto */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1" ref={dropRef}>
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             className={cn(inputCls, 'pl-8')}
             value={search}
-            onChange={e => { setSearch(e.target.value); onUpdate(index, { product_name: e.target.value }) }}
-            placeholder="Buscar producto..."
+            onChange={e => {
+              setSearch(e.target.value)
+              if (!e.target.value) {
+                setSizes([])
+                onUpdate(index, { product_id: null, product_name: '', size: '', stock_actual: 0 })
+              }
+            }}
+            placeholder="Buscar producto por nombre o código..."
+            autoComplete="off"
           />
+          {open && results.length > 0 && (
+            <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-[#111] border border-border rounded-xl shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
+              {results.slice(0, 10).map(p => {
+                // stock total del producto (suma de todos los talles con stock > 0)
+                const totalStock = (p.sizes || []).reduce((s, sz) => s + (sz.stock || 0), 0)
+                return (
+                  <button key={p.id} type="button" onClick={() => pick(p)}
+                    className="w-full text-left px-3 py-2.5 text-xs hover:bg-white/[0.06] transition-colors border-b border-border/40 last:border-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-white font-medium truncate">{p.name}</span>
+                      <span className={cn('text-[10px] shrink-0 tabular-nums',
+                        totalStock === 0 ? 'text-red-400' : 'text-green-400')}>
+                        Stock: {totalStock}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mt-0.5">
+                      {p.color && <span className="text-zinc-500">{p.color}</span>}
+                      <span className="text-zinc-600">Costo: {formatCurrency(p.cost)}</span>
+                      {p.barcode && <span className="text-zinc-700 font-mono">{p.barcode}</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
-        {open && results.length > 0 && (
-          <div className="absolute top-full mt-1 w-full z-50 bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
-            {results.slice(0, 8).map(p => (
-              <button key={p.id} type="button" onClick={() => pick(p)}
-                className="w-full text-left px-3 py-2.5 text-xs hover:bg-white/5 transition-colors border-b border-border/50 last:border-0">
-                <p className="text-white font-medium">{p.name}</p>
-                <p className="text-zinc-500">{p.color || ''} · Costo: {formatCurrency(p.cost)}</p>
-              </button>
-            ))}
-          </div>
-        )}
+        <button type="button" onClick={() => onRemove(index)}
+          className="no-drag p-1.5 text-zinc-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 shrink-0">
+          <Trash2 size={14} />
+        </button>
       </div>
 
-      {/* Talle */}
-      <input
-        className={inputCls}
-        value={item.size || ''}
-        onChange={e => onUpdate(index, { size: e.target.value })}
-        placeholder="Talle"
-      />
+      {/* Fila 2: talle + cantidad + costo + subtotal */}
+      {item.product_id ? (
+        <div className="grid gap-2" style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr' }}>
+          {/* Selector de talle con stock */}
+          <div>
+            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">Talle</label>
+            {sizes.length > 0 ? (
+              <select
+                className={cn(inputCls, 'text-sm')}
+                value={item.size || ''}
+                onChange={e => handleSizeChange(e.target.value)}
+              >
+                <option value="">— Elegí talle —</option>
+                {sizes.map(sz => (
+                  <option key={sz.size} value={sz.size}
+                    style={sz.stock === 0 ? { color: '#6b7280' } : {}}>
+                    T.{sz.size} — Stock: {sz.stock}
+                    {sz.stock === 0 ? ' (sin stock)' : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input className={inputCls} value={item.size || ''}
+                onChange={e => onUpdate(index, { size: e.target.value })}
+                placeholder="Talle..." />
+            )}
+          </div>
 
-      {/* Cantidad */}
-      <input
-        type="number" min="1"
-        className={cn(inputCls, 'text-center')}
-        value={item.quantity || ''}
-        onChange={e => onUpdate(index, { quantity: Number(e.target.value) })}
-        placeholder="Cant."
-      />
+          {/* Cantidad con validación */}
+          <div>
+            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">
+              Cantidad
+              {stockActual !== null && (
+                <span className={cn('ml-1 font-normal normal-case', stockActual === 0 ? 'text-red-400' : 'text-zinc-500')}>
+                  (disp: {stockActual})
+                </span>
+              )}
+            </label>
+            <input
+              type="number" min="1"
+              className={cn(inputCls, 'text-center', stockWarn && 'border-amber-500/60')}
+              value={item.quantity || ''}
+              onChange={e => onUpdate(index, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+              placeholder="1"
+            />
+            {stockWarn && (
+              <p className="text-[10px] text-amber-400 mt-0.5">
+                ⚠ Supera stock ({stockActual})
+              </p>
+            )}
+          </div>
 
-      {/* Precio costo */}
-      <input
-        type="number" min="0" step="0.01"
-        className={cn(inputCls, 'text-right')}
-        value={item.cost_price || ''}
-        onChange={e => onUpdate(index, { cost_price: Number(e.target.value) })}
-        placeholder="Costo"
-      />
+          {/* Precio de costo */}
+          <div>
+            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">Precio costo</label>
+            <input
+              type="number" min="0" step="0.01"
+              className={cn(inputCls, 'text-right')}
+              value={item.cost_price || ''}
+              onChange={e => onUpdate(index, { cost_price: Number(e.target.value) })}
+              placeholder="0.00"
+            />
+          </div>
 
-      {/* Subtotal */}
-      <span className="text-sm font-semibold text-accent tabular-nums text-right pr-1">
-        {formatCurrency(subtotal)}
-      </span>
-
-      <button type="button" onClick={() => onRemove(index)}
-        className="no-drag p-1.5 text-zinc-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10">
-        <Trash2 size={13} />
-      </button>
+          {/* Subtotal */}
+          <div>
+            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">Subtotal</label>
+            <div className={cn(inputCls, 'text-right font-semibold text-accent pointer-events-none select-none')}>
+              {formatCurrency(subtotal)}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-600 text-center py-1">← Buscá y seleccioná un producto para cargar los talles</p>
+      )}
     </div>
   )
 }
@@ -363,7 +465,7 @@ function NuevoEgresoView({ onDone }) {
   }, [])
 
   function newItem() {
-    return { _key: Date.now() + Math.random(), product_id: null, product_name: '', size: '', color: '', quantity: 1, cost_price: 0 }
+    return { _key: Date.now() + Math.random(), product_id: null, product_name: '', size: '', color: '', quantity: 1, cost_price: 0, stock_actual: null }
   }
 
   const addItem  = () => setItems(p => [...p, newItem()])
@@ -479,16 +581,10 @@ function NuevoEgresoView({ onDone }) {
           </div>
         </div>
 
-        {/* Cabecera de tabla */}
-        <div className="grid text-[11px] text-zinc-500 uppercase px-3 py-1.5"
-          style={{ gridTemplateColumns: '2fr 80px 100px 110px 110px 36px' }}>
-          <span>Producto</span>
-          <span className="text-center">Talle</span>
-          <span className="text-center">Cantidad</span>
-          <span className="text-right">Precio costo</span>
-          <span className="text-right">Subtotal</span>
-          <span />
-        </div>
+        {/* Cabecera */}
+        <p className="text-[11px] text-zinc-500 uppercase tracking-wider px-1">
+          Productos a devolver — buscá, seleccioná talle y cantidad
+        </p>
 
         {/* Filas */}
         <div className="space-y-2">
