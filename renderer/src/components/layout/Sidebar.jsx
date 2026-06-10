@@ -139,7 +139,7 @@ export default function Sidebar() {
         >
           <LogOut size={11} /> Cerrar sesión
         </button>
-        <div className="text-[10px] text-zinc-700">v1.1.9 · DELPA</div>
+        <div className="text-[10px] text-zinc-700">v1.2.0 · DELPA</div>
       </div>
     </aside>
   )

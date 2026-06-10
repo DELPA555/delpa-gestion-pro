@@ -1,4 +1,12 @@
 {
+  "v1.2.0": {
+    "fecha": "2026-06-10",
+    "correcciones": [
+      "Fix: búsqueda de productos en Pedidos a Proveedores (import useCallback faltaba)",
+      "Fix: botón 'Actualizar ahora' ahora descarga e instala correctamente la nueva versión",
+      "Fix: el updater manual ahora usa checkForUpdates() internamente para que electron-updater conozca la versión disponible antes de descargar"
+    ]
+  },
   "v1.1.9": {
     "fecha": "2026-06-10",
     "correcciones": [

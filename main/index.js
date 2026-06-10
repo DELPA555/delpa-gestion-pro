@@ -187,6 +187,15 @@ function setupAutoUpdater() {
     autoUpdater.logger = null // sin logs en consola
 
     autoUpdater.on('update-available', (info) => {
+      // Si fue disparado desde el botón manual de Settings, descargamos directo
+      const updaterState = require('./ipc/updater-manual')
+      if (updaterState.manualMode) {
+        updaterState.manualMode = false
+        mainWindow?.webContents.send('updater:status', { type: 'downloading', version: info.version })
+        autoUpdater.downloadUpdate()
+        return
+      }
+      // Verificación automática al inicio: mostrar dialog de confirmación
       const choice = dialog.showMessageBoxSync(mainWindow, {
         type: 'info',
         title: 'Nueva versión disponible',

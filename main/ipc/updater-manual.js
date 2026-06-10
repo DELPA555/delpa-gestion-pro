@@ -1,6 +1,11 @@
 const { ipcMain, app, shell } = require('electron')
 const https = require('https')
 
+// Flag compartido con setupAutoUpdater en main/index.js
+// Cuando es true, update-available descarga directo sin dialog
+const state = { manualMode: false }
+module.exports = state
+
 const REPO_API = 'https://api.github.com/repos/DELPA555/delpa-gestion-pro/releases/latest'
 
 function compareVersions(a, b) {
@@ -80,13 +85,22 @@ ipcMain.handle('updater:openReleasePage', (_, url) => {
 })
 
 // ── updater:downloadAndInstall ────────────────────────────────────────────────
+// downloadUpdate() requiere que checkForUpdates() haya corrido primero dentro
+// del ciclo de electron-updater. La verificación manual usa HTTPS directo y
+// bypasea ese estado interno, por eso hay que llamar checkForUpdates() acá.
+// La flag manualMode hace que setupAutoUpdater omita el dialog de confirmación
+// y descargue directo (el usuario ya confirmó desde la UI de Settings).
 
-ipcMain.handle('updater:downloadAndInstall', () => {
+ipcMain.handle('updater:downloadAndInstall', async () => {
   try {
     const { autoUpdater } = require('electron-updater')
-    autoUpdater.downloadUpdate()
+    state.manualMode = true
+    await autoUpdater.checkForUpdates()
+    // update-available se dispara durante checkForUpdates y si manualMode=true
+    // setupAutoUpdater llama downloadUpdate() directamente (sin dialog)
     return { ok: true }
   } catch (e) {
+    state.manualMode = false
     return { ok: false, error: e.message }
   }
 })
