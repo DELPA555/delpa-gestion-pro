@@ -1,4 +1,11 @@
 {
+  "v1.1.9": {
+    "fecha": "2026-06-10",
+    "correcciones": [
+      "Fix: búsqueda de productos en Pedidos a Proveedores no mostraba resultados",
+      "Fix: dropdown de resultados quedaba cortado por el contenedor de la tabla"
+    ]
+  },
   "v1.1.8": {
     "fecha": "2026-06-10",
     "mejoras": [

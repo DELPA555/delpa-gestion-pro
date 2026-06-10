@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -7,7 +7,7 @@ import {
   MessageCircle, PackagePlus, AlertTriangle, ChevronDown,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { formatCurrency, cn, debounce } from '@/lib/utils'
+import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
 import EmptyState from '@/components/shared/EmptyState'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
@@ -33,22 +33,23 @@ function newItem() {
 }
 
 // ── Item row with product search ───────────────────────────────────────────────
-function ItemRow({ item, onChange, onRemove, allSizes }) {
+function ItemRow({ item, onChange, onRemove }) {
   const [query, setQuery]     = useState(item.product_name || '')
   const [results, setResults] = useState([])
   const [sizes, setSizes]     = useState([])
   const [searching, setSearching] = useState(false)
+  const searchTimer = useRef(null)
 
-  const search = useCallback(debounce(async (q) => {
+  function handleQueryChange(q) {
+    setQuery(q)
+    clearTimeout(searchTimer.current)
     if (q.length < 2) { setResults([]); return }
     setSearching(true)
-    try { setResults(await api.products.search(q)) } catch {}
-    finally { setSearching(false) }
-  }, 280), [])
-
-  useEffect(() => {
-    if (!item.product_id) search(query)
-  }, [query])
+    searchTimer.current = setTimeout(async () => {
+      try { setResults(await api.products.search(q) || []) } catch {}
+      finally { setSearching(false) }
+    }, 280)
+  }
 
   const selectProduct = async (p) => {
     setQuery(p.name)
@@ -93,7 +94,7 @@ function ItemRow({ item, onChange, onRemove, allSizes }) {
           <>
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
-              <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleBarcode}
+              <input value={query} onChange={e => handleQueryChange(e.target.value)} onKeyDown={handleBarcode}
                 placeholder="Buscar o escanear..." className={cn(inputCls, 'pl-7 text-xs py-1.5')} />
               {searching && <RefreshCw size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-600 animate-spin" />}
             </div>
@@ -476,9 +477,9 @@ export default function SupplierOrders() {
         </div>
       </div>
 
-      {/* Items table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
+      {/* Items table — sin overflow-hidden para que el dropdown de búsqueda no quede clippeado */}
+      <div className="bg-card border border-border rounded-xl">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface rounded-t-xl">
           <p className="text-sm font-medium text-white">{fItems.filter(i=>i.product_id).length} productos</p>
           <div className="flex gap-2">
             <button onClick={addLowStock} disabled={loadingLow}
@@ -509,7 +510,7 @@ export default function SupplierOrders() {
           ))}
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface rounded-b-xl">
           <span className="text-xs text-zinc-500">Total del pedido</span>
           <span className="text-lg font-bold text-white tabular-nums">{formatCurrency(fTotal)}</span>
         </div>
