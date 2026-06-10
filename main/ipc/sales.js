@@ -56,13 +56,14 @@ ipcMain.handle('sales:create', (_, {
       INSERT INTO sale_items (sale_id,product_id,product_name,size,quantity,unit_price,unit_cost,discount)
       VALUES (?,?,?,?,?,?,?,?)
     `)
-    const updStock = db.prepare(`UPDATE product_sizes SET stock=stock-? WHERE product_id=? AND size=?`)
+    const updStock = db.prepare(`UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?`)
     let updModTime = null
     try { updModTime = db.prepare(`UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?`) } catch {}
 
     for (const it of items) {
       insItem.run(saleId, it.productId, it.productName, it.size, it.quantity, it.unitPrice, it.unitCost || 0, it.discount || 0)
       if (it.size !== 'N/A') {
+        console.log('[SALE] Descontando stock:', { product_id: it.productId, size: it.size, qty: it.quantity })
         updStock.run(it.quantity, it.productId, it.size)
         try { updModTime?.run(it.productId, it.size) } catch {}
       }

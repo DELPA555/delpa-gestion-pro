@@ -2097,8 +2097,28 @@ export default function Sales() {
               <label className={labelCls}>Producto devuelto</label>
               <div className="relative">
                 <input value={exchReturnQuery} onChange={e => { setExchReturnQuery(e.target.value); setExchReturnProduct(null); setExchReturnSize(null) }}
-                  placeholder="Buscar producto..." className={inputCls}
-                  onBlur={() => setTimeout(() => setExchReturnResults([]), 150)} />
+                  placeholder="Buscar o escanear..." className={inputCls}
+                  onBlur={() => setTimeout(() => setExchReturnResults([]), 150)}
+                  onKeyDown={async (e) => {
+                    if (e.key !== 'Enter') return
+                    e.preventDefault()
+                    const code = exchReturnQuery.trim()
+                    if (code.length < 4) return
+                    try {
+                      const result = await api.products.searchByBarcode(code)
+                      if (result) {
+                        setExchReturnProduct(result)
+                        setExchReturnQuery(result.name)
+                        setExchReturnResults([])
+                        setExchReturnSize(result.matchedSize || null)
+                        setExchReturnCustomSize('')
+                        playBeep('success')
+                      } else {
+                        playBeep('error')
+                        toast.error('Código no encontrado')
+                      }
+                    } catch { playBeep('error') }
+                  }} />
                 <AnimatePresence>
                   {exchReturnResults.length > 0 && !exchReturnProduct && (
                     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -2144,8 +2164,32 @@ export default function Sales() {
               <label className={labelCls}>Producto nuevo</label>
               <div className="relative">
                 <input value={exchNewQuery} onChange={e => { setExchNewQuery(e.target.value); setExchNewProduct(null); setExchNewSize(null) }}
-                  placeholder="Buscar producto..." className={inputCls}
-                  onBlur={() => setTimeout(() => setExchNewResults([]), 150)} />
+                  placeholder="Buscar o escanear..." className={inputCls}
+                  onBlur={() => setTimeout(() => setExchNewResults([]), 150)}
+                  onKeyDown={async (e) => {
+                    if (e.key !== 'Enter') return
+                    e.preventDefault()
+                    const code = exchNewQuery.trim()
+                    if (code.length < 4) return
+                    try {
+                      const result = await api.products.searchByBarcode(code)
+                      if (result) {
+                        if (result.matchedSize && result.matchedStock === 0) {
+                          playBeep('error')
+                          toast.error(`Sin stock: ${result.name} T.${result.matchedSize}`)
+                          return
+                        }
+                        setExchNewProduct(result)
+                        setExchNewQuery(result.name)
+                        setExchNewResults([])
+                        setExchNewSize(result.matchedSize || null)
+                        playBeep('success')
+                      } else {
+                        playBeep('error')
+                        toast.error('Código no encontrado')
+                      }
+                    } catch { playBeep('error') }
+                  }} />
                 <AnimatePresence>
                   {exchNewResults.length > 0 && !exchNewProduct && (
                     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
