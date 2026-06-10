@@ -1,4 +1,14 @@
 {
+  "v1.1.8": {
+    "fecha": "2026-06-10",
+    "mejoras": [
+      "Configuración: nuevo menú lateral con grupos (General, Comercial, Integraciones, Sistema)",
+      "Pestaña Actualizaciones ahora siempre visible y accesible con un clic"
+    ],
+    "correcciones": [
+      "Fix: tabs de Configuración ya no se cortaban fuera de pantalla"
+    ]
+  },
   "v1.1.7": {
     "fecha": "2026-06-10",
     "mejoras": [

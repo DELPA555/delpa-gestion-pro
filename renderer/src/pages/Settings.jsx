@@ -7,22 +7,42 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
 
-const TABS = [
-  { id: 'business',     label: 'Negocio',       Icon: Building2 },
-  { id: 'sizes',        label: 'Talles',         Icon: Ruler },
-  { id: 'categories',   label: 'Categorías',    Icon: Tag },
-  { id: 'payments',     label: 'Pagos & Drive',  Icon: CreditCard },
-  { id: 'sellers',      label: 'Vendedoras',     Icon: Users },
-  { id: 'surcharges',   label: 'Recargos',       Icon: Percent },
-  { id: 'fidelizacion', label: 'Fidelización',   Icon: Gift },
-  { id: 'email',        label: 'Email',          Icon: Mail },
-  { id: 'afip',         label: 'AFIP',           Icon: ShieldCheck },
-  { id: 'tiendanube',   label: 'Tienda Nube',    Icon: Store },
-  { id: 'mercadopago',  label: 'Mercado Pago',   Icon: QrCode },
-  { id: 'usuarios',     label: 'Usuarios',       Icon: UserCog },
-  { id: 'gastosfijos',  label: 'Gastos Fijos',   Icon: DollarSign },
-  { id: 'licencia',       label: 'Licencia',       Icon: ShieldAlert },
-  { id: 'actualizaciones', label: 'Actualizaciones', Icon: ArrowUpCircle },
+const TAB_GROUPS = [
+  {
+    label: 'General',
+    items: [
+      { id: 'business',     label: 'Negocio',      Icon: Building2 },
+      { id: 'sizes',        label: 'Talles',        Icon: Ruler },
+      { id: 'categories',   label: 'Categorías',   Icon: Tag },
+      { id: 'sellers',      label: 'Vendedoras',    Icon: Users },
+      { id: 'usuarios',     label: 'Usuarios',      Icon: UserCog },
+    ],
+  },
+  {
+    label: 'Comercial',
+    items: [
+      { id: 'surcharges',   label: 'Recargos',      Icon: Percent },
+      { id: 'fidelizacion', label: 'Fidelización',  Icon: Gift },
+      { id: 'gastosfijos',  label: 'Gastos Fijos',  Icon: DollarSign },
+    ],
+  },
+  {
+    label: 'Integraciones',
+    items: [
+      { id: 'email',        label: 'Email',         Icon: Mail },
+      { id: 'afip',         label: 'AFIP',          Icon: ShieldCheck },
+      { id: 'tiendanube',   label: 'Tienda Nube',   Icon: Store },
+      { id: 'mercadopago',  label: 'Mercado Pago',  Icon: QrCode },
+      { id: 'payments',     label: 'Pagos & Drive', Icon: CreditCard },
+    ],
+  },
+  {
+    label: 'Sistema',
+    items: [
+      { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
+      { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
+    ],
+  },
 ]
 
 const inputCls = 'input-field w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 no-drag'
@@ -579,23 +599,37 @@ export default function Settings() {
     >
       <PageHeader title="Configuración" subtitle="Personalizá el sistema a tu negocio" />
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-surface rounded-xl p-1 border border-border overflow-x-auto max-w-full [&::-webkit-scrollbar]:hidden">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`no-drag shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors ${
-              tab === id
-                ? 'bg-card text-white font-medium shadow-sm border border-border'
-                : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <Icon size={14} />
-            {label}
-          </button>
-        ))}
-      </div>
+      <div className="flex gap-6 mt-6">
+        {/* ── Nav lateral ── */}
+        <aside className="w-44 shrink-0 space-y-5">
+          {TAB_GROUPS.map(group => (
+            <div key={group.label}>
+              <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-1.5 px-2">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => setTab(id)}
+                    className={cn(
+                      'no-drag w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors text-left border-l-2',
+                      tab === id
+                        ? 'bg-accent/10 border-accent text-accent font-semibold'
+                        : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04] border-transparent'
+                    )}
+                  >
+                    <Icon size={13} strokeWidth={tab === id ? 2.2 : 1.8} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </aside>
+
+        {/* ── Contenido ── */}
+        <div className="flex-1 min-w-0">
 
       {/* ── Tab: Negocio ── */}
       {tab === 'business' && (
@@ -2009,6 +2043,8 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
       {/* ── Tab: Actualizaciones ── */}
       {tab === 'actualizaciones' && <TabActualizaciones inputCls={inputCls} />}
 
+        </div>{/* end content */}
+      </div>{/* end flex layout */}
     </motion.div>
   )
 }
