@@ -1,4 +1,25 @@
 {
+  "v1.1.7": {
+    "fecha": "2026-06-10",
+    "mejoras": [
+      "Nuevo módulo Pedidos a Proveedores: creá y gestioná órdenes de reposición",
+      "Número correlativo automático: PED-2026-0001, PED-2026-0002...",
+      "Búsqueda de productos por nombre o escáner de código de barras en el pedido",
+      "Botón 'Agregar desde stock mínimo': carga automáticamente los productos bajo mínimo",
+      "Generación de PDF del pedido al confirmar (listo para imprimir o enviar)",
+      "Envío por WhatsApp con detalle del pedido y total",
+      "Flujo de estados: Borrador → Enviado → Confirmado → Recibido",
+      "Recibir pedido convierte automáticamente en Ingreso de Mercadería y actualiza el stock",
+      "Historial de pedidos con filtros por proveedor y estado",
+      "Reportes: nueva pestaña 'Sin movimiento' con productos inactivos y herramienta de liquidación",
+      "Reportes: nueva pestaña 'Vendedoras' con podio, ranking y comparativa de desempeño",
+      "Reportes: nueva pestaña 'Rentabilidad por categoría' con gráficos y comparativa de período"
+    ],
+    "correcciones": [
+      "Fix v1.1.6: stock de productos sin talle (N/A) ahora se descuenta correctamente al vender",
+      "Fix v1.1.5: stock nunca queda negativo al registrar ventas"
+    ]
+  },
   "v1.1.4": {
     "fecha": "2026-06-04",
     "mejoras": [

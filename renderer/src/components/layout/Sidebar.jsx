@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, Users, CreditCard,
-  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus,
+  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -29,6 +29,7 @@ const NAV_ADMIN = [
   { to: '/ingreso',      label: 'Ing. Mercadería',  Icon: PackagePlus },
   { to: '/egresos',      label: 'Egr. Mercadería',  Icon: PackageMinus },
   { to: '/remitos',      label: 'Remitos',          Icon: FileBox },
+  { to: '/reposicion',   label: 'Ped. Proveedores', Icon: Boxes },
   { to: '/configuracion', label: 'Configuración',   Icon: Settings },
 ]
 
@@ -138,7 +139,7 @@ export default function Sidebar() {
         >
           <LogOut size={11} /> Cerrar sesión
         </button>
-        <div className="text-[10px] text-zinc-700">v1.1.6 · DELPA</div>
+        <div className="text-[10px] text-zinc-700">v1.1.7 · DELPA</div>
       </div>
     </aside>
   )

@@ -26,6 +26,7 @@ import Senas from './pages/Senas'
 import StockEntry from './pages/StockEntry'
 import StockEgreso from './pages/StockEgreso'
 import Remitos from './pages/Remitos'
+import SupplierOrders from './pages/SupplierOrders'
 import SetupWizard from './pages/SetupWizard'
 import { api } from './lib/api'
 import { toast } from 'sonner'
@@ -82,6 +83,7 @@ function AnimatedRoutes() {
           <Route path="/egresos"      element={<PageErrorBoundary><StockEgreso /></PageErrorBoundary>} />
           <Route path="/configuracion" element={<PageErrorBoundary><Settings /></PageErrorBoundary>} />
           <Route path="/remitos"      element={<PageErrorBoundary><Remitos /></PageErrorBoundary>} />
+          <Route path="/reposicion"   element={<PageErrorBoundary><SupplierOrders /></PageErrorBoundary>} />
         </>}
         <Route path="*" element={<Navigate to="/ventas" replace />} />
       </Routes>

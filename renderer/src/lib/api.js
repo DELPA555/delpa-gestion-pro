@@ -65,6 +65,15 @@ export const api = {
     history: (id) => inv('suppliers:history', id),
     addPayment: (d) => inv('suppliers:addPayment', d),
   },
+  supplierOrders: {
+    list:           (p)  => inv('supplierorders:list', p),
+    get:            (id) => inv('supplierorders:get', id),
+    create:         (d)  => inv('supplierorders:create', d),
+    update:         (d)  => inv('supplierorders:update', d),
+    delete:         (id) => inv('supplierorders:delete', id),
+    lowStock:       ()   => inv('supplierorders:lowStock'),
+    convertToEntry: (id) => inv('supplierorders:convertToEntry', id),
+  },
   purchases: {
     list: (p) => inv('purchases:list', p),
     get: (id) => inv('purchases:get', id),

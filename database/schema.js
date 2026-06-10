@@ -545,6 +545,24 @@ function createTables(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_price_history_product ON price_history(product_id);
     CREATE INDEX IF NOT EXISTS idx_price_history_date ON price_history(changed_at);
+
+    CREATE TABLE IF NOT EXISTS supplier_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_number TEXT NOT NULL UNIQUE,
+      supplier_id INTEGER,
+      supplier_name TEXT DEFAULT '',
+      supplier_email TEXT DEFAULT '',
+      supplier_phone TEXT DEFAULT '',
+      status TEXT DEFAULT 'draft',
+      notes TEXT DEFAULT '',
+      total REAL DEFAULT 0,
+      items_json TEXT DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_supplier_orders_supplier ON supplier_orders(supplier_id);
+    CREATE INDEX IF NOT EXISTS idx_supplier_orders_status ON supplier_orders(status);
   `)
 
   const migrations = [
