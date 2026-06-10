@@ -109,6 +109,10 @@ export const api = {
     clientDebt:          ()  => inv('reports:clientDebt'),
     priceHistoryReport:  (p) => inv('reports:priceHistoryReport', p),
     priceHistoryProduct: (p) => inv('reports:priceHistoryProduct', p),
+    sinMovimiento:       (p) => inv('reports:sinMovimiento', p),
+    liquidarProductos:   (p) => inv('reports:liquidarProductos', p),
+    vendedoras:          (p) => inv('reports:vendedoras', p),
+    rentabilidadCategorias: (p) => inv('reports:rentabilidadCategorias', p),
   },
   orders: {
     list: (p) => inv('orders:list', p),

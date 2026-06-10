@@ -291,3 +291,139 @@ ipcMain.handle('reports:priceHistoryProduct', (_, { productId } = {}) => {
     'SELECT * FROM price_history WHERE product_id=? ORDER BY changed_at ASC'
   ).all(productId)
 })
+
+// ── Sin movimiento ─────────────────────────────────────────────────────────────
+ipcMain.handle('reports:sinMovimiento', (_, { days = 30 } = {}) => {
+  const db = getDB()
+  const rows = db.prepare(`
+    SELECT p.id, p.name, COALESCE(p.category,'Sin categoría') as category,
+           p.price, p.cost,
+           COALESCE(SUM(ps.stock),0) as total_stock,
+           last_q.last_sold,
+           CASE
+             WHEN last_q.last_sold IS NULL THEN 9999
+             ELSE CAST(julianday('now','localtime') - julianday(last_q.last_sold,'localtime') AS INTEGER)
+           END as days_inactive
+    FROM products p
+    LEFT JOIN product_sizes ps ON ps.product_id=p.id
+    LEFT JOIN (
+      SELECT si.product_id, MAX(date(s.created_at,'localtime')) as last_sold
+      FROM sale_items si JOIN sales s ON s.id=si.sale_id
+      WHERE s.voided=0
+      GROUP BY si.product_id
+    ) last_q ON last_q.product_id=p.id
+    WHERE p.active=1
+    GROUP BY p.id
+    HAVING days_inactive >= ? AND total_stock > 0
+    ORDER BY days_inactive DESC, total_stock DESC
+  `).all(days)
+
+  const total_capital = rows.reduce((s, r) => s + r.total_stock * (r.cost || 0), 0)
+  return { rows, total_capital }
+})
+
+ipcMain.handle('reports:liquidarProductos', (_, { productIds, discountPct }) => {
+  if (!Array.isArray(productIds) || productIds.length === 0) return { ok: false }
+  const db = getDB()
+  const pct = Math.max(0, Math.min(99, Number(discountPct) || 0))
+  const upd = db.prepare('UPDATE products SET price=MAX(1, ROUND(price*(1.0-?/100.0))) WHERE id=?')
+  const run = db.transaction(() => {
+    for (const id of productIds) upd.run(pct, id)
+  })
+  run()
+  return { ok: true, count: productIds.length, pct }
+})
+
+// ── Vendedoras ─────────────────────────────────────────────────────────────────
+ipcMain.handle('reports:vendedoras', (_, { from, to } = {}) => {
+  const db = getDB()
+  const f = from || defaultFrom(), t = to || defaultTo()
+
+  const sellers = db.prepare(`
+    SELECT s.seller_name,
+           COUNT(*) as sale_count,
+           COALESCE(SUM(s.total),0) as total_sold,
+           COALESCE(AVG(s.total),0) as avg_ticket
+    FROM sales s
+    WHERE s.voided=0 AND s.seller_name!=''
+      AND date(s.created_at,'localtime') BETWEEN ? AND ?
+    GROUP BY s.seller_name ORDER BY total_sold DESC
+  `).all(f, t)
+
+  const rateMap = {}
+  try {
+    for (const r of db.prepare('SELECT name,commission_rate FROM sellers WHERE active=1').all())
+      rateMap[r.name] = Number(r.commission_rate || 0)
+  } catch {}
+
+  const bestDays = db.prepare(`
+    SELECT seller_name, date_day, day_total FROM (
+      SELECT s.seller_name, date(s.created_at,'localtime') as date_day,
+             SUM(s.total) as day_total,
+             ROW_NUMBER() OVER (PARTITION BY s.seller_name ORDER BY SUM(s.total) DESC) as rn
+      FROM sales s WHERE s.voided=0 AND s.seller_name!=''
+        AND date(s.created_at,'localtime') BETWEEN ? AND ?
+      GROUP BY s.seller_name, date_day
+    ) WHERE rn=1
+  `).all(f, t)
+  const bestDayMap = {}
+  for (const r of bestDays) bestDayMap[r.seller_name] = { day: r.date_day, total: r.day_total }
+
+  const topProducts = db.prepare(`
+    SELECT seller_name, product_name, qty FROM (
+      SELECT s.seller_name, si.product_name, SUM(si.quantity) as qty,
+             ROW_NUMBER() OVER (PARTITION BY s.seller_name ORDER BY SUM(si.quantity) DESC) as rn
+      FROM sale_items si JOIN sales s ON s.id=si.sale_id
+      WHERE s.voided=0 AND s.seller_name!=''
+        AND date(s.created_at,'localtime') BETWEEN ? AND ?
+      GROUP BY s.seller_name, si.product_id, si.product_name
+    ) WHERE rn=1
+  `).all(f, t)
+  const topProdMap = {}
+  for (const r of topProducts) topProdMap[r.seller_name] = { name: r.product_name, qty: r.qty }
+
+  return sellers.map(s => ({
+    ...s,
+    commission_rate: rateMap[s.seller_name] ?? 0,
+    commission_amount: s.total_sold * (rateMap[s.seller_name] ?? 0) / 100,
+    best_day: bestDayMap[s.seller_name] || null,
+    top_product: topProdMap[s.seller_name] || null,
+  }))
+})
+
+// ── Rentabilidad por categoría ─────────────────────────────────────────────────
+ipcMain.handle('reports:rentabilidadCategorias', (_, { from, to } = {}) => {
+  const db = getDB()
+  const f = from || defaultFrom(), t = to || defaultTo()
+
+  const catQuery = (ff, tt) => db.prepare(`
+    SELECT COALESCE(p.category,'Sin categoría') as category,
+           SUM(si.quantity) as units_sold,
+           SUM(si.quantity*si.unit_price) as revenue,
+           SUM(si.quantity*si.unit_cost) as total_cost,
+           SUM(si.quantity*(si.unit_price-si.unit_cost)) as profit
+    FROM sale_items si
+    JOIN sales s ON s.id=si.sale_id
+    LEFT JOIN products p ON p.id=si.product_id
+    WHERE s.voided=0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
+    GROUP BY category ORDER BY profit DESC
+  `).all(ff, tt)
+
+  const current = catQuery(f, t)
+
+  const fDate = new Date(f), tDate = new Date(t)
+  const diffMs = tDate - fDate
+  const pf = new Date(fDate - diffMs - 86400000).toISOString().split('T')[0]
+  const pt = new Date(fDate - 86400000).toISOString().split('T')[0]
+  const prev = catQuery(pf, pt)
+  const prevMap = {}
+  for (const r of prev) prevMap[r.category] = r
+
+  return current.map(r => {
+    const margin = r.revenue > 0 ? (r.profit / r.revenue * 100) : 0
+    const p = prevMap[r.category]
+    const prev_profit = p?.profit || 0
+    const trend = prev_profit === 0 ? null : ((r.profit - prev_profit) / Math.abs(prev_profit) * 100)
+    return { ...r, margin, prev_profit, trend }
+  })
+})

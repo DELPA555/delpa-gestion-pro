@@ -60,13 +60,17 @@ ipcMain.handle('sales:create', (_, {
     let updModTime = null
     try { updModTime = db.prepare(`UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?`) } catch {}
 
+    const updStockNull = db.prepare(`UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND (size IS NULL OR size='')`)
     for (const it of items) {
       insItem.run(saleId, it.productId, it.productName, it.size, it.quantity, it.unitPrice, it.unitCost || 0, it.discount || 0)
-      if (it.size !== 'N/A') {
-        console.log('[SALE] Descontando stock:', { product_id: it.productId, size: it.size, qty: it.quantity })
-        updStock.run(it.quantity, it.productId, it.size)
-        try { updModTime?.run(it.productId, it.size) } catch {}
+      const sz = it.size || 'N/A'
+      console.log('[SALE] Descontando stock:', { product_id: it.productId, size: sz, qty: it.quantity })
+      const r = updStock.run(it.quantity, it.productId, sz)
+      if (r.changes === 0 && sz === 'N/A') {
+        const r2 = updStockNull.run(it.quantity, it.productId)
+        console.log('[SALE] Fallback N/A:', r2.changes > 0 ? 'match NULL/""' : 'no match (sin stock trackeado)')
       }
+      try { updModTime?.run(it.productId, sz) } catch {}
     }
 
     // Account movements for Cuenta Corriente portions

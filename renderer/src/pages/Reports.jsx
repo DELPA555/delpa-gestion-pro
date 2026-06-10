@@ -318,6 +318,26 @@ export default function Reports() {
   // Categorías para filtros
   const [categories, setCategories] = useState([])
 
+  // Sin movimiento tab
+  const [sinMovDays, setSinMovDays] = useState(30)
+  const [sinMovData, setSinMovData] = useState(null)
+  const [sinMovLoading, setSinMovLoading] = useState(false)
+  const [sinMovSelected, setSinMovSelected] = useState(new Set())
+  const [sinMovDiscount, setSinMovDiscount] = useState(30)
+  const [sinMovApplying, setSinMovApplying] = useState(false)
+
+  // Vendedoras tab
+  const [vendFrom, setVendFrom] = useState(defaultFrom())
+  const [vendTo, setVendTo] = useState(defaultTo())
+  const [vendData, setVendData] = useState([])
+  const [vendLoading, setVendLoading] = useState(false)
+
+  // Rentabilidad categorías tab
+  const [rentFrom, setRentFrom] = useState(defaultFrom())
+  const [rentTo, setRentTo] = useState(defaultTo())
+  const [rentData, setRentData] = useState([])
+  const [rentLoading, setRentLoading] = useState(false)
+
   // Fiscal tab
   const [fiscalSubTab,   setFiscalSubTab]   = useState('ventas')
   const [fiscalFrom,     setFiscalFrom]     = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
@@ -500,6 +520,32 @@ export default function Reports() {
 
   useEffect(() => { if (tab === 'fiscal') loadFiscal() }, [tab, loadFiscal])
 
+  const loadSinMov = useCallback(async () => {
+    setSinMovLoading(true)
+    setSinMovSelected(new Set())
+    try { setSinMovData(await api.reports.sinMovimiento({ days: sinMovDays })) }
+    catch { setSinMovData(null) }
+    finally { setSinMovLoading(false) }
+  }, [sinMovDays])
+
+  const loadVend = useCallback(async () => {
+    setVendLoading(true)
+    try { setVendData(await api.reports.vendedoras({ from: vendFrom, to: vendTo })) }
+    catch { setVendData([]) }
+    finally { setVendLoading(false) }
+  }, [vendFrom, vendTo])
+
+  const loadRentCat = useCallback(async () => {
+    setRentLoading(true)
+    try { setRentData(await api.reports.rentabilidadCategorias({ from: rentFrom, to: rentTo })) }
+    catch { setRentData([]) }
+    finally { setRentLoading(false) }
+  }, [rentFrom, rentTo])
+
+  useEffect(() => { if (tab === 'sinmov')   loadSinMov()  }, [tab, loadSinMov])
+  useEffect(() => { if (tab === 'vendedoras') loadVend()   }, [tab, loadVend])
+  useEffect(() => { if (tab === 'rentcat')  loadRentCat() }, [tab, loadRentCat])
+
   const inputCls = 'input-field bg-card border border-border rounded-lg px-3 py-2 text-sm text-white no-drag'
 
   const filteredArt = artData.filter(r =>
@@ -526,6 +572,9 @@ export default function Reports() {
           { id: 'precios',    label: 'Historial precios' },
           { id: 'fiscal',     label: '⚖ Fiscal' },
           { id: 'comisiones', label: 'Comisiones' },
+          { id: 'sinmov',     label: 'Sin movimiento' },
+          { id: 'vendedoras', label: 'Vendedoras' },
+          { id: 'rentcat',    label: 'Rentabilidad' },
         ].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
@@ -1053,6 +1102,337 @@ export default function Reports() {
             )}
           </div>
         </div>
+      ) : tab === 'sinmov' ? (
+        /* ─── SIN MOVIMIENTO ──────────────────────────────────────────── */
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">Días sin ventas:</label>
+            {[15, 30, 60, 90, 180].map(d => (
+              <button key={d} onClick={() => setSinMovDays(d)}
+                className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                  sinMovDays === d ? 'bg-accent text-black border-accent' : 'bg-surface text-zinc-400 border-border hover:text-white')}>
+                {d} días
+              </button>
+            ))}
+            <button onClick={loadSinMov} disabled={sinMovLoading}
+              className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+              <RefreshCw size={13} className={sinMovLoading ? 'animate-spin' : ''} /> Buscar
+            </button>
+            {sinMovData?.rows?.length > 0 && (
+              <button onClick={() => {
+                const rows = (sinMovData?.rows || []).map(r =>
+                  `<tr><td>${r.name}</td><td>${r.category}</td><td style="text-align:right">${r.total_stock}</td><td style="text-align:right">${r.last_sold || '—'}</td><td style="text-align:right">${r.days_inactive === 9999 ? 'Nunca' : r.days_inactive}</td><td style="text-align:right">$${(r.price||0).toLocaleString('es-AR')}</td><td style="text-align:right">$${((r.total_stock||0)*(r.cost||0)).toLocaleString('es-AR')}</td></tr>`
+                ).join('')
+                const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sin movimiento</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial;font-size:11px;padding:20px}h2{margin-bottom:12px}table{width:100%;border-collapse:collapse}th{background:#f0f0f0;padding:5px 7px;font-size:10px;text-transform:uppercase}th:not(:first-child){text-align:right}td{padding:4px 7px;border-bottom:1px solid #eee}td:not(:first-child){text-align:right}tfoot td{background:#f0f0f0;font-weight:bold}.cap{color:#e53e3e}@media print{@page{size:A4;margin:10mm}}</style></head><body><h2>Productos sin movimiento — últimos ${sinMovDays} días</h2><p style="color:#555;font-size:10px;margin-bottom:12px">Capital inmovilizado: <strong>$${(sinMovData.total_capital||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</strong></p><table><thead><tr><th>Producto</th><th>Categoría</th><th>Stock</th><th>Última venta</th><th>Días</th><th>Precio</th><th>Capital</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`
+                const w = window.open('', '_blank', 'width=900,height=700')
+                if (w) { w.document.write(html); w.document.close() }
+              }} className="no-drag ml-auto flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                <Printer size={13} /> PDF
+              </button>
+            )}
+          </div>
+
+          {sinMovData && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-300">{sinMovData.rows?.length || 0} productos sin movimiento en {sinMovDays} días</p>
+                <p className="text-xs text-amber-500 mt-0.5">Capital inmovilizado: <span className="font-bold">{formatCurrency(sinMovData.total_capital || 0)}</span></p>
+              </div>
+              {sinMovSelected.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-400">{sinMovSelected.size} seleccionados · Descuento:</span>
+                  <input type="number" min="1" max="99" value={sinMovDiscount}
+                    onChange={e => setSinMovDiscount(Number(e.target.value))}
+                    className="w-16 px-2 py-1 text-sm bg-[#0a0a0a] border border-border rounded-lg text-white text-center no-drag" />
+                  <span className="text-xs text-zinc-400">%</span>
+                  <button disabled={sinMovApplying} onClick={async () => {
+                    setSinMovApplying(true)
+                    try {
+                      const res = await api.reports.liquidarProductos({ productIds: [...sinMovSelected], discountPct: sinMovDiscount })
+                      if (res?.ok) { toast.success(`Descuento ${sinMovDiscount}% aplicado a ${res.count} productos`); loadSinMov() }
+                    } catch { toast.error('Error al aplicar descuento') }
+                    finally { setSinMovApplying(false) }
+                  }} className="no-drag btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50">
+                    <TrendingDown size={12} /> {sinMovApplying ? 'Aplicando...' : 'Liquidar'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            {sinMovLoading ? (
+              <div className="py-4"><SkeletonTable rows={8} cols={7} /></div>
+            ) : !sinMovData ? (
+              <EmptyState icon={AlertTriangle} title="Hacer clic en Buscar" subtitle="Seleccioná los días y buscá productos sin movimiento" />
+            ) : sinMovData.rows?.length === 0 ? (
+              <EmptyState icon={Package} title="¡Excelente!" subtitle="Todos los productos tuvieron ventas en este período" />
+            ) : (
+              <>
+                <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"
+                  style={{ gridTemplateColumns: '24px 2.5fr 1fr 1fr 1fr 1fr 1fr 1fr' }}>
+                  <span></span>
+                  <span>Producto</span>
+                  <span>Categoría</span>
+                  <span className="text-right">Stock</span>
+                  <span className="text-right">Último mov.</span>
+                  <span className="text-right">Días</span>
+                  <span className="text-right">Precio</span>
+                  <span className="text-right">Capital</span>
+                </div>
+                <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+                  {sinMovData.rows.map(r => {
+                    const capital = r.total_stock * (r.cost || 0)
+                    const sel = sinMovSelected.has(r.id)
+                    return (
+                      <div key={r.id} onClick={() => setSinMovSelected(prev => {
+                        const n = new Set(prev)
+                        sel ? n.delete(r.id) : n.add(r.id)
+                        return n
+                      })} className={cn('row-alt grid items-center px-4 py-2.5 text-sm cursor-pointer transition-colors',
+                        sel ? 'bg-accent/10 border-l-2 border-accent' : 'hover:bg-white/[0.02]')}
+                        style={{ gridTemplateColumns: '24px 2.5fr 1fr 1fr 1fr 1fr 1fr 1fr' }}>
+                        <div className={cn('w-4 h-4 rounded border flex items-center justify-center', sel ? 'bg-accent border-accent' : 'border-zinc-600')}>
+                          {sel && <span className="text-black text-[10px] font-bold">✓</span>}
+                        </div>
+                        <span className="text-white font-medium truncate">{r.name}</span>
+                        <span className="text-zinc-500 text-xs">{r.category}</span>
+                        <span className="text-right text-zinc-300 tabular-nums">{r.total_stock}</span>
+                        <span className="text-right text-zinc-500 text-xs tabular-nums">{r.last_sold || '—'}</span>
+                        <span className={cn('text-right tabular-nums text-xs font-medium',
+                          r.days_inactive >= 90 ? 'text-red-400' : r.days_inactive >= 45 ? 'text-amber-400' : 'text-zinc-400')}>
+                          {r.days_inactive === 9999 ? 'Nunca' : `${r.days_inactive}d`}
+                        </span>
+                        <span className="text-right text-zinc-300 tabular-nums text-xs">{formatCurrency(r.price)}</span>
+                        <span className="text-right text-amber-400 tabular-nums text-xs">{formatCurrency(capital)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="px-4 py-3 text-xs text-zinc-500 bg-surface border-t border-border flex justify-between">
+                  <span>Clic en una fila para seleccionar · Seleccionar varios para liquidar con descuento</span>
+                  <button onClick={() => setSinMovSelected(sinMovSelected.size === sinMovData.rows.length ? new Set() : new Set(sinMovData.rows.map(r => r.id)))}
+                    className="text-accent hover:underline no-drag">
+                    {sinMovSelected.size === sinMovData.rows.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+      ) : tab === 'vendedoras' ? (
+        /* ─── VENDEDORAS ──────────────────────────────────────────────── */
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="date" value={vendFrom} onChange={e => setVendFrom(e.target.value)} className={inputCls} />
+            <span className="text-zinc-600">→</span>
+            <input type="date" value={vendTo} onChange={e => setVendTo(e.target.value)} className={inputCls} />
+            <button onClick={loadVend} disabled={vendLoading}
+              className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+              <RefreshCw size={13} className={vendLoading ? 'animate-spin' : ''} /> Actualizar
+            </button>
+            {vendData.length > 0 && (
+              <button onClick={() => {
+                const medals = ['🥇','🥈','🥉']
+                const podio = vendData.slice(0, 3).map((s, i) => `<div style="text-align:center;padding:12px;background:#f9f9f9;border-radius:8px"><div style="font-size:22px">${medals[i]||''}</div><div style="font-weight:bold">${s.seller_name}</div><div style="color:#555">$${(s.total_sold||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</div></div>`).join('')
+                const rows = vendData.map(s => `<tr><td>${s.seller_name}</td><td style="text-align:right">${s.sale_count}</td><td style="text-align:right">$${(s.total_sold||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</td><td style="text-align:right">$${(s.avg_ticket||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</td><td style="text-align:right">${s.commission_rate}%</td><td style="text-align:right">$${(s.commission_amount||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</td></tr>`).join('')
+                const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Vendedoras</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial;font-size:11px;padding:20px}h2{margin-bottom:12px}.podio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}table{width:100%;border-collapse:collapse}th{background:#f0f0f0;padding:5px 7px;font-size:10px;text-transform:uppercase}th:not(:first-child){text-align:right}td{padding:4px 7px;border-bottom:1px solid #eee}td:not(:first-child){text-align:right}@media print{@page{size:A4;margin:10mm}}</style></head><body><h2>Reporte de vendedoras — ${vendFrom} al ${vendTo}</h2><div class="podio">${podio}</div><table><thead><tr><th>Vendedora</th><th>Ventas</th><th>Total</th><th>Ticket prom.</th><th>Comisión %</th><th>A pagar</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`
+                const w = window.open('', '_blank', 'width=900,height=700')
+                if (w) { w.document.write(html); w.document.close() }
+              }} className="no-drag ml-auto flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                <Printer size={13} /> PDF
+              </button>
+            )}
+          </div>
+
+          {vendLoading ? (
+            <div className="py-4"><SkeletonTable rows={5} cols={6} /></div>
+          ) : vendData.length === 0 ? (
+            <EmptyState icon={Users} title="Sin datos" subtitle="No hay ventas asignadas a vendedoras en este período" />
+          ) : (
+            <div className="space-y-4">
+              {/* Podio */}
+              {vendData.length >= 1 && (
+                <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Math.min(vendData.length, 3)}, 1fr)` }}>
+                  {vendData.slice(0, 3).map((s, i) => (
+                    <div key={s.seller_name} className={cn('p-4 rounded-xl border text-center',
+                      i === 0 ? 'bg-yellow-500/10 border-yellow-500/30' : i === 1 ? 'bg-zinc-400/10 border-zinc-400/20' : 'bg-amber-700/10 border-amber-700/20')}>
+                      <div className="text-2xl mb-1">{['🥇','🥈','🥉'][i]}</div>
+                      <p className="font-bold text-white text-sm">{s.seller_name}</p>
+                      <p className="text-accent font-semibold text-sm tabular-nums">{formatCurrency(s.total_sold)}</p>
+                      <p className="text-xs text-zinc-500">{s.sale_count} ventas · ticket {formatCurrency(s.avg_ticket)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Gráfico de barras */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Ventas por vendedora</p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={vendData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                    <XAxis dataKey="seller_name" tick={{ fill: '#999', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#777', fontSize: 10 }} tickFormatter={v => '$' + (v/1000).toFixed(0) + 'k'} />
+                    <Tooltip content={<TT />} />
+                    <Bar dataKey="total_sold" fill="#e91e8c" radius={[4,4,0,0]} name="Total vendido" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Tabla detallada */}
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"
+                  style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                  <span>Vendedora</span>
+                  <span className="text-right">Ventas</span>
+                  <span className="text-right">Total</span>
+                  <span className="text-right">Ticket prom.</span>
+                  <span className="text-right">Comisión</span>
+                  <span className="text-right">Mejor día</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {vendData.map(s => (
+                    <div key={s.seller_name} className="row-alt space-y-1 px-4 py-3">
+                      <div className="grid items-center text-sm" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                        <span className="text-white font-medium">{s.seller_name}</span>
+                        <span className="text-right text-zinc-400 tabular-nums">{s.sale_count}</span>
+                        <span className="text-right text-white tabular-nums">{formatCurrency(s.total_sold)}</span>
+                        <span className="text-right text-zinc-400 tabular-nums">{formatCurrency(s.avg_ticket)}</span>
+                        <span className="text-right text-accent tabular-nums">{formatCurrency(s.commission_amount)}</span>
+                        <span className="text-right text-zinc-500 text-xs tabular-nums">{s.best_day?.day || '—'}</span>
+                      </div>
+                      {s.top_product && (
+                        <p className="text-[11px] text-zinc-600">+ vendido: <span className="text-zinc-400">{s.top_product.name}</span> ({s.top_product.qty} u.)</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+      ) : tab === 'rentcat' ? (
+        /* ─── RENTABILIDAD POR CATEGORÍA ──────────────────────────────── */
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="date" value={rentFrom} onChange={e => setRentFrom(e.target.value)} className={inputCls} />
+            <span className="text-zinc-600">→</span>
+            <input type="date" value={rentTo} onChange={e => setRentTo(e.target.value)} className={inputCls} />
+            <button onClick={loadRentCat} disabled={rentLoading}
+              className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+              <RefreshCw size={13} className={rentLoading ? 'animate-spin' : ''} /> Actualizar
+            </button>
+            {rentData.length > 0 && (
+              <button onClick={() => {
+                const rows = rentData.map(r => {
+                  const trendStr = r.trend === null ? '—' : r.trend > 0 ? `↑${r.trend.toFixed(1)}%` : `↓${Math.abs(r.trend).toFixed(1)}%`
+                  return `<tr><td>${r.category}</td><td style="text-align:right">${r.units_sold}</td><td style="text-align:right">$${(r.revenue||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</td><td style="text-align:right">$${(r.total_cost||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</td><td style="text-align:right">$${(r.profit||0).toLocaleString('es-AR',{minimumFractionDigits:2})}</td><td style="text-align:right">${(r.margin||0).toFixed(1)}%</td><td style="text-align:right">${trendStr}</td></tr>`
+                }).join('')
+                const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rentabilidad</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial;font-size:11px;padding:20px}h2{margin-bottom:12px}table{width:100%;border-collapse:collapse}th{background:#f0f0f0;padding:5px 7px;font-size:10px;text-transform:uppercase}th:not(:first-child){text-align:right}td{padding:4px 7px;border-bottom:1px solid #eee}td:not(:first-child){text-align:right}@media print{@page{size:A4;margin:10mm}}</style></head><body><h2>Rentabilidad por categoría — ${rentFrom} al ${rentTo}</h2><table><thead><tr><th>Categoría</th><th>Unidades</th><th>Ingresos</th><th>Costo total</th><th>Ganancia</th><th>Margen</th><th>vs anterior</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>{window.print();window.close()}<\/script></body></html>`
+                const w = window.open('', '_blank', 'width=900,height=700')
+                if (w) { w.document.write(html); w.document.close() }
+              }} className="no-drag ml-auto flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                <Printer size={13} /> PDF
+              </button>
+            )}
+          </div>
+
+          {rentLoading ? (
+            <div className="py-4"><SkeletonTable rows={8} cols={7} /></div>
+          ) : rentData.length === 0 ? (
+            <EmptyState icon={BarChart3} title="Sin datos" subtitle="No hay ventas en este período" />
+          ) : (
+            <div className="space-y-4">
+              {/* Gráfico de torta */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Distribución de ganancia</p>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie data={rentData.filter(r => r.profit > 0)} dataKey="profit" nameKey="category"
+                        cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}
+                        labelLine={false}>
+                        {rentData.filter(r => r.profit > 0).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(v) => formatCurrency(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Ganancia por categoría</p>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={rentData} layout="vertical" margin={{ left: 0, right: 0 }}>
+                      <XAxis type="number" tick={{ fill: '#777', fontSize: 10 }} tickFormatter={v => '$' + (v/1000).toFixed(0) + 'k'} />
+                      <YAxis type="category" dataKey="category" tick={{ fill: '#999', fontSize: 10 }} width={80} />
+                      <Tooltip content={<TT />} />
+                      <Bar dataKey="profit" fill="#e91e8c" radius={[0,4,4,0]} name="Ganancia" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Tabla */}
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"
+                  style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr' }}>
+                  <span>Categoría</span>
+                  <span className="text-right">Unidades</span>
+                  <span className="text-right">Ingresos</span>
+                  <span className="text-right">Costo</span>
+                  <span className="text-right">Ganancia</span>
+                  <span className="text-right">Margen</span>
+                  <span className="text-right">vs anterior</span>
+                </div>
+                <div className="divide-y divide-border max-h-[450px] overflow-y-auto">
+                  {rentData.map((r, i) => (
+                    <div key={i} className="row-alt grid items-center px-4 py-2.5 text-sm"
+                      style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr' }}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        <span className="text-white font-medium">{r.category}</span>
+                      </div>
+                      <span className="text-right text-zinc-300 tabular-nums">{r.units_sold}</span>
+                      <span className="text-right text-zinc-300 tabular-nums">{formatCurrency(r.revenue)}</span>
+                      <span className="text-right text-zinc-500 tabular-nums">{formatCurrency(r.total_cost)}</span>
+                      <span className="text-right text-green-400 font-medium tabular-nums">{formatCurrency(r.profit)}</span>
+                      <span className={cn('text-right tabular-nums text-xs', r.margin >= 30 ? 'text-green-400' : r.margin >= 10 ? 'text-amber-400' : 'text-red-400')}>
+                        {r.margin.toFixed(1)}%
+                      </span>
+                      <span className={cn('text-right tabular-nums text-xs', r.trend === null ? 'text-zinc-600' : r.trend > 0 ? 'text-green-400' : 'text-red-400')}>
+                        {r.trend === null ? '—' : r.trend > 0 ? `↑${r.trend.toFixed(1)}%` : `↓${Math.abs(r.trend).toFixed(1)}%`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {rentData.length > 0 && (() => {
+                  const totUnits = rentData.reduce((s, r) => s + r.units_sold, 0)
+                  const totRev = rentData.reduce((s, r) => s + r.revenue, 0)
+                  const totCost = rentData.reduce((s, r) => s + r.total_cost, 0)
+                  const totProfit = rentData.reduce((s, r) => s + r.profit, 0)
+                  const totMargin = totRev > 0 ? (totProfit / totRev * 100) : 0
+                  return (
+                    <div className="grid items-center px-4 py-3 text-sm bg-surface border-t border-border font-medium"
+                      style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr 1fr' }}>
+                      <span className="text-zinc-400 uppercase text-xs tracking-wider">Total</span>
+                      <span className="text-right text-white tabular-nums">{totUnits}</span>
+                      <span className="text-right text-white tabular-nums">{formatCurrency(totRev)}</span>
+                      <span className="text-right text-zinc-400 tabular-nums">{formatCurrency(totCost)}</span>
+                      <span className="text-right text-green-400 tabular-nums">{formatCurrency(totProfit)}</span>
+                      <span className={cn('text-right tabular-nums text-xs', totMargin >= 30 ? 'text-green-400' : totMargin >= 10 ? 'text-amber-400' : 'text-red-400')}>
+                        {totMargin.toFixed(1)}%
+                      </span>
+                      <span></span>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+
       ) : (
         /* Artículos tab */
         <div className="space-y-4">
