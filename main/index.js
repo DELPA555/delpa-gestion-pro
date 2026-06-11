@@ -76,6 +76,10 @@ app.whenReady().then(() => {
   require('./ipc/backup')
   require('./ipc/fiscal')
   require('./ipc/changelog')
+  require('./ipc/intelligence')
+  require('./ipc/vouchers')
+  require('./ipc/consignment')
+  require('./ipc/ivabook')
   const { performBackup } = require('./ipc/googledrive')
   const { scheduleWeeklySummary } = require('./ipc/weeklySummary')
 

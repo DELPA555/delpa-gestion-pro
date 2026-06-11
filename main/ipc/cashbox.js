@@ -74,12 +74,13 @@ ipcMain.handle('cashbox:current', () =>
   getDB().prepare("SELECT * FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get() || null
 )
 
-ipcMain.handle('cashbox:open', (_, { openingCash, notes }) => {
+ipcMain.handle('cashbox:open', (_, { openingCash, notes, shift }) => {
   const db = getDB()
   if (db.prepare("SELECT id FROM cashbox WHERE status='open'").get())
     throw new Error('Ya hay una caja abierta')
-  const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes) VALUES (?,?)').run(openingCash || 0, notes || '')
-  db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('OPEN','cashbox',?,?)`).run(id, `Caja abierta con $${openingCash || 0}`)
+  const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes,shift) VALUES (?,?,?)').run(openingCash || 0, notes || '', shift || '')
+  const shiftInfo = shift ? ` (turno: ${shift})` : ''
+  db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('OPEN','cashbox',?,?)`).run(id, `Caja abierta con $${openingCash || 0}${shiftInfo}`)
   return id
 })
 

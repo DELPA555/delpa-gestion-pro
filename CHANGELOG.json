@@ -1,4 +1,19 @@
 {
+  "v1.2.4": {
+    "fecha": "2026-06-11",
+    "mejoras": [
+      "IA de recomendaciones de compra: widget en Dashboard con análisis de los últimos 90 días por producto/talle — detecta velocidad de rotación, días de stock restante, patrones por día de semana y picos estacionales del año anterior",
+      "Predicción de quiebre de stock: widget Dashboard con alertas color rojo (<3 días), naranja (<7 días) y amarillo (<15 días) ordenadas por urgencia",
+      "Ambos widgets IA incluyen botón 'Crear pedido' / 'Pedir ahora' que navega a Pedidos a Proveedores",
+      "Caja con turnos: al abrir la caja podés seleccionar turno (Mañana, Tarde o sin turno), el nombre del turno aparece en el encabezado y los reportes",
+      "Nombres de turnos configurables desde Configuración → Caja (cashbox_shifts)",
+      "Nuevo módulo Vales de Descuento: generá vales por monto fijo o porcentaje con código único (VALE-YYYY-XXXX), asignalos a una clienta o genéricos, con fecha de vencimiento y PDF imprimible",
+      "En Ventas: campo 'Código de vale' con validación — aplica el descuento automáticamente y marca el vale como usado al confirmar la venta",
+      "Nuevo módulo Consignación: configurá productos en consignación por proveedor, registrá ventas manuales, y liquidá la deuda por proveedor con PDF de liquidación con firma",
+      "Consignación: historial de liquidaciones, deuda pendiente por proveedor y registro detallado de cada venta consignada",
+      "Libro IVA para contador: nuevo módulo con datos de ventas y compras en formato AFIP SIAP (pipe-delimited .txt), exportación CSV compatible con Excel, y opción de envío por email al contador"
+    ]
+  },
   "v1.2.3": {
     "fecha": "2026-06-10",
     "correcciones": [

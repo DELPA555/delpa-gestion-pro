@@ -565,6 +565,70 @@ function createTables(db) {
     CREATE INDEX IF NOT EXISTS idx_supplier_orders_status ON supplier_orders(status);
   `)
 
+  // v2.x new features: vouchers, consignment
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vouchers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      type TEXT NOT NULL,
+      value REAL NOT NULL,
+      client_id INTEGER,
+      client_name TEXT DEFAULT '',
+      expires_at TEXT DEFAULT '',
+      conditions TEXT DEFAULT '',
+      used INTEGER DEFAULT 0,
+      used_at DATETIME,
+      sale_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_vouchers_code ON vouchers(code);
+    CREATE INDEX IF NOT EXISTS idx_vouchers_used ON vouchers(used);
+
+    CREATE TABLE IF NOT EXISTS consignment_products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL UNIQUE,
+      supplier_id INTEGER NOT NULL,
+      cost_per_unit REAL NOT NULL,
+      active INTEGER DEFAULT 1,
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+      FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS consignment_sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sale_id INTEGER,
+      product_id INTEGER NOT NULL,
+      product_name TEXT NOT NULL,
+      size TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      cost_per_unit REAL NOT NULL,
+      total_cost REAL NOT NULL,
+      supplier_id INTEGER NOT NULL,
+      supplier_name TEXT DEFAULT '',
+      liquidated INTEGER DEFAULT 0,
+      liquidation_id INTEGER,
+      sold_at DATETIME NOT NULL,
+      FOREIGN KEY (sale_id) REFERENCES sales(id),
+      FOREIGN KEY (product_id) REFERENCES products(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_consignment_sales_supplier ON consignment_sales(supplier_id);
+    CREATE INDEX IF NOT EXISTS idx_consignment_sales_liq ON consignment_sales(liquidated);
+
+    CREATE TABLE IF NOT EXISTS consignment_liquidations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      number TEXT NOT NULL,
+      supplier_id INTEGER NOT NULL,
+      supplier_name TEXT DEFAULT '',
+      total_amount REAL NOT NULL,
+      total_units INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    );
+  `)
+
   const migrations = [
     "ALTER TABLE clients ADD COLUMN points INTEGER DEFAULT 0",
     "ALTER TABLE sales ADD COLUMN installments INTEGER DEFAULT 1",
@@ -667,6 +731,8 @@ function createTables(db) {
     ['monthly_goal',        '0'],
     ['sena_seq',            '0'],
     ['barcode_migration_done', '0'],
+    ['email_contador',         ''],
+    ['cashbox_shifts',         '["Mañana","Tarde"]'],
     ['share_stock_online',    '0'],
     ['stock_access_pin',      ''],
     ['stock_public_file_id',  ''],
@@ -694,6 +760,9 @@ function createTables(db) {
   addColumnIfMissing(db, 'product_sizes', 'size_barcode',      'TEXT DEFAULT NULL')
   addColumnIfMissing(db, 'product_sizes', 'tn_last_synced',    'DATETIME DEFAULT NULL')
   addColumnIfMissing(db, 'product_sizes', 'stock_modified_at', 'DATETIME DEFAULT NULL')
+  addColumnIfMissing(db, 'cashbox', 'shift',             "TEXT DEFAULT ''")
+  addColumnIfMissing(db, 'sales',   'voucher_code',      "TEXT DEFAULT ''")
+  addColumnIfMissing(db, 'sales',   'voucher_discount',  'REAL DEFAULT 0')
 
   // One-time migration: generate size_barcode for all existing sizes that don't have one
   try {

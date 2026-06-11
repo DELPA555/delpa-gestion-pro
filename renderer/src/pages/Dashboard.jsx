@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown } from 'lucide-react'
+import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { SkeletonCard } from '@/components/shared/SkeletonLoader'
@@ -98,6 +99,9 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [trend, setTrend] = useState([])
   const [byPayment, setByPayment] = useState([])
+  const [intelligenceRecs, setIntelligenceRecs] = useState([])
+  const [stockBreaks, setStockBreaks] = useState([])
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [lowStock, setLowStock] = useState([])
   const [cashbox, setCashbox] = useState(null)
   const [cashSummary, setCashSummary] = useState(null)
@@ -177,8 +181,21 @@ export default function Dashboard() {
     }).catch(() => {})
   }, [])
 
+  // Load intelligence widgets lazily (after main load, non-blocking)
+  useEffect(() => {
+    setIntelligenceLoading(true)
+    Promise.allSettled([
+      api.intelligence.recommendations(),
+      api.intelligence.stockBreaks(),
+    ]).then(([recs, breaks]) => {
+      if (recs.status === 'fulfilled') setIntelligenceRecs(recs.value || [])
+      if (breaks.status === 'fulfilled') setStockBreaks(breaks.value || [])
+    }).finally(() => setIntelligenceLoading(false))
+  }, [])
+
   useEffect(() => { load() }, [load])
 
+  const navigate = useNavigate()
   const today = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
@@ -743,6 +760,96 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Intelligence widgets */}
+      {!intelligenceLoading && intelligenceRecs.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-card border border-border rounded-xl overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Brain size={15} className="text-purple-400" />
+              <h3 className="text-sm font-medium text-white">Recomendaciones inteligentes</h3>
+            </div>
+            <button onClick={() => navigate('/reposicion')}
+              className="no-drag text-xs text-accent hover:underline">Ver pedidos →</button>
+          </div>
+          <div className="divide-y divide-border">
+            {intelligenceRecs.map((rec, i) => {
+              const urgencyConfig = {
+                critical: { dot: 'bg-red-500', text: 'text-red-400', badge: 'bg-red-500/10 text-red-400 border-red-500/30', label: 'Crítico' },
+                high:     { dot: 'bg-orange-400', text: 'text-orange-400', badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30', label: 'Alto' },
+                seasonal: { dot: 'bg-blue-400', text: 'text-blue-400', badge: 'bg-blue-500/10 text-blue-400 border-blue-500/30', label: 'Estacional' },
+                medium:   { dot: 'bg-amber-400', text: 'text-amber-400', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', label: 'Medio' },
+              }
+              const uc = urgencyConfig[rec.urgency] || urgencyConfig.medium
+              return (
+                <div key={i} className="row-alt flex items-start justify-between px-4 py-3 text-sm transition-colors">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${uc.dot}`} />
+                    <div className="min-w-0">
+                      <p className="text-zinc-200 text-xs leading-relaxed">{rec.message}</p>
+                      <p className="text-zinc-600 text-[10px] mt-0.5">
+                        Stock actual: {rec.current_stock} u. · Velocidad: {rec.daily_velocity} u/día · Necesitás: {rec.units_needed} u.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${uc.badge}`}>{uc.label}</span>
+                    <button onClick={() => navigate('/reposicion')}
+                      className="no-drag text-xs text-accent hover:underline whitespace-nowrap">Crear pedido</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </motion.div>
+      )}
+
+      {!intelligenceLoading && stockBreaks.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.07 }}
+          className="bg-card border border-red-900/30 rounded-xl overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Zap size={15} className="text-red-400" />
+              <h3 className="text-sm font-medium text-white">Alertas de quiebre de stock</h3>
+              <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">{stockBreaks.length} alertas</span>
+            </div>
+            <button onClick={() => navigate('/reposicion')}
+              className="no-drag text-xs text-accent hover:underline">Pedir ahora →</button>
+          </div>
+          <div className="divide-y divide-border max-h-52 overflow-y-auto">
+            {stockBreaks.map((item, i) => {
+              const levelConfig = {
+                red:    { dot: 'bg-red-500',    text: 'text-red-400',    label: `${item.days_left}d` },
+                orange: { dot: 'bg-orange-400', text: 'text-orange-400', label: `${item.days_left}d` },
+                yellow: { dot: 'bg-amber-400',  text: 'text-amber-400',  label: `${item.days_left}d` },
+              }
+              const lc = levelConfig[item.level] || levelConfig.yellow
+              return (
+                <div key={i} className="row-alt flex items-center justify-between px-4 py-2.5 text-sm transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${lc.dot}`} />
+                    <span className="text-zinc-200 truncate">{item.product_name}</span>
+                    <span className="text-zinc-600 text-xs shrink-0">T.{item.size}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-zinc-500 text-xs tabular-nums">{item.current_stock} en stock</span>
+                    <span className={`font-bold text-xs tabular-nums ${lc.text}`}>{lc.label} restantes</span>
+                    <button onClick={() => navigate('/reposicion')}
+                      className="no-drag text-xs text-zinc-500 hover:text-accent transition-colors">Pedir</button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </motion.div>
       )}

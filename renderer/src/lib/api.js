@@ -290,6 +290,40 @@ export const api = {
     changelog:         () => inv('app:changelog'),
     markChangelogSeen: () => inv('app:markChangelogSeen'),
   },
+  intelligence: {
+    recommendations: () => inv('intelligence:recommendations'),
+    stockBreaks:     () => inv('intelligence:stockBreaks'),
+  },
+  vouchers: {
+    list:     (p)    => inv('voucher:list', p),
+    create:   (d)    => inv('voucher:create', d),
+    validate: (code) => inv('voucher:validate', { code }),
+    use:      (d)    => inv('voucher:use', d),
+    delete:   (id)   => inv('voucher:delete', id),
+  },
+  consignment: {
+    products: {
+      list: ()  => inv('consignment:products:list'),
+      set:  (d) => inv('consignment:products:set', d),
+    },
+    sales: {
+      list:   (p) => inv('consignment:sales:list', p),
+      record: (d) => inv('consignment:sales:record', d),
+    },
+    pending:      ()    => inv('consignment:pending'),
+    liquidate:    (d)   => inv('consignment:liquidate', d),
+    liquidations: {
+      list: ()   => inv('consignment:liquidations:list'),
+      get:  (id) => inv('consignment:liquidation:get', id),
+    },
+  },
+  ivabook: {
+    ventas:        (p) => inv('ivabook:ventas', p),
+    compras:       (p) => inv('ivabook:compras', p),
+    exportCSV:     (p) => inv('ivabook:exportCSV', p),
+    exportSIAP:    (p) => inv('ivabook:exportSIAP', p),
+    emailContador: (p) => inv('ivabook:emailContador', p),
+  },
   tn: {
     connect:        ()    => inv('tn:connect'),
     status:         ()    => inv('tn:status'),

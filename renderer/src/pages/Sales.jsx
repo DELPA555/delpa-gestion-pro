@@ -6,7 +6,7 @@ import {
   Search, Plus, Minus, Trash2, ShoppingCart, User, Printer,
   CheckCircle, X, CreditCard, Banknote, Smartphone, Receipt, ChevronDown,
   AlertTriangle, Wallet, Eye, Gift, ShieldCheck, FileText, Mail, MessageCircle, Store, Download, RefreshCw,
-  ArrowLeftRight, RotateCcw, QrCode, Clock, Loader2,
+  ArrowLeftRight, RotateCcw, QrCode, Clock, Loader2, Tag,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime, debounce, cn } from '@/lib/utils'
@@ -259,6 +259,15 @@ export default function Sales() {
   const [mpError, setMpError] = useState('')
   const mpPollingRef = useRef(null)
   const mpTimerRef = useRef(null)
+
+  // Voucher discount (vale de descuento)
+  const [valeCode, setValeCode] = useState('')
+  const [valeInput, setValeInput] = useState('')
+  const [valeDiscount, setValeDiscount] = useState(0)
+  const [valeKind, setValeKind] = useState(null) // 'fixed'|'percent'
+  const [valeValidating, setValeValidating] = useState(false)
+  const [valeError, setValeError] = useState('')
+  const [valeInfo, setValeInfo] = useState(null)
 
   // Return modal
   const [returnModal, setReturnModal] = useState(false)
@@ -609,7 +618,8 @@ export default function Sales() {
   const clientPoints = selectedClient?.points ?? 0
   const canRedeem = pointsCfg.enabled && clientPoints >= pointsCfg.minRedeem
   const pointsDiscount = redeemPoints && canRedeem ? Math.min(clientPoints * pointsCfg.value, subtotal - discountAmt) : 0
-  const net = subtotal - discountAmt - pointsDiscount
+  const computedValeDiscount = valeDiscount > 0 ? Math.min(valeDiscount, subtotal - discountAmt - pointsDiscount) : 0
+  const net = subtotal - discountAmt - pointsDiscount - computedValeDiscount
   const surchargeAmt = net * surchargeRate / 100
   const singleTotal = net + surchargeAmt
   const perInstallment = installments > 1 ? singleTotal / installments : 0
@@ -649,6 +659,7 @@ export default function Sales() {
     setSelectedClient(null); setClientSearch(''); setQuery('')
     setSplitPayment(false); setPaymentRows([{ method: 'Efectivo', baseAmount: '', installments: 1 }])
     setRedeemPoints(false)
+    setValeCode(''); setValeInput(''); setValeDiscount(0); setValeKind(null); setValeInfo(null); setValeError('')
   }
 
   const completeSale = async (afipData = null, { mpPaymentId = '' } = {}) => {
@@ -698,6 +709,10 @@ export default function Sales() {
       })
       const saleId = typeof result === 'object' ? result.saleId : result
       const saleData = await api.sales.get(saleId)
+      // Mark voucher as used if applied
+      if (valeCode) {
+        try { await api.vouchers.use({ code: valeCode, sale_id: saleId }) } catch {}
+      }
       setLastSale(saleData)
       // Track points for ticket
       if (pointsCfg.enabled && selectedClient) {
@@ -1525,6 +1540,58 @@ export default function Sales() {
                 placeholder="0,00" className={inputCls} />
             </div>
 
+            {/* Vale de descuento */}
+            <div>
+              <label className={labelCls}>Vale de descuento (opcional)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={valeInput}
+                  onChange={e => { setValeInput(e.target.value.toUpperCase()); setValeError('') }}
+                  placeholder="Ej: VALE-2026-AB12"
+                  className={cn(inputCls, valeCode ? 'border-green-500/50' : '')}
+                  disabled={!!valeCode}
+                />
+                {valeCode ? (
+                  <button onClick={() => { setValeCode(''); setValeInput(''); setValeDiscount(0); setValeKind(null); setValeInfo(null) }}
+                    className="no-drag px-3 py-2 text-xs text-red-400 border border-red-500/30 hover:bg-red-500/10 rounded-lg transition-colors shrink-0">
+                    Quitar
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (!valeInput.trim()) return
+                      setValeValidating(true); setValeError('')
+                      try {
+                        const res = await api.vouchers.validate(valeInput.trim())
+                        if (!res.valid) { setValeError(res.message); return }
+                        const v = res.voucher
+                        let disc = 0
+                        if (v.type === 'fixed') disc = v.value
+                        else if (v.type === 'percent') disc = subtotal * v.value / 100
+                        setValeDiscount(disc)
+                        setValeKind(v.type)
+                        setValeInfo(v)
+                        setValeCode(v.code)
+                        toast.success(`Vale ${v.code} aplicado — ${v.type === 'fixed' ? formatCurrency(disc) : `${v.value}%`} OFF`)
+                      } catch (e) { setValeError(e.message || 'Error al validar') }
+                      finally { setValeValidating(false) }
+                    }}
+                    disabled={valeValidating}
+                    className="no-drag px-3 py-2 text-xs border border-border text-zinc-400 hover:text-white hover:border-zinc-500 rounded-lg transition-colors shrink-0">
+                    {valeValidating ? '...' : 'Validar'}
+                  </button>
+                )}
+              </div>
+              {valeError && <p className="text-xs text-red-400 mt-1">{valeError}</p>}
+              {valeCode && (
+                <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                  <CheckCircle size={11} />
+                  Vale aplicado — {valeKind === 'fixed' ? formatCurrency(computedValeDiscount) : `${valeInfo?.value}%`} de descuento
+                </p>
+              )}
+            </div>
+
             {/* Totals */}
             <div className="bg-[#0a0a0a] border border-border rounded-xl p-4 space-y-2">
               <div className="flex justify-between text-sm">
@@ -1541,6 +1608,12 @@ export default function Sales() {
                 <div className="flex justify-between text-sm">
                   <span className="text-accent flex items-center gap-1"><Gift size={11} /> Puntos canjeados</span>
                   <span className="text-accent tabular-nums">-{formatCurrency(pointsDiscount)}</span>
+                </div>
+              )}
+              {computedValeDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-purple-400 flex items-center gap-1"><Tag size={11} /> Vale {valeCode}</span>
+                  <span className="text-purple-400 tabular-nums">-{formatCurrency(computedValeDiscount)}</span>
                 </div>
               )}
               {!splitPayment && surchargeRate > 0 && (

@@ -69,6 +69,13 @@ const CHANNELS = [
   'fiscal:stats', 'fiscal:ivaVentas', 'fiscal:ivaCompras', 'fiscal:posicion', 'fiscal:monotributo12m',
   'afip:syncComprobantes',
   'app:changelog', 'app:markChangelogSeen',
+  'intelligence:recommendations', 'intelligence:stockBreaks',
+  'voucher:list', 'voucher:create', 'voucher:validate', 'voucher:use', 'voucher:delete',
+  'consignment:products:list', 'consignment:products:set', 'consignment:sales:list',
+  'consignment:pending', 'consignment:liquidate', 'consignment:liquidations:list',
+  'consignment:liquidation:get', 'consignment:sales:record',
+  'ivabook:ventas', 'ivabook:compras', 'ivabook:exportCSV', 'ivabook:exportSIAP', 'ivabook:emailContador',
+  'monthlySummary:send',
 ]
 
 contextBridge.exposeInMainWorld('electron', {

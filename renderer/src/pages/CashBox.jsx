@@ -172,6 +172,8 @@ export default function CashBox() {
   const [closeModal, setCloseModal] = useState(false)
   const [movementModal, setMovementModal] = useState(false)
   const [openCash, setOpenCash] = useState('')
+  const [openShift, setOpenShift] = useState('')
+  const [shiftOptions, setShiftOptions] = useState(['Mañana', 'Tarde'])
   const [paymentRealAmounts, setPaymentRealAmounts] = useState({})
   const [closeNotes, setCloseNotes] = useState('')
   const [lastClosedId, setLastClosedId] = useState(null)
@@ -213,15 +215,26 @@ export default function CashBox() {
   }, [])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { api.settings.getAll().then(setBiz).catch(() => {}) }, [])
+  useEffect(() => {
+    api.settings.getAll().then(all => {
+      setBiz(all)
+      try {
+        const shifts = JSON.parse(all.cashbox_shifts || '["Mañana","Tarde"]')
+        if (Array.isArray(shifts) && shifts.length > 0) {
+          setShiftOptions(shifts)
+          setOpenShift(shifts[0])
+        }
+      } catch {}
+    }).catch(() => {})
+  }, [])
   useEffect(() => { if (tab === 'historial') loadHistory() }, [tab, loadHistory])
   useEffect(() => { if (tab === 'movimientos' && cashbox) loadMovements(cashbox.id) }, [tab, cashbox, loadMovements])
 
   const handleOpen = async () => {
     setProcessing(true)
     try {
-      await api.cashbox.open({ openingCash: Number(openCash) || 0 })
-      toast.success('Caja abierta')
+      await api.cashbox.open({ openingCash: Number(openCash) || 0, shift: openShift })
+      toast.success('Caja abierta' + (openShift ? ` — Turno ${openShift}` : ''))
       setOpenModal(false); load()
     } catch (e) { toast.error(e.message) }
     finally { setProcessing(false) }
@@ -307,7 +320,7 @@ export default function CashBox() {
       exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}
       className="p-6"
     >
-      <PageHeader title="Caja" subtitle={cashbox ? `Abierta desde ${formatDateTime(cashbox.opened_at)}` : 'Sin caja abierta'}
+      <PageHeader title="Caja" subtitle={cashbox ? `Abierta desde ${formatDateTime(cashbox.opened_at)}${cashbox.shift ? ` — Turno ${cashbox.shift}` : ''}` : 'Sin caja abierta'}
         actions={
           <div className="flex gap-2">
             {cashbox && (
@@ -458,7 +471,23 @@ export default function CashBox() {
       {/* Open modal */}
       <Modal open={openModal} onClose={() => setOpenModal(false)} title="Abrir caja" width="max-w-sm">
         <div className="space-y-4">
-          <p className="text-sm text-zinc-400">Ingresá el monto de efectivo con el que iniciás la caja.</p>
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Turno</label>
+            <div className="flex gap-2 flex-wrap">
+              {shiftOptions.map(s => (
+                <button key={s} onClick={() => setOpenShift(s)}
+                  className={cn('px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                    openShift === s ? 'bg-accent/10 border-accent text-accent' : 'border-border text-zinc-500 hover:text-zinc-300')}>
+                  {s}
+                </button>
+              ))}
+              <button onClick={() => setOpenShift('')}
+                className={cn('px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                  openShift === '' ? 'bg-zinc-700 border-zinc-600 text-zinc-200' : 'border-border text-zinc-600 hover:text-zinc-400')}>
+                Sin turno
+              </button>
+            </div>
+          </div>
           <div>
             <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Efectivo inicial $</label>
             <input type="number" min="0" step="0.01" className={inputCls} value={openCash} onChange={e => setOpenCash(e.target.value)} placeholder="0,00" autoFocus />
