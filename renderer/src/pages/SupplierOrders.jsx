@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import {
   ClipboardList, Plus, ChevronLeft, RefreshCw, Trash2, Search,
   Package, Printer, Send, CheckCircle, X, Truck,
-  MessageCircle, PackagePlus, AlertTriangle, ChevronDown,
+  MessageCircle, PackagePlus, AlertTriangle,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -28,129 +28,164 @@ function StatusBadge({ status }) {
   return <span className={cn('text-[11px] px-2 py-0.5 rounded-full border font-medium', s.cls)}>{s.label}</span>
 }
 
-function newItem() {
-  return { _key: `${Date.now()}-${Math.random()}`, product_id: null, product_name: '', color: '', size: '', qty: 1, cost: 0 }
+function newCard() {
+  return { _key: `${Date.now()}-${Math.random()}`, product_id: null, product_name: '', color: '', cost: 0, sizes: [] }
 }
 
-// ── Item row with product search ───────────────────────────────────────────────
-function ItemRow({ item, onChange, onRemove }) {
-  const [query, setQuery]     = useState(item.product_name || '')
-  const [results, setResults] = useState([])
-  const [sizes, setSizes]     = useState([])
-  const [searching, setSearching] = useState(false)
-  const searchTimer = useRef(null)
+// ── Grilla de talles para pedido (referencia de stock, sin validación) ────────
 
-  function handleQueryChange(q) {
-    setQuery(q)
-    clearTimeout(searchTimer.current)
-    if (q.length < 2) { setResults([]); return }
-    setSearching(true)
-    searchTimer.current = setTimeout(async () => {
-      try { setResults(await api.products.search(q) || []) } catch {}
-      finally { setSearching(false) }
-    }, 280)
+function SizeGridOrder({ sizes, onChange }) {
+  if (!sizes?.length) return null
+  const cols = Math.min(sizes.length, 8)
+  return (
+    <div className="grid gap-2 pt-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(50px, 1fr))` }}>
+      {sizes.map(({ size, stock, qty }) => (
+        <div key={size} className="flex flex-col items-center gap-0.5">
+          <span className="text-[11px] text-zinc-400 font-mono font-medium">T.{size}</span>
+          {stock != null && (
+            <span className={cn('text-[9px] tabular-nums leading-none',
+              stock === 0 ? 'text-amber-500' : 'text-zinc-600')}>
+              St:{stock}
+            </span>
+          )}
+          <input
+            type="number" min="0"
+            value={qty || ''}
+            onChange={e => onChange(size, Math.max(0, Number(e.target.value) || 0))}
+            className="w-full bg-[#0a0a0a] border border-border rounded px-1 py-1.5 text-sm text-white text-center outline-none focus:border-accent transition-colors no-drag"
+            placeholder="0"
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Tarjeta de producto para pedido ──────────────────────────────────────────
+
+function ProductCardOrder({ card, onUpdate, onRemove }) {
+  const [search,  setSearch]  = useState(card.product_name || '')
+  const [results, setResults] = useState([])
+  const [open,    setOpen]    = useState(false)
+  const dropRef = useRef(null)
+  const timer   = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function handleSearch(q) {
+    setSearch(q)
+    if (!q) { onUpdate({ ...card, product_id: null, product_name: '', sizes: [] }); setOpen(false); return }
+    clearTimeout(timer.current)
+    if (q.length < 2) { setResults([]); setOpen(false); return }
+    timer.current = setTimeout(async () => {
+      try {
+        const res = await api.products.search(q) || []
+        setResults(res)
+        setOpen(res.length > 0)
+      } catch {}
+    }, 220)
   }
 
-  const selectProduct = async (p) => {
-    setQuery(p.name)
+  async function pick(p) {
+    setSearch(p.name)
     setResults([])
+    setOpen(false)
     try {
       const full = await api.products.get(p.id)
-      const productSizes = (full?.sizes || []).map(s => s.size)
-      setSizes(productSizes)
-      onChange({ ...item, product_id: p.id, product_name: p.name, cost: p.cost || 0, color: p.color || '', size: productSizes[0] || '' })
+      const sizes = (full?.sizes || []).map(s => ({ size: s.size, stock: s.stock ?? 0, qty: 0 }))
+      onUpdate({ ...card, product_id: p.id, product_name: p.name, color: p.color || '', cost: p.cost || 0, sizes })
     } catch {
-      onChange({ ...item, product_id: p.id, product_name: p.name, cost: p.cost || 0, color: p.color || '' })
+      onUpdate({ ...card, product_id: p.id, product_name: p.name, color: p.color || '', cost: p.cost || 0, sizes: [] })
     }
   }
 
-  const handleBarcode = async (e) => {
-    if (e.key !== 'Enter' || item.product_id) return
-    e.preventDefault()
-    const code = query.trim()
-    if (code.length < 4) return
-    try {
-      const result = await api.products.searchByBarcode(code)
-      if (result) {
-        await selectProduct(result)
-        if (result.matchedSize) onChange(prev => ({ ...prev, size: result.matchedSize }))
-      } else { toast.error('Código no encontrado') }
-    } catch {}
-  }
+  const totalQty = card.sizes.reduce((s, sz) => s + (sz.qty || 0), 0)
+  const subtotal = totalQty * (Number(card.cost) || 0)
 
   return (
-    <div className="grid gap-2 items-center py-2 border-b border-border/50"
-      style={{ gridTemplateColumns: '2.5fr 1fr 1fr 80px 100px 80px 32px' }}>
-      {/* Product search */}
-      <div className="relative">
-        {item.product_id ? (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 border border-accent/30 rounded-lg">
-            <Package size={12} className="text-accent shrink-0" />
-            <span className="text-xs text-white truncate">{item.product_name}</span>
-            <button onClick={() => { onChange({ ...item, product_id: null, product_name: '', size: '', color: '' }); setQuery(''); setSizes([]) }}
-              className="ml-auto text-zinc-600 hover:text-red-400 shrink-0 no-drag"><X size={11} /></button>
-          </div>
-        ) : (
-          <>
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
-              <input value={query} onChange={e => handleQueryChange(e.target.value)} onKeyDown={handleBarcode}
-                placeholder="Buscar o escanear..." className={cn(inputCls, 'pl-7 text-xs py-1.5')} />
-              {searching && <RefreshCw size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-600 animate-spin" />}
+    <div className="p-4 bg-surface border border-border rounded-xl space-y-3">
+      {/* Búsqueda */}
+      <div className="flex items-start gap-2">
+        <div className="relative flex-1" ref={dropRef}>
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          <input
+            className={cn(inputCls, 'pl-8')}
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Buscar producto por nombre o código..."
+            autoComplete="off"
+          />
+          {open && results.length > 0 && (
+            <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-[#111] border border-border rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
+              {results.slice(0, 10).map(p => (
+                <button key={p.id} type="button" onClick={() => pick(p)}
+                  className="w-full text-left px-3 py-2.5 text-xs hover:bg-white/[0.06] transition-colors border-b border-border/40 last:border-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-white font-medium truncate">{p.name}</span>
+                    <span className="text-zinc-500 shrink-0">{formatCurrency(p.cost || 0)}</span>
+                  </div>
+                  {p.color && <span className="text-zinc-500">{p.color}</span>}
+                </button>
+              ))}
             </div>
-            {results.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-0.5 bg-card border border-border rounded-xl overflow-hidden z-20 shadow-xl max-h-40 overflow-y-auto">
-                {results.slice(0, 8).map(p => (
-                  <button key={p.id} onMouseDown={() => selectProduct(p)}
-                    className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-white/5 text-left">
-                    <span className="text-xs text-white truncate">{p.name}{p.color ? ` · ${p.color}` : ''}</span>
-                    <span className="text-[10px] text-zinc-500 ml-2 shrink-0">{formatCurrency(p.cost || 0)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+          )}
+        </div>
+        <button type="button" onClick={onRemove}
+          className="no-drag mt-0.5 p-1.5 text-zinc-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 shrink-0">
+          <Trash2 size={14} />
+        </button>
       </div>
 
-      {/* Color */}
-      <input value={item.color} onChange={e => onChange({ ...item, color: e.target.value })}
-        placeholder="Color" className={cn(inputCls, 'text-xs py-1.5')} />
+      {/* Grilla de talles */}
+      {card.product_id && card.sizes.length > 0 && (
+        <>
+          <SizeGridOrder
+            sizes={card.sizes}
+            onChange={(size, qty) =>
+              onUpdate({ ...card, sizes: card.sizes.map(s => s.size === size ? { ...s, qty } : s) })
+            }
+          />
 
-      {/* Size */}
-      {sizes.length > 0 ? (
-        <select value={item.size} onChange={e => onChange({ ...item, size: e.target.value })}
-          className={cn(inputCls, 'text-xs py-1.5')}>
-          <option value="">— Talle —</option>
-          {sizes.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-      ) : (
-        <input value={item.size} onChange={e => onChange({ ...item, size: e.target.value })}
-          placeholder="Talle" className={cn(inputCls, 'text-xs py-1.5')} />
+          {/* Costo + resumen */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-zinc-500 whitespace-nowrap">Precio costo:</label>
+              <input
+                type="number" min="0" step="0.01"
+                value={card.cost || ''}
+                onChange={e => onUpdate({ ...card, cost: Number(e.target.value) || 0 })}
+                placeholder="0.00"
+                className="w-28 bg-[#0a0a0a] border border-border rounded-lg px-2 py-1.5 text-sm text-white text-right outline-none focus:border-accent transition-colors no-drag"
+              />
+            </div>
+            <div className="ml-auto text-right">
+              <span className="text-xs text-zinc-500">Subtotal: </span>
+              <span className="text-sm font-semibold text-accent tabular-nums">{formatCurrency(subtotal)}</span>
+              <span className="text-xs text-zinc-600 ml-2">({totalQty} u.)</span>
+            </div>
+          </div>
+        </>
       )}
 
-      {/* Qty */}
-      <input type="number" min="1" value={item.qty} onChange={e => onChange({ ...item, qty: Math.max(1, Number(e.target.value) || 1) })}
-        className={cn(inputCls, 'text-xs py-1.5 text-center')} />
+      {card.product_id && card.sizes.length === 0 && (
+        <p className="text-xs text-zinc-600 text-center py-1">Sin talles registrados para este producto</p>
+      )}
 
-      {/* Cost */}
-      <input type="number" min="0" step="0.01" value={item.cost} onChange={e => onChange({ ...item, cost: Number(e.target.value) || 0 })}
-        className={cn(inputCls, 'text-xs py-1.5 text-right')} />
-
-      {/* Subtotal */}
-      <span className="text-xs text-zinc-300 tabular-nums text-right px-1">
-        {formatCurrency((item.qty || 0) * (item.cost || 0))}
-      </span>
-
-      {/* Delete */}
-      <button onClick={onRemove} className="no-drag text-zinc-600 hover:text-red-400 flex items-center justify-center">
-        <Trash2 size={13} />
-      </button>
+      {!card.product_id && (
+        <p className="text-xs text-zinc-600 text-center py-1">
+          ← Buscá y seleccioná un producto para ver la grilla de talles
+        </p>
+      )}
     </div>
   )
 }
 
 // ── PDF generator ──────────────────────────────────────────────────────────────
+
 function printOrderPDF(order, biz = {}) {
   const bizName  = biz.business_name || 'DELPA'
   const bizAddr  = biz.business_address || ''
@@ -240,31 +275,31 @@ ${order.notes ? `<div class="notes-box" style="margin-top:16px"><strong>Observac
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
+
 export default function SupplierOrders() {
-  const [view, setView]       = useState('list')   // 'list' | 'form'
-  const [editOrder, setEditOrder] = useState(null) // null = new, obj = editing
+  const [view, setView]         = useState('list')   // 'list' | 'form'
+  const [editOrder, setEditOrder] = useState(null)
 
   // ── List state ──────────────────────────────────────────────────────────────
   const [orders, setOrders]   = useState([])
   const [loading, setLoading] = useState(false)
   const [page, setPage]       = useState(1)
   const [total, setTotal]     = useState(0)
-  const [filterStatus, setFilterStatus] = useState('')
+  const [filterStatus, setFilterStatus]   = useState('')
   const [filterSupplier, setFilterSupplier] = useState('')
   const [search, setSearch]   = useState('')
   const [suppliers, setSuppliers] = useState([])
   const [biz, setBiz]         = useState({})
 
   // ── Form state ──────────────────────────────────────────────────────────────
-  const [fSupplierId, setFSupplierId] = useState('')
+  const [fSupplierId,   setFSupplierId]   = useState('')
   const [fSupplierName, setFSupplierName] = useState('')
-  const [fSupplierEmail, setFSupplierEmail] = useState('')
-  const [fSupplierPhone, setFSupplierPhone] = useState('')
-  const [fDate, setFDate]     = useState(new Date().toISOString().split('T')[0])
-  const [fNotes, setFNotes]   = useState('')
-  const [fItems, setFItems]   = useState([newItem()])
-  const [fSaving, setFSaving] = useState(false)
-  const [loadingLow, setLoadingLow] = useState(false)
+  const [fSupplierEmail,setFSupplierEmail]= useState('')
+  const [fSupplierPhone,setFSupplierPhone]= useState('')
+  const [fNotes,        setFNotes]        = useState('')
+  const [fCards,        setFCards]        = useState([newCard()])
+  const [fSaving,       setFSaving]       = useState(false)
+  const [loadingLow,    setLoadingLow]    = useState(false)
 
   const LIMIT = 20
 
@@ -292,8 +327,7 @@ export default function SupplierOrders() {
   const openNew = () => {
     setEditOrder(null)
     setFSupplierId(''); setFSupplierName(''); setFSupplierEmail(''); setFSupplierPhone('')
-    setFDate(new Date().toISOString().split('T')[0])
-    setFNotes(''); setFItems([newItem()])
+    setFNotes(''); setFCards([newCard()])
     setView('form')
   }
 
@@ -306,9 +340,42 @@ export default function SupplierOrders() {
       setFSupplierName(order.supplier_name || '')
       setFSupplierEmail(order.supplier_email || '')
       setFSupplierPhone(order.supplier_phone || '')
-      setFDate(order.created_at?.split('T')[0] || new Date().toISOString().split('T')[0])
       setFNotes(order.notes || '')
-      setFItems(order.items?.length ? order.items.map(it => ({ ...it, _key: `${it.product_id}-${it.size}-${Math.random()}` })) : [newItem()])
+
+      // Agrupar ítems guardados por product_id → una tarjeta por producto
+      const grouped = {}
+      for (const it of (order.items || [])) {
+        if (!grouped[it.product_id]) {
+          grouped[it.product_id] = {
+            _key: `${it.product_id}-${Math.random()}`,
+            product_id: it.product_id,
+            product_name: it.product_name || '',
+            color: it.color || '',
+            cost: it.cost || 0,
+            sizes: [],
+          }
+        }
+        grouped[it.product_id].sizes.push({ size: it.size || '', stock: null, qty: it.qty || 0 })
+      }
+
+      // Enriquecer con stock actual por producto
+      const cards = await Promise.all(Object.values(grouped).map(async (card) => {
+        try {
+          const full = await api.products.get(card.product_id)
+          if (full?.sizes?.length) {
+            // Construir grilla completa con todos los talles, mergeando cantidades guardadas
+            const savedQties = Object.fromEntries(card.sizes.map(s => [s.size, s.qty]))
+            card.sizes = full.sizes.map(s => ({
+              size: s.size,
+              stock: s.stock ?? 0,
+              qty: savedQties[s.size] || 0,
+            }))
+          }
+        } catch {}
+        return card
+      }))
+
+      setFCards(cards.length ? cards : [newCard()])
       setView('form')
     } catch { toast.error('Error al cargar pedido') }
   }
@@ -325,39 +392,69 @@ export default function SupplierOrders() {
     try {
       const rows = await api.supplierOrders.lowStock()
       if (!rows?.length) { toast.info('No hay productos bajo el stock mínimo'); return }
-      const newItems = rows.map(r => ({
-        _key: `${r.product_id}-${r.size}-${Math.random()}`,
-        product_id: r.product_id,
-        product_name: r.product_name,
-        color: r.color || '',
-        size: r.size || 'N/A',
-        qty: Math.max(1, r.qty_needed || 1),
-        cost: r.cost || 0,
-      }))
-      setFItems(prev => {
-        const existingKeys = new Set(prev.filter(i => i.product_id).map(i => `${i.product_id}-${i.size}`))
-        const toAdd = newItems.filter(i => !existingKeys.has(`${i.product_id}-${i.size}`))
-        const base = prev.filter(i => i.product_id)
+
+      // Agrupar filas por product_id → una tarjeta por producto
+      const grouped = {}
+      for (const r of rows) {
+        if (!grouped[r.product_id]) {
+          grouped[r.product_id] = {
+            _key: `${r.product_id}-${Math.random()}`,
+            product_id: r.product_id,
+            product_name: r.product_name || '',
+            color: r.color || '',
+            cost: r.cost || 0,
+            sizes: [],
+          }
+        }
+        grouped[r.product_id].sizes.push({
+          size: r.size || 'N/A',
+          stock: r.stock ?? 0,
+          qty: Math.max(1, r.qty_needed || 1),
+        })
+      }
+
+      const newCards = Object.values(grouped)
+      setFCards(prev => {
+        const existingIds = new Set(prev.filter(c => c.product_id).map(c => c.product_id))
+        const toAdd = newCards.filter(c => !existingIds.has(c.product_id))
+        const base  = prev.filter(c => c.product_id)
         return [...base, ...toAdd]
       })
-      toast.success(`${newItems.length} productos bajo mínimo agregados`)
+      toast.success(`${newCards.length} productos bajo mínimo agregados`)
     } catch { toast.error('Error al cargar stock bajo') }
     finally { setLoadingLow(false) }
   }
 
+  // Expandir tarjetas a lista plana de ítems (una entrada por talle con qty > 0)
+  function expandCards(cards) {
+    const items = []
+    for (const card of cards) {
+      if (!card.product_id) continue
+      for (const sz of card.sizes) {
+        if ((sz.qty || 0) > 0) {
+          items.push({
+            product_id:   card.product_id,
+            product_name: card.product_name,
+            color:        card.color || '',
+            size:         sz.size,
+            qty:          sz.qty,
+            cost:         Number(card.cost) || 0,
+          })
+        }
+      }
+    }
+    return items
+  }
+
   const saveOrder = async (status = 'draft') => {
-    const validItems = fItems.filter(it => it.product_id && it.qty > 0)
-    if (validItems.length === 0) { toast.error('Agregá al menos un producto'); return }
+    const validItems = expandCards(fCards)
+    if (!validItems.length) { toast.error('Agregá al menos un producto con cantidad'); return }
     setFSaving(true)
     try {
       const payload = {
         supplier_id: fSupplierId ? Number(fSupplierId) : null,
-        supplier_name: fSupplierName,
-        supplier_email: fSupplierEmail,
-        supplier_phone: fSupplierPhone,
-        notes: fNotes,
-        items: validItems,
-        status,
+        supplier_name: fSupplierName, supplier_email: fSupplierEmail,
+        supplier_phone: fSupplierPhone, notes: fNotes, items: validItems, status,
       }
       if (editOrder) {
         await api.supplierOrders.update({ id: editOrder.id, ...payload })
@@ -373,8 +470,8 @@ export default function SupplierOrders() {
   }
 
   const confirmAndPrint = async () => {
-    const validItems = fItems.filter(it => it.product_id && it.qty > 0)
-    if (validItems.length === 0) { toast.error('Agregá al menos un producto'); return }
+    const validItems = expandCards(fCards)
+    if (!validItems.length) { toast.error('Agregá al menos un producto con cantidad'); return }
     setFSaving(true)
     try {
       const payload = {
@@ -382,16 +479,15 @@ export default function SupplierOrders() {
         supplier_name: fSupplierName, supplier_email: fSupplierEmail,
         supplier_phone: fSupplierPhone, notes: fNotes, items: validItems, status: 'sent',
       }
-      let orderId, orderNumber
+      let orderNumber
       if (editOrder) {
         await api.supplierOrders.update({ id: editOrder.id, ...payload })
-        orderId = editOrder.id; orderNumber = editOrder.order_number
+        orderNumber = editOrder.order_number
       } else {
         const res = await api.supplierOrders.create(payload)
-        orderId = res.id; orderNumber = res.order_number
+        orderNumber = res.order_number
       }
-      const total = validItems.reduce((s, it) => s + (it.qty||0)*(it.cost||0), 0)
-      printOrderPDF({ ...payload, order_number: orderNumber, created_at: new Date().toISOString(), items: validItems }, biz)
+      printOrderPDF({ ...payload, order_number: orderNumber, created_at: new Date().toISOString() }, biz)
       toast.success(`Pedido ${orderNumber} generado`)
       setView('list')
       loadOrders()
@@ -421,7 +517,7 @@ export default function SupplierOrders() {
   const convertToEntry = async (id) => {
     if (!confirm('Esto creará un Ingreso de Mercadería con los productos del pedido y actualizará el stock. ¿Continuar?')) return
     try {
-      const res = await api.supplierOrders.convertToEntry(id)
+      await api.supplierOrders.convertToEntry(id)
       toast.success('Ingreso de mercadería creado exitosamente')
       loadOrders()
     } catch (e) { toast.error(e.message || 'Error al convertir') }
@@ -436,13 +532,16 @@ export default function SupplierOrders() {
     api.shell.openExternal(`https://wa.me/${phone}?text=${msg}`)
   }
 
-  const fTotal = fItems.reduce((s, it) => s + (it.qty||0)*(it.cost||0), 0)
-  const pages  = Math.ceil(total / LIMIT)
+  const fTotal = fCards.reduce((s, c) => {
+    const qty = c.sizes.reduce((ss, sz) => ss + (sz.qty || 0), 0)
+    return s + qty * (Number(c.cost) || 0)
+  }, 0)
+  const pages = Math.ceil(total / LIMIT)
 
   // ── FORM VIEW ─────────────────────────────────────────────────────────────────
   if (view === 'form') return (
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-4 }} transition={{ duration:0.18 }}
-      className="p-6 space-y-5">
+      className="p-6 space-y-5 h-full overflow-auto">
       <div className="flex items-center gap-3">
         <button onClick={() => setView('list')} className="no-drag flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
           <ChevronLeft size={15} /> Volver
@@ -455,7 +554,6 @@ export default function SupplierOrders() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Supplier */}
         <div>
           <label className={labelCls}>Proveedor</label>
           <select value={fSupplierId} onChange={e => handleSupplierChange(e.target.value)} className={inputCls}>
@@ -477,43 +575,40 @@ export default function SupplierOrders() {
         </div>
       </div>
 
-      {/* Items table — sin overflow-hidden para que el dropdown de búsqueda no quede clippeado */}
-      <div className="bg-card border border-border rounded-xl">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface rounded-t-xl">
-          <p className="text-sm font-medium text-white">{fItems.filter(i=>i.product_id).length} productos</p>
-          <div className="flex gap-2">
-            <button onClick={addLowStock} disabled={loadingLow}
-              className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-500/40 text-amber-400 rounded-lg hover:bg-amber-500/10 transition-colors disabled:opacity-50">
-              <AlertTriangle size={11} className={loadingLow ? 'animate-pulse' : ''} />
-              {loadingLow ? 'Cargando...' : 'Agregar desde stock mínimo'}
-            </button>
-            <button onClick={() => setFItems(p => [...p, newItem()])}
-              className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent/10 border border-accent/30 text-accent rounded-lg hover:bg-accent/20 transition-colors">
-              <Plus size={11} /> Agregar fila
-            </button>
-          </div>
+      {/* Productos con grilla de talles */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[11px] text-zinc-500 uppercase tracking-wider">
+            Productos — distribuí cantidades por talle
+          </p>
+          <button onClick={addLowStock} disabled={loadingLow}
+            className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-xs border border-amber-500/40 text-amber-400 rounded-lg hover:bg-amber-500/10 transition-colors disabled:opacity-50">
+            <AlertTriangle size={11} className={loadingLow ? 'animate-pulse' : ''} />
+            {loadingLow ? 'Cargando...' : 'Agregar desde stock mínimo'}
+          </button>
         </div>
 
-        <div className="px-4 pt-2">
-          <div className="grid text-[10px] text-zinc-600 uppercase pb-1"
-            style={{ gridTemplateColumns: '2.5fr 1fr 1fr 80px 100px 80px 32px' }}>
-            <span>Producto</span><span>Color</span><span>Talle</span>
-            <span className="text-center">Cantidad</span>
-            <span className="text-right">P. costo</span>
-            <span className="text-right">Subtotal</span>
-            <span></span>
-          </div>
-          {fItems.map((item, idx) => (
-            <ItemRow key={item._key} item={item}
-              onChange={updated => setFItems(p => p.map(i => i._key === updated._key ? updated : i))}
-              onRemove={() => setFItems(p => p.filter(i => i._key !== item._key))} />
-          ))}
+        <div className="space-y-2">
+          <AnimatePresence initial={false}>
+            {fCards.map(card => (
+              <motion.div key={card._key}
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
+                transition={{ duration: 0.15 }}>
+                <ProductCardOrder
+                  card={card}
+                  onUpdate={updated => setFCards(p => p.map(c => c._key === updated._key ? updated : c))}
+                  onRemove={() => setFCards(p => p.filter(c => c._key !== card._key))}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface rounded-b-xl">
-          <span className="text-xs text-zinc-500">Total del pedido</span>
-          <span className="text-lg font-bold text-white tabular-nums">{formatCurrency(fTotal)}</span>
-        </div>
+        <button type="button" onClick={() => setFCards(p => [...p, newCard()])}
+          className="no-drag mt-2 flex items-center gap-2 px-4 py-2.5 w-full border border-dashed border-border rounded-xl text-zinc-500 hover:text-white hover:border-accent/50 transition-colors text-sm">
+          <Plus size={14} /> Agregar producto
+        </button>
       </div>
 
       {/* Notes */}
@@ -524,20 +619,26 @@ export default function SupplierOrders() {
           className={cn(inputCls, 'resize-none')} />
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-        <button onClick={() => setView('list')} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
-          Cancelar
-        </button>
-        <button onClick={() => saveOrder('draft')} disabled={fSaving}
-          className="no-drag px-4 py-2 text-sm border border-border text-zinc-300 rounded-lg hover:border-zinc-500 transition-colors disabled:opacity-50">
-          Guardar borrador
-        </button>
-        <button onClick={confirmAndPrint} disabled={fSaving}
-          className="no-drag btn-primary flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium disabled:opacity-50">
-          <Printer size={14} className={fSaving ? 'animate-spin' : ''} />
-          {fSaving ? 'Guardando...' : 'Confirmar y generar PDF'}
-        </button>
+      {/* Footer con total + acciones */}
+      <div className="flex items-center gap-4 bg-card border border-border rounded-xl px-5 py-4">
+        <div className="flex-1">
+          <p className="text-xs text-zinc-500">Total del pedido</p>
+          <p className="text-xl font-bold text-accent tabular-nums">{formatCurrency(fTotal)}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setView('list')} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
+            Cancelar
+          </button>
+          <button onClick={() => saveOrder('draft')} disabled={fSaving}
+            className="no-drag px-4 py-2 text-sm border border-border text-zinc-300 rounded-lg hover:border-zinc-500 transition-colors disabled:opacity-50">
+            Guardar borrador
+          </button>
+          <button onClick={confirmAndPrint} disabled={fSaving}
+            className="no-drag btn-primary flex items-center gap-2 px-5 py-2.5 text-sm rounded-lg font-medium disabled:opacity-50">
+            <Printer size={14} className={fSaving ? 'animate-spin' : ''} />
+            {fSaving ? 'Guardando...' : 'Confirmar y generar PDF'}
+          </button>
+        </div>
       </div>
     </motion.div>
   )
@@ -554,7 +655,7 @@ export default function SupplierOrders() {
         </button>
       </div>
 
-      {/* Filters */}
+      {/* Filtros */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[180px]">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
@@ -578,7 +679,7 @@ export default function SupplierOrders() {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Tabla */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {loading ? (
           <div className="py-4"><SkeletonTable rows={6} cols={6} /></div>
@@ -613,7 +714,6 @@ export default function SupplierOrders() {
                   <StatusBadge status={o.status} />
                   <span className="text-right text-sm tabular-nums font-medium text-white">{formatCurrency(o.total)}</span>
                   <div className="flex items-center justify-end gap-1.5">
-                    {/* Print */}
                     <button onClick={async () => {
                       const full = await api.supplierOrders.get(o.id)
                       if (full) printOrderPDF(full, biz)
@@ -621,7 +721,6 @@ export default function SupplierOrders() {
                       className="no-drag p-1.5 text-zinc-600 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
                       <Printer size={13} />
                     </button>
-                    {/* WhatsApp */}
                     {o.supplier_phone && (
                       <button onClick={async () => {
                         const full = await api.supplierOrders.get(o.id)
@@ -631,7 +730,6 @@ export default function SupplierOrders() {
                         <MessageCircle size={13} />
                       </button>
                     )}
-                    {/* Status transitions */}
                     {o.status === 'draft' && (
                       <button onClick={() => changeStatus(o.id, 'sent')} title="Marcar como enviado"
                         className="no-drag p-1.5 text-zinc-600 hover:text-blue-400 hover:bg-white/5 rounded-lg transition-colors">
@@ -656,7 +754,6 @@ export default function SupplierOrders() {
                         <PackagePlus size={11} /> Recibir
                       </button>
                     )}
-                    {/* Delete (draft only) */}
                     {o.status === 'draft' && (
                       <button onClick={() => deleteOrder(o.id)} title="Eliminar"
                         className="no-drag p-1.5 text-zinc-700 hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors">
@@ -671,7 +768,7 @@ export default function SupplierOrders() {
         )}
       </div>
 
-      {/* Pagination */}
+      {/* Paginación */}
       {pages > 1 && (
         <div className="flex items-center justify-between text-sm text-zinc-500">
           <span>{total} pedidos</span>

@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
-  PackageMinus, Plus, Trash2, X, Search, ChevronLeft, ChevronRight,
-  FileDown, Send, MessageCircle, CheckCircle, Truck, RefreshCw,
+  PackageMinus, Plus, Trash2, Search, ChevronLeft, ChevronRight,
+  FileDown, MessageCircle, CheckCircle, Truck, RefreshCw,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -26,103 +26,113 @@ const STATUS_CFG = {
   confirmed: { label: 'Confirmado proveedor',  cls: 'bg-green-500/10 text-green-400 border-green-500/20' },
 }
 
-// ── Fila de producto (rediseñada con talles reales + stock) ───────────────────
+// ── Grilla de talles con stock y validación ───────────────────────────────────
 
-function ItemRow({ item, index, onUpdate, onRemove }) {
-  const [search,   setSearch]   = useState(item.product_name || '')
-  const [results,  setResults]  = useState([])
-  const [open,     setOpen]     = useState(false)
-  const [sizes,    setSizes]    = useState([])   // todos los talles del producto con su stock
-  const dropRef = useRef(null)
+function SizeGridEgreso({ sizes, onChange }) {
+  if (!sizes?.length) return null
+  const cols = Math.min(sizes.length, 8)
+  return (
+    <div className="grid gap-2 pt-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(50px, 1fr))` }}>
+      {sizes.map(({ size, stock, qty }) => {
+        const n    = qty || 0
+        const warn = stock != null && n > stock
+        return (
+          <div key={size} className="flex flex-col items-center gap-0.5">
+            <span className="text-[11px] text-zinc-400 font-mono font-medium">T.{size}</span>
+            {stock != null && (
+              <span className={cn('text-[9px] tabular-nums leading-none',
+                stock === 0 ? 'text-red-400' : 'text-zinc-600')}>
+                St:{stock}
+              </span>
+            )}
+            <input
+              type="number" min="0"
+              value={n || ''}
+              onChange={e => onChange(size, Math.max(0, Number(e.target.value) || 0))}
+              className={cn(
+                'w-full bg-[#0a0a0a] border rounded px-1 py-1.5 text-sm text-white text-center outline-none transition-colors no-drag',
+                warn
+                  ? 'border-amber-500 focus:border-amber-400'
+                  : 'border-border focus:border-accent'
+              )}
+              placeholder="0"
+            />
+            {warn && (
+              <span className="text-[8px] text-amber-400 leading-none">Máx {stock}</span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
-  // ── Cerrar dropdown al click fuera ─────────────────────────────────────────
+// ── Tarjeta de producto con grilla de talles ──────────────────────────────────
+
+function ProductCardEgreso({ card, onUpdate, onRemove }) {
+  const [search,  setSearch]  = useState(card.product_name || '')
+  const [results, setResults] = useState([])
+  const [open,    setOpen]    = useState(false)
+  const dropRef   = useRef(null)
+  const timer     = useRef(null)
+
   useEffect(() => {
     const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── Búsqueda con debounce ───────────────────────────────────────────────────
-  const doSearch = useCallback(async (q) => {
+  function handleSearch(q) {
+    setSearch(q)
+    if (!q) { onUpdate({ ...card, product_id: null, product_name: '', sizes: [] }); setOpen(false); return }
+    clearTimeout(timer.current)
     if (q.length < 2) { setResults([]); setOpen(false); return }
-    try {
-      const res = await api.products.search(q)
-      // products:search devuelve sizes con stock>0; para el egreso traemos TODOS
-      // usando products:get cuando el user elige el producto
-      setResults(res || [])
-      setOpen(true)
-    } catch {}
-  }, [])
+    timer.current = setTimeout(async () => {
+      try {
+        const res = await api.products.search(q) || []
+        setResults(res)
+        setOpen(res.length > 0)
+      } catch {}
+    }, 220)
+  }
 
-  useEffect(() => {
-    const t = setTimeout(() => doSearch(search), 220)
-    return () => clearTimeout(t)
-  }, [search, doSearch])
-
-  // ── Cargar talles completos del producto seleccionado ──────────────────────
-  const loadSizes = useCallback(async (productId) => {
-    try {
-      const full = await api.products.get(productId)
-      // sizes incluye todos los talles con stock (incluso 0)
-      setSizes(full?.sizes || [])
-    } catch { setSizes([]) }
-  }, [])
-
-  // ── Seleccionar producto del dropdown ──────────────────────────────────────
-  const pick = async (p) => {
+  async function pick(p) {
     setSearch(p.name)
     setResults([])
     setOpen(false)
-    // Cargar talles reales
-    await loadSizes(p.id)
-    onUpdate(index, {
-      product_id:   p.id,
-      product_name: p.name,
-      color:        p.color || '',
-      cost_price:   p.cost || 0,
-      size:         '',      // resetear talle al cambiar producto
-      stock_actual: 0,
-    })
+    try {
+      const full = await api.products.get(p.id)
+      // Cargar TODOS los talles (incluso con stock 0) para poder devolver cualquier talle
+      const sizes = (full?.sizes || []).map(s => ({ size: s.size, stock: s.stock ?? 0, qty: 0 }))
+      onUpdate({ ...card, product_id: p.id, product_name: p.name, color: p.color || '', cost_price: p.cost || 0, sizes })
+    } catch {
+      onUpdate({ ...card, product_id: p.id, product_name: p.name, color: p.color || '', cost_price: p.cost || 0, sizes: [] })
+    }
   }
 
-  // ── Al cambiar talle, actualizar stock_actual y ajustar cantidad ───────────
-  const handleSizeChange = (size) => {
-    const sizeRow = sizes.find(s => s.size === size)
-    const stockActual = sizeRow?.stock ?? 0
-    onUpdate(index, { size, stock_actual: stockActual })
-  }
-
-  const stockActual = item.stock_actual ?? (sizes.find(s => s.size === item.size)?.stock ?? null)
-  const qty         = Number(item.quantity) || 0
-  const stockWarn   = stockActual !== null && qty > stockActual
-  const subtotal    = qty * (Number(item.cost_price) || 0)
+  const totalQty = card.sizes.reduce((s, sz) => s + (sz.qty || 0), 0)
+  const subtotal = totalQty * (Number(card.cost_price) || 0)
+  const hasWarn  = card.sizes.some(sz => (sz.qty || 0) > (sz.stock ?? 999))
 
   return (
     <div className={cn(
-      'p-3 bg-surface border rounded-xl space-y-2.5 transition-colors',
-      stockWarn ? 'border-amber-500/40' : 'border-border'
+      'p-4 bg-surface border rounded-xl space-y-3 transition-colors',
+      hasWarn ? 'border-amber-500/40' : 'border-border'
     )}>
-      {/* Fila 1: búsqueda de producto */}
-      <div className="flex items-center gap-2">
+      {/* Búsqueda */}
+      <div className="flex items-start gap-2">
         <div className="relative flex-1" ref={dropRef}>
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             className={cn(inputCls, 'pl-8')}
             value={search}
-            onChange={e => {
-              setSearch(e.target.value)
-              if (!e.target.value) {
-                setSizes([])
-                onUpdate(index, { product_id: null, product_name: '', size: '', stock_actual: 0 })
-              }
-            }}
+            onChange={e => handleSearch(e.target.value)}
             placeholder="Buscar producto por nombre o código..."
             autoComplete="off"
           />
           {open && results.length > 0 && (
             <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-[#111] border border-border rounded-xl shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
               {results.slice(0, 10).map(p => {
-                // stock total del producto (suma de todos los talles con stock > 0)
                 const totalStock = (p.sizes || []).reduce((s, sz) => s + (sz.stock || 0), 0)
                 return (
                   <button key={p.id} type="button" onClick={() => pick(p)}
@@ -131,100 +141,66 @@ function ItemRow({ item, index, onUpdate, onRemove }) {
                       <span className="text-white font-medium truncate">{p.name}</span>
                       <span className={cn('text-[10px] shrink-0 tabular-nums',
                         totalStock === 0 ? 'text-red-400' : 'text-green-400')}>
-                        Stock: {totalStock}
+                        Stock total: {totalStock}
                       </span>
                     </div>
-                    <div className="flex gap-2 mt-0.5">
-                      {p.color && <span className="text-zinc-500">{p.color}</span>}
-                      <span className="text-zinc-600">Costo: {formatCurrency(p.cost)}</span>
-                      {p.barcode && <span className="text-zinc-700 font-mono">{p.barcode}</span>}
-                    </div>
+                    {(p.color || p.cost) && (
+                      <div className="flex gap-2 mt-0.5 text-zinc-500">
+                        {p.color && <span>{p.color}</span>}
+                        {p.cost  && <span>Costo: {formatCurrency(p.cost)}</span>}
+                      </div>
+                    )}
                   </button>
                 )
               })}
             </div>
           )}
         </div>
-        <button type="button" onClick={() => onRemove(index)}
-          className="no-drag p-1.5 text-zinc-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 shrink-0">
+        <button type="button" onClick={onRemove}
+          className="no-drag mt-0.5 p-1.5 text-zinc-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10 shrink-0">
           <Trash2 size={14} />
         </button>
       </div>
 
-      {/* Fila 2: talle + cantidad + costo + subtotal */}
-      {item.product_id ? (
-        <div className="grid gap-2" style={{ gridTemplateColumns: '1.4fr 0.9fr 1fr 1fr' }}>
-          {/* Selector de talle con stock */}
-          <div>
-            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">Talle</label>
-            {sizes.length > 0 ? (
-              <select
-                className={cn(inputCls, 'text-sm')}
-                value={item.size || ''}
-                onChange={e => handleSizeChange(e.target.value)}
-              >
-                <option value="">— Elegí talle —</option>
-                {sizes.map(sz => (
-                  <option key={sz.size} value={sz.size}
-                    style={sz.stock === 0 ? { color: '#6b7280' } : {}}>
-                    T.{sz.size} — Stock: {sz.stock}
-                    {sz.stock === 0 ? ' (sin stock)' : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input className={inputCls} value={item.size || ''}
-                onChange={e => onUpdate(index, { size: e.target.value })}
-                placeholder="Talle..." />
-            )}
-          </div>
+      {/* Grilla de talles */}
+      {card.product_id && card.sizes.length > 0 && (
+        <>
+          <SizeGridEgreso
+            sizes={card.sizes}
+            onChange={(size, qty) =>
+              onUpdate({ ...card, sizes: card.sizes.map(s => s.size === size ? { ...s, qty } : s) })
+            }
+          />
 
-          {/* Cantidad con validación */}
-          <div>
-            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">
-              Cantidad
-              {stockActual !== null && (
-                <span className={cn('ml-1 font-normal normal-case', stockActual === 0 ? 'text-red-400' : 'text-zinc-500')}>
-                  (disp: {stockActual})
-                </span>
-              )}
-            </label>
-            <input
-              type="number" min="1"
-              className={cn(inputCls, 'text-center', stockWarn && 'border-amber-500/60')}
-              value={item.quantity || ''}
-              onChange={e => onUpdate(index, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-              placeholder="1"
-            />
-            {stockWarn && (
-              <p className="text-[10px] text-amber-400 mt-0.5">
-                ⚠ Supera stock ({stockActual})
-              </p>
-            )}
-          </div>
-
-          {/* Precio de costo */}
-          <div>
-            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">Precio costo</label>
-            <input
-              type="number" min="0" step="0.01"
-              className={cn(inputCls, 'text-right')}
-              value={item.cost_price || ''}
-              onChange={e => onUpdate(index, { cost_price: Number(e.target.value) })}
-              placeholder="0.00"
-            />
-          </div>
-
-          {/* Subtotal */}
-          <div>
-            <label className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1 block">Subtotal</label>
-            <div className={cn(inputCls, 'text-right font-semibold text-accent pointer-events-none select-none')}>
-              {formatCurrency(subtotal)}
+          {/* Costo + resumen */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border/50">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-zinc-500 whitespace-nowrap">Precio costo:</label>
+              <input
+                type="number" min="0" step="0.01"
+                value={card.cost_price || ''}
+                onChange={e => onUpdate({ ...card, cost_price: Number(e.target.value) || 0 })}
+                placeholder="0.00"
+                className="w-28 bg-[#0a0a0a] border border-border rounded-lg px-2 py-1.5 text-sm text-white text-right outline-none focus:border-accent transition-colors no-drag"
+              />
+            </div>
+            <div className="ml-auto text-right">
+              <span className="text-xs text-zinc-500">Subtotal: </span>
+              <span className="text-sm font-semibold text-accent tabular-nums">{formatCurrency(subtotal)}</span>
+              <span className="text-xs text-zinc-600 ml-2">({totalQty} u.)</span>
             </div>
           </div>
-        </div>
-      ) : (
-        <p className="text-xs text-zinc-600 text-center py-1">← Buscá y seleccioná un producto para cargar los talles</p>
+        </>
+      )}
+
+      {card.product_id && card.sizes.length === 0 && (
+        <p className="text-xs text-zinc-600 text-center py-1">Sin talles registrados para este producto</p>
+      )}
+
+      {!card.product_id && (
+        <p className="text-xs text-zinc-600 text-center py-1">
+          ← Buscá y seleccioná un producto para ver la grilla de talles
+        </p>
       )}
     </div>
   )
@@ -319,7 +295,7 @@ function HistorialView({ onNew }) {
                 <span className="text-center">Estado</span>
               </div>
               <div className="divide-y divide-border">
-                {data.egresos.map((e, i) => {
+                {data.egresos.map((e) => {
                   const scfg = STATUS_CFG[e.status] || STATUS_CFG.pending
                   const reasonLabel = REASONS.find(r => r.value === e.reason)?.label || e.reason || '—'
                   return (
@@ -347,10 +323,14 @@ function HistorialView({ onNew }) {
             {data.pages > 1 && (
               <div className="flex items-center justify-center gap-3 mt-4">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="no-drag p-1.5 border border-border rounded-lg text-zinc-400 hover:text-white disabled:opacity-40"><ChevronLeft size={15}/></button>
+                  className="no-drag p-1.5 border border-border rounded-lg text-zinc-400 hover:text-white disabled:opacity-40">
+                  <ChevronLeft size={15}/>
+                </button>
                 <span className="text-xs text-zinc-500">Pág. {page} / {data.pages}</span>
                 <button onClick={() => setPage(p => Math.min(data.pages, p + 1))} disabled={page >= data.pages}
-                  className="no-drag p-1.5 border border-border rounded-lg text-zinc-400 hover:text-white disabled:opacity-40"><ChevronRight size={15}/></button>
+                  className="no-drag p-1.5 border border-border rounded-lg text-zinc-400 hover:text-white disabled:opacity-40">
+                  <ChevronRight size={15}/>
+                </button>
               </div>
             )}
           </div>
@@ -362,7 +342,6 @@ function HistorialView({ onNew }) {
         title={detail ? `Egreso ${detail.number}` : ''} width="max-w-2xl">
         {detail && (
           <div className="space-y-4">
-            {/* Header info */}
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: 'Proveedor',  value: detail.supplier_name || '—' },
@@ -382,7 +361,6 @@ function HistorialView({ onNew }) {
               {detail.notes && <p className="text-xs text-zinc-500 mt-1">{detail.notes}</p>}
             </div>
 
-            {/* Items table */}
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="grid text-[11px] text-zinc-500 uppercase px-3 py-2 border-b border-border bg-surface"
                 style={{ gridTemplateColumns: '2fr 70px 70px 60px 90px 90px' }}>
@@ -390,8 +368,8 @@ function HistorialView({ onNew }) {
                 <span className="text-right">Cant.</span><span className="text-right">Costo</span><span className="text-right">Subtotal</span>
               </div>
               <div className="divide-y divide-border">
-                {(detail.items || []).map(item => (
-                  <div key={item.id} className="row-alt grid items-center px-3 py-2.5 text-sm"
+                {(detail.items || []).map((item, i) => (
+                  <div key={i} className="row-alt grid items-center px-3 py-2.5 text-sm"
                     style={{ gridTemplateColumns: '2fr 70px 70px 60px 90px 90px' }}>
                     <span className="text-white truncate pr-1">{item.product_name}</span>
                     <span className="text-center text-zinc-400 font-mono text-xs">{item.size || '—'}</span>
@@ -412,7 +390,6 @@ function HistorialView({ onNew }) {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-2 pt-2 flex-wrap">
               <button onClick={() => generatePDF(detail.id)} disabled={saving}
                 className="no-drag flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
@@ -456,33 +433,56 @@ function NuevoEgresoView({ onDone }) {
     date: new Date().toISOString().split('T')[0],
     reason: 'defecto', notes: '',
   })
-  const [items,   setItems]   = useState([newItem()])
-  const [saving,  setSaving]  = useState(false)
-  const [result,  setResult]  = useState(null) // { id, number, warnings }
+  const [cards,  setCards]  = useState([newCard()])
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState(null)
 
   useEffect(() => {
     api.suppliers.list({}).then(r => setSuppliers(r?.suppliers || [])).catch(() => {})
   }, [])
 
-  function newItem() {
-    return { _key: Date.now() + Math.random(), product_id: null, product_name: '', size: '', color: '', quantity: 1, cost_price: 0, stock_actual: null }
+  function newCard() {
+    return { _key: Date.now() + Math.random(), product_id: null, product_name: '', color: '', sizes: [], cost_price: 0 }
   }
 
-  const addItem  = () => setItems(p => [...p, newItem()])
-  const removeItem = (idx) => setItems(p => p.filter((_, i) => i !== idx))
-  const updateItem = (idx, patch) => setItems(p => p.map((it, i) => i === idx ? { ...it, ...patch } : it))
-
-  const totalUnits  = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0)
-  const totalAmount = items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.cost_price) || 0), 0)
+  const addCard    = () => setCards(p => [...p, newCard()])
+  const removeCard = (key) => setCards(p => p.filter(c => c._key !== key))
+  const updateCard = (updated) => setCards(p => p.map(c => c._key === updated._key ? updated : c))
 
   const handleSupplier = (id) => {
     const sup = suppliers.find(s => String(s.id) === id)
     setForm(p => ({ ...p, supplier_id: id, supplier_name: sup?.name || '' }))
   }
 
+  // Calcular totales sumando todas las tarjetas y talles
+  const totalUnits  = cards.reduce((s, c) => s + c.sizes.reduce((ss, sz) => ss + (sz.qty || 0), 0), 0)
+  const totalAmount = cards.reduce((s, c) => {
+    const qty = c.sizes.reduce((ss, sz) => ss + (sz.qty || 0), 0)
+    return s + qty * (Number(c.cost_price) || 0)
+  }, 0)
+
   const confirmar = async () => {
-    const validItems = items.filter(i => i.product_name.trim() && (Number(i.quantity) || 0) > 0)
+    // Expandir tarjetas a lista plana de ítems (una entrada por talle con qty > 0)
+    const validItems = []
+    for (const card of cards) {
+      if (!card.product_id) continue
+      for (const sz of card.sizes) {
+        if ((sz.qty || 0) > 0) {
+          validItems.push({
+            product_id:   card.product_id,
+            product_name: card.product_name,
+            color:        card.color || '',
+            size:         sz.size,
+            quantity:     sz.qty,
+            cost_price:   Number(card.cost_price) || 0,
+            stock_actual: sz.stock ?? null,
+            subtotal:     (sz.qty || 0) * (Number(card.cost_price) || 0),
+          })
+        }
+      }
+    }
     if (!validItems.length) { toast.error('Agregá al menos un producto con cantidad'); return }
+
     setSaving(true)
     try {
       const res = await api.egreso.create({ ...form, items: validItems, total_amount: totalAmount, total_units: totalUnits })
@@ -507,7 +507,7 @@ function NuevoEgresoView({ onDone }) {
     finally { setSaving(false) }
   }
 
-  // ── Resultado post-confirmación ──
+  // ── Pantalla de éxito post-confirmación ──
   if (result) {
     return (
       <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
@@ -528,7 +528,7 @@ function NuevoEgresoView({ onDone }) {
             className="no-drag flex items-center gap-2 px-5 py-2.5 bg-card border border-border rounded-xl text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
             <FileDown size={15} /> {saving ? 'Generando...' : 'Generar PDF'}
           </button>
-          <button onClick={() => { setResult(null); setItems([newItem()]); setForm(p => ({ ...p, notes: '' })) }}
+          <button onClick={() => { setResult(null); setCards([newCard()]); setForm(p => ({ ...p, notes: '' })) }}
             className="no-drag flex items-center gap-2 px-5 py-2.5 bg-card border border-border rounded-xl text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
             <Plus size={15} /> Nuevo egreso
           </button>
@@ -581,32 +581,30 @@ function NuevoEgresoView({ onDone }) {
           </div>
         </div>
 
-        {/* Cabecera */}
+        {/* Productos */}
         <p className="text-[11px] text-zinc-500 uppercase tracking-wider px-1">
-          Productos a devolver — buscá, seleccioná talle y cantidad
+          Productos a devolver — seleccioná el producto y distribuí cantidades por talle
         </p>
 
-        {/* Filas */}
         <div className="space-y-2">
           <AnimatePresence initial={false}>
-            {items.map((item, idx) => (
-              <motion.div key={item._key}
+            {cards.map(card => (
+              <motion.div key={card._key}
                 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
                 transition={{ duration: 0.15 }}>
-                <ItemRow item={item} index={idx} onUpdate={updateItem} onRemove={removeItem} />
+                <ProductCardEgreso card={card} onUpdate={updateCard} onRemove={() => removeCard(card._key)} />
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
 
-        {/* Agregar línea */}
-        <button type="button" onClick={addItem}
+        <button type="button" onClick={addCard}
           className="no-drag flex items-center gap-2 px-4 py-2.5 w-full border border-dashed border-border rounded-xl text-zinc-500 hover:text-white hover:border-accent/50 transition-colors text-sm">
-          <Plus size={14} /> Agregar línea
+          <Plus size={14} /> Agregar producto
         </button>
 
-        {/* Footer con totales y confirmar */}
+        {/* Footer totales + confirmar */}
         <div className="flex items-center gap-4 bg-card border border-border rounded-xl px-5 py-4">
           <div className="flex-1 grid grid-cols-2 gap-4">
             <div>
@@ -632,7 +630,7 @@ function NuevoEgresoView({ onDone }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function StockEgreso() {
-  const [view, setView] = useState('list') // 'list' | 'new'
+  const [view, setView] = useState('list')
   return view === 'list'
     ? <HistorialView onNew={() => setView('new')} />
     : <NuevoEgresoView onDone={() => setView('list')} />

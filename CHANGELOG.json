@@ -1,4 +1,31 @@
 {
+  "v1.2.3": {
+    "fecha": "2026-06-10",
+    "correcciones": [
+      "Fix: informe semanal de prueba reprogramado para hoy a las 20:45 hs"
+    ]
+  },
+  "v1.2.2": {
+    "fecha": "2026-06-10",
+    "mejoras": [
+      "Informe semanal: ahora se envía los lunes a las 19:00 hs (antes: lunes 8:00 hs)",
+      "Informe semanal: primera ejecución automática hoy a las 19:00 para verificar que funciona",
+      "Nuevo informe mensual automático: se envía el primer día de cada mes a las 19:00 hs con resumen del mes anterior",
+      "Informe mensual incluye: ventas vs gastos, resultado neto, top 10 productos, top 5 clientes, mejor día del mes, stock crítico y saldo de cuentas",
+      "Al iniciar la app se muestra en consola la fecha y hora del próximo informe semanal y mensual",
+      "Zona horaria: America/Argentina/Buenos_Aires en todos los cron jobs"
+    ]
+  },
+  "v1.2.1": {
+    "fecha": "2026-06-10",
+    "mejoras": [
+      "Egreso de Mercadería: grilla de talles por producto (igual que Ingreso) — seleccioná un producto y distribuí cantidades por talle en una sola tarjeta",
+      "Egreso de Mercadería: muestra stock actual sobre cada talle, borde ámbar si se supera el stock disponible",
+      "Pedidos a Proveedores: grilla de talles por producto — un producto = una tarjeta con todos sus talles",
+      "Pedidos a Proveedores: stock actual visible como referencia sobre cada talle (color ámbar si el talle está sin stock)",
+      "Al editar un pedido existente se reconstruye la grilla completa con todos los talles del producto y se recuperan las cantidades guardadas"
+    ]
+  },
   "v1.2.0": {
     "fecha": "2026-06-10",
     "correcciones": [
