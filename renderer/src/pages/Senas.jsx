@@ -12,7 +12,7 @@ import Pagination from '@/components/shared/Pagination'
 
 const fmtMoney = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(v || 0)
 
-function printSenaTicket(seña, biz) {
+function printSenaTicket(seña, biz, pointsInfo = null) {
   const now = new Date()
   const dateStr = now.toLocaleDateString('es-AR') + ' ' + now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
   const logoHtml = biz?.business_logo ? `<img src="${biz.business_logo}" style="max-width:50mm;max-height:18mm;margin-bottom:3pt" />` : ''
@@ -51,6 +51,11 @@ ${seña.totalPrice > 0 ? `<div class="row"><span>Precio total:</span><span>${fmt
 </div>
 ${seña.deadline ? `<div class="row"><span>Fecha límite de retiro:</span><span class="b">${seña.deadline}</span></div>` : ''}
 ${seña.notes ? `<div style="font-size:8pt;color:#555;margin:2mm 0">Obs: ${seña.notes}</div>` : ''}
+${pointsInfo && pointsInfo.enabled && seña.clientName ? `
+<div class="div"></div>
+<div class="c b" style="font-size:10pt;letter-spacing:0.5px">PROGRAMA DE FIDELIZACIÓN</div>
+<div class="c" style="margin:3pt 0">Puntos acumulados: <b style="font-size:12pt">${pointsInfo.total} pts</b></div>
+${pointsInfo.total >= (pointsInfo.minRedeem || 5) ? `<div class="c" style="font-size:7.5pt;margin:2pt 0">Podés canjear ${pointsInfo.total} pts = ${fmtMoney(pointsInfo.total * (pointsInfo.value || 0))} de descuento</div>` : ''}` : ''}
 <div class="div"></div>
 <div class="ft">Conserve este ticket para retirar su mercadería.<br>Sin este comprobante no se realizará la entrega.</div>
 <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),900)}<\/script>
@@ -185,7 +190,7 @@ export default function Senas() {
       setForm(EMPTY_FORM)
       setProductQuery('')
       setSelectedProduct(null)
-      setTicketData({ ...res, biz })
+      setTicketData({ ...res, clientId: form.clientId, biz })
       load()
     } catch (e) { toast.error(e.message || 'Error al guardar') }
     finally { setSaving(false) }
@@ -470,7 +475,26 @@ export default function Senas() {
               )}
             </div>
             <div className="flex flex-col gap-2">
-              <button onClick={() => printSenaTicket(ticketData, ticketData.biz)}
+              <button onClick={async () => {
+                let pointsInfo = null
+                if (ticketData.clientId) {
+                  try {
+                    const [client, settings] = await Promise.all([
+                      api.clients.get(ticketData.clientId),
+                      api.settings.getAll(),
+                    ])
+                    if (settings.points_enabled === '1') {
+                      pointsInfo = {
+                        enabled: true,
+                        total: client?.points ?? 0,
+                        value: Number(settings.point_value) || 100,
+                        minRedeem: Number(settings.points_min_redeem) || 5,
+                      }
+                    }
+                  } catch {}
+                }
+                printSenaTicket(ticketData, ticketData.biz, pointsInfo)
+              }}
                 className="btn-primary no-drag flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm">
                 <Printer size={14} /> Imprimir ticket
               </button>

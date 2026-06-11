@@ -134,9 +134,10 @@ ${caeFmtVto ? `<div class="row"><span>Vto. CAE:</span><span>${caeFmtVto}</span><
 ${sale.voided ? '<div class="divider"></div><p class="center bold" style="font-size:18px">*** ANULADA ***</p>' : ''}
 ${pointsInfo && pointsInfo.enabled && sale.client_name ? `
 <div class="divider"></div>
-<div class="row"><span>Puntos ganados:</span><span class="bold">+${pointsInfo.earned} pts</span></div>
-<div class="row"><span>Puntos acumulados:</span><span class="bold">${pointsInfo.total} pts</span></div>
-<div class="row" style="font-size:11px"><span>Equivalen a:</span><span>$${(pointsInfo.total * pointsInfo.value).toLocaleString('es-AR')}</span></div>` : ''}
+<p class="center bold" style="font-size:13px;letter-spacing:0.5px">PROGRAMA DE FIDELIZACIÓN</p>
+<p class="center" style="margin:4px 0">Puntos ganados hoy: <strong style="font-size:15px">+${pointsInfo.earned} pts</strong></p>
+<p class="center" style="margin:4px 0">Puntos acumulados: <strong style="font-size:15px">${pointsInfo.total} pts</strong></p>
+${pointsInfo.total >= (pointsInfo.minRedeem || 5) ? `<p class="center" style="font-size:11px;margin:2px 0">Podés canjear ${pointsInfo.total} pts = $${(pointsInfo.total * (pointsInfo.value || 0)).toLocaleString('es-AR')} de descuento</p>` : ''}` : ''}
 <div class="divider"></div>
 <p class="center" style="margin-top:4px">¡Gracias por su compra!</p>
 </body></html>`
@@ -145,6 +146,28 @@ ${pointsInfo && pointsInfo.enabled && sale.client_name ? `
   w.document.write(html)
   w.document.close()
   w.onload = () => { w.print(); setTimeout(() => w.close(), 500) }
+}
+
+async function printTicketFetched(sale, biz) {
+  let pointsInfo = null
+  if (sale.client_id) {
+    try {
+      const [client, settings] = await Promise.all([
+        api.clients.get(sale.client_id),
+        api.settings.getAll(),
+      ])
+      if (settings.points_enabled === '1') {
+        pointsInfo = {
+          enabled: true,
+          earned: Math.floor((sale.total || 0) / (Number(settings.points_per_pesos) || 1000)),
+          total: client?.points ?? 0,
+          value: Number(settings.point_value) || 100,
+          minRedeem: Number(settings.points_min_redeem) || 5,
+        }
+      }
+    } catch {}
+  }
+  printTicket(sale, biz, pointsInfo)
 }
 
 function printChangeTicket(sale, biz = {}) {
@@ -723,6 +746,7 @@ export default function Sales() {
           earned,
           total: updatedClient?.points ?? (selectedClient.points + earned),
           value: pointsCfg.value,
+          minRedeem: pointsCfg.minRedeem,
         })
       } else {
         setLastSalePoints(null)
@@ -1763,7 +1787,7 @@ export default function Sales() {
                             {formatCurrency(s.total)}
                           </span>
                           <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                            <button onClick={() => api.sales.get(s.id).then(data => data && printTicket(data, biz))}
+                            <button onClick={() => api.sales.get(s.id).then(data => data && printTicketFetched(data, biz))}
                               className="p-1.5 text-zinc-600 hover:text-zinc-300 rounded">
                               <Printer size={13} />
                             </button>
@@ -1886,7 +1910,7 @@ export default function Sales() {
               </div>
             )}
             <div className="flex gap-2 pt-2 border-t border-border">
-              <button onClick={() => { printTicket(detailModal, biz); setDetailModal(null) }}
+              <button onClick={() => { printTicketFetched(detailModal, biz); setDetailModal(null) }}
                 className="flex-1 border border-border rounded-lg py-2 text-sm text-zinc-400 hover:text-white flex items-center justify-center gap-2">
                 <Printer size={13} /> Ticket
               </button>
@@ -1914,7 +1938,7 @@ export default function Sales() {
               <p className="font-mono text-xs text-zinc-300 mt-1 break-all">CAE: {facturaSuccess.afip.cae}</p>
             </div>
 
-            <button onClick={() => printTicket(facturaSuccess.sale, biz)}
+            <button onClick={() => printTicketFetched(facturaSuccess.sale, biz)}
               className="w-full flex items-center justify-center gap-2 border border-border rounded-lg py-2.5 text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
               <Printer size={15} /> Imprimir ticket
             </button>

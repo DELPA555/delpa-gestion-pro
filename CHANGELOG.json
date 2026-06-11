@@ -1,4 +1,15 @@
 {
+  "v1.2.6": {
+    "fecha": "2026-06-11",
+    "correcciones": [
+      "Fix: el ticket (fiscal y no fiscal) ahora muestra la sección del Programa de Fidelización con puntos ganados en la compra y puntos acumulados del cliente",
+      "El bloque de fidelización aparece solo cuando hay un cliente asignado a la venta",
+      "Si el cliente tiene suficientes puntos para canjear, se muestra 'Podés canjear X pts = $XX de descuento'",
+      "Fix: historial de ventas y detalle de venta también muestran puntos al reimprimir ticket",
+      "Fix: factura AFIP (botón FACTURAR) también muestra puntos al imprimir",
+      "Ticket de seña: muestra puntos acumulados del cliente si tiene programa de fidelización activo"
+    ]
+  },
   "v1.2.5": {
     "fecha": "2026-06-11",
     "mejoras": [
