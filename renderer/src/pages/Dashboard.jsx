@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
+  AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap } from 'lucide-react'
+import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { SkeletonCard } from '@/components/shared/SkeletonLoader'
@@ -102,6 +103,11 @@ export default function Dashboard() {
   const [intelligenceRecs, setIntelligenceRecs] = useState([])
   const [stockBreaks, setStockBreaks] = useState([])
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
+  const [stockSpecular, setStockSpecular] = useState([])
+  const [cashflow, setCashflow] = useState(null)
+  const [breakeven, setBreakeven] = useState(null)
+  const [healthScore, setHealthScore] = useState(null)
+  const [healthDrilldown, setHealthDrilldown] = useState(false)
   const [lowStock, setLowStock] = useState([])
   const [cashbox, setCashbox] = useState(null)
   const [cashSummary, setCashSummary] = useState(null)
@@ -191,6 +197,20 @@ export default function Dashboard() {
       if (recs.status === 'fulfilled') setIntelligenceRecs(recs.value || [])
       if (breaks.status === 'fulfilled') setStockBreaks(breaks.value || [])
     }).finally(() => setIntelligenceLoading(false))
+  }, [])
+
+  useEffect(() => {
+    Promise.allSettled([
+      api.intelligence.stockSpecular(),
+      api.cashflow.projection(),
+      api.breakeven.data(),
+      api.health.score(),
+    ]).then(([spec, cf, be, hs]) => {
+      if (spec.status === 'fulfilled') setStockSpecular(spec.value || [])
+      if (cf.status === 'fulfilled') setCashflow(cf.value)
+      if (be.status === 'fulfilled') setBreakeven(be.value)
+      if (hs.status === 'fulfilled') setHealthScore(hs.value)
+    })
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -808,6 +828,234 @@ export default function Dashboard() {
               )
             })}
           </div>
+        </motion.div>
+      )}
+
+      {/* ── Widget: Stock Especular ──────────────────────────────────── */}
+      {stockSpecular.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.04 }}
+          className="bg-card border border-amber-900/30 rounded-xl overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Archive size={15} className="text-amber-400" />
+              <h3 className="text-sm font-medium text-white">Capital inmovilizado — sin movimiento 60 días</h3>
+              <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                {formatCurrency(stockSpecular.reduce((s, r) => s + r.capital_inmovilizado, 0))}
+              </span>
+            </div>
+            <button onClick={() => navigate('/remitos')}
+              className="no-drag text-xs text-accent hover:underline">Crear remito →</button>
+          </div>
+          <div className="divide-y divide-border max-h-52 overflow-y-auto">
+            {stockSpecular.slice(0, 10).map((item, i) => (
+              <div key={i} className="row-alt flex items-center justify-between px-4 py-2.5 text-sm transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-zinc-200 truncate">{item.product_name}</span>
+                  <span className="text-zinc-600 text-xs shrink-0">T.{item.size}</span>
+                  <span className="text-zinc-700 text-xs shrink-0">{item.stock} u.</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-amber-400 font-bold text-xs tabular-nums">{formatCurrency(item.capital_inmovilizado)}</span>
+                  <span className="text-zinc-600 text-[10px]">Desc. sugerido: {formatCurrency(item.discount_price)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Widget: Flujo de Caja Proyectado ─────────────────────────── */}
+      {cashflow && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.06 }}
+          className={`bg-card rounded-xl p-4 border ${
+            cashflow.status === 'red' ? 'border-red-900/40' :
+            cashflow.status === 'yellow' ? 'border-amber-900/40' : 'border-border'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={15} className={cashflow.status === 'green' ? 'text-green-400' : cashflow.status === 'yellow' ? 'text-amber-400' : 'text-red-400'} />
+              <h3 className="text-sm font-medium text-white">Flujo de caja proyectado — próximos 30 días</h3>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-zinc-500">Ingreso prom: <span className="text-green-400 font-medium">{formatCurrency(cashflow.avgDaily)}/día</span></span>
+              <span className="text-zinc-500">Egreso prom: <span className="text-red-400 font-medium">{formatCurrency(cashflow.avgExpDaily)}/día</span></span>
+              <div className={`w-3 h-3 rounded-full shrink-0 ${cashflow.status === 'green' ? 'bg-green-500' : cashflow.status === 'yellow' ? 'bg-amber-400' : 'bg-red-500'}`} title={`${cashflow.negativeDays} días negativos`} />
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={cashflow.projection} margin={{ left: -10, right: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
+              <XAxis dataKey="day" stroke="#3f3f3f" tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false}
+                tickFormatter={v => `D${v}`} interval={4} />
+              <YAxis stroke="#3f3f3f" tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false}
+                tickFormatter={v => v >= 0 ? `$${(v/1000).toFixed(0)}k` : `-$${(Math.abs(v)/1000).toFixed(0)}k`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#111', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 11 }}
+                formatter={(v, name) => [formatCurrency(v), name]}
+                labelFormatter={v => `Día ${v}`}
+              />
+              <Area type="monotone" dataKey="balance" name="Balance" stroke="#00c853" fill="rgba(0,200,83,0.08)" strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+          {cashflow.negativeDays > 0 && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              <AlertTriangle size={12} />
+              ⚠ {cashflow.negativeDays} día{cashflow.negativeDays !== 1 ? 's' : ''} con balance negativo proyectado — considerá reducir egresos o incrementar ventas
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* ── Widget: Punto de Equilibrio ───────────────────────────────── */}
+      {breakeven && breakeven.fixedCosts > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+          className={`bg-card rounded-xl p-4 border ${breakeven.achieved ? 'border-green-900/40' : 'border-border'}`}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Target size={15} className={breakeven.achieved ? 'text-green-400' : 'text-accent'} />
+            <h3 className="text-sm font-medium text-white">Punto de equilibrio — {new Date().toLocaleString('es-AR', { month: 'long', year: 'numeric' })}</h3>
+            {breakeven.achieved && (
+              <span className="ml-auto text-xs bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full">
+                ✓ Gastos cubiertos
+              </span>
+            )}
+          </div>
+
+          {breakeven.achieved ? (
+            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+              <p className="text-green-400 font-bold text-base">¡Ya cubriste los gastos fijos del mes!</p>
+              <p className="text-xs text-zinc-500 mt-1">
+                Vendiste {formatCurrency(breakeven.monthlySales)} vs punto de equilibrio {formatCurrency(breakeven.breakeven)}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-zinc-400">Ventas del mes</span>
+                <span className="text-white font-medium">{formatCurrency(breakeven.monthlySales)} <span className="text-zinc-600">/ {formatCurrency(breakeven.breakeven)}</span></span>
+              </div>
+              <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${breakeven.pct >= 80 ? 'bg-green-500' : breakeven.pct >= 50 ? 'bg-amber-400' : 'bg-accent'}`}
+                  style={{ width: `${Math.min(100, breakeven.pct)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-zinc-600">
+                <span>{breakeven.pct.toFixed(0)}% del punto de equilibrio</span>
+                <span>Faltan {formatCurrency(breakeven.remaining)} para cubrir gastos</span>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-3 mt-3">
+            {[
+              { label: 'Gastos fijos/mes', value: formatCurrency(breakeven.fixedCosts), color: 'text-red-400' },
+              { label: 'Margen contribución', value: `${(breakeven.marginRate * 100).toFixed(0)}%`, color: 'text-blue-400' },
+              { label: 'Punto de equilibrio', value: formatCurrency(breakeven.breakeven), color: 'text-white' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-surface rounded-lg px-3 py-2">
+                <p className="text-[10px] text-zinc-600 uppercase">{label}</p>
+                <p className={`text-sm font-bold tabular-nums mt-0.5 ${color}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Widget: Score de Salud del Negocio ────────────────────────── */}
+      {healthScore && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.09 }}
+          className={`bg-card rounded-xl p-4 border ${
+            healthScore.color === 'green' ? 'border-green-900/40' :
+            healthScore.color === 'yellow' ? 'border-amber-900/40' :
+            healthScore.color === 'orange' ? 'border-orange-900/40' : 'border-red-900/40'
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={15} className={
+              healthScore.color === 'green' ? 'text-green-400' :
+              healthScore.color === 'yellow' ? 'text-amber-400' :
+              healthScore.color === 'orange' ? 'text-orange-400' : 'text-red-400'
+            } />
+            <h3 className="text-sm font-medium text-white">Score de salud del negocio</h3>
+          </div>
+
+          <div className="flex items-center gap-6">
+            {/* Score circle */}
+            <div className="flex flex-col items-center shrink-0">
+              <div className={`w-20 h-20 rounded-full flex flex-col items-center justify-center border-4 ${
+                healthScore.color === 'green' ? 'border-green-500 bg-green-500/10' :
+                healthScore.color === 'yellow' ? 'border-amber-400 bg-amber-500/10' :
+                healthScore.color === 'orange' ? 'border-orange-400 bg-orange-500/10' : 'border-red-500 bg-red-500/10'
+              }`}>
+                <span className={`text-2xl font-black tabular-nums ${
+                  healthScore.color === 'green' ? 'text-green-400' :
+                  healthScore.color === 'yellow' ? 'text-amber-400' :
+                  healthScore.color === 'orange' ? 'text-orange-400' : 'text-red-400'
+                }`}>{healthScore.total}</span>
+                <span className="text-[9px] text-zinc-600 uppercase tracking-wider">/ 100</span>
+              </div>
+              <span className={`text-xs font-semibold mt-1 ${
+                healthScore.color === 'green' ? 'text-green-400' :
+                healthScore.color === 'yellow' ? 'text-amber-400' :
+                healthScore.color === 'orange' ? 'text-orange-400' : 'text-red-400'
+              }`}>{healthScore.label}</span>
+            </div>
+
+            {/* Category bars */}
+            <div className="flex-1 space-y-2">
+              {healthScore.scores.map(s => (
+                <div key={s.label}>
+                  <div className="flex justify-between text-[11px] mb-0.5">
+                    <span className="text-zinc-400">{s.label}</span>
+                    <span className="text-zinc-500 tabular-nums">{s.pts}/{s.max}</span>
+                  </div>
+                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        s.pts / s.max >= 0.8 ? 'bg-green-500' :
+                        s.pts / s.max >= 0.5 ? 'bg-amber-400' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${(s.pts / s.max) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tips drilldown */}
+          <button
+            onClick={() => setHealthDrilldown(v => !v)}
+            className="no-drag mt-3 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-accent transition-colors"
+          >
+            {healthDrilldown ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {healthDrilldown ? 'Ocultar consejos' : 'Ver consejos para mejorar'}
+          </button>
+          {healthDrilldown && (
+            <div className="mt-3 space-y-1.5">
+              {healthScore.scores.filter(s => s.tip).map(s => (
+                <div key={s.label} className="flex items-start gap-2 text-xs bg-surface rounded-lg px-3 py-2">
+                  <span className="text-amber-400 shrink-0 mt-0.5">→</span>
+                  <span className="text-zinc-300"><span className="text-zinc-500">{s.label}:</span> {s.tip}</span>
+                </div>
+              ))}
+              {healthScore.scores.every(s => !s.tip) && (
+                <p className="text-xs text-green-400 text-center py-2">¡Todo en orden! Seguí así.</p>
+              )}
+            </div>
+          )}
         </motion.div>
       )}
 

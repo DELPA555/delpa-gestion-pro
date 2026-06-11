@@ -338,6 +338,12 @@ export default function Reports() {
   const [rentData, setRentData] = useState([])
   const [rentLoading, setRentLoading] = useState(false)
 
+  // Proveedores tab
+  const [suppFrom,    setSuppFrom]    = useState(defaultFrom())
+  const [suppTo,      setSuppTo]      = useState(defaultTo())
+  const [suppData,    setSuppData]    = useState([])
+  const [suppLoading, setSuppLoading] = useState(false)
+
   // Fiscal tab
   const [fiscalSubTab,   setFiscalSubTab]   = useState('ventas')
   const [fiscalFrom,     setFiscalFrom]     = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
@@ -546,6 +552,14 @@ export default function Reports() {
   useEffect(() => { if (tab === 'vendedoras') loadVend()   }, [tab, loadVend])
   useEffect(() => { if (tab === 'rentcat')  loadRentCat() }, [tab, loadRentCat])
 
+  const loadSupp = useCallback(async () => {
+    setSuppLoading(true)
+    try { setSuppData(await api.supplieranalytics.margins({ from: suppFrom, to: suppTo })) }
+    catch { setSuppData([]) }
+    finally { setSuppLoading(false) }
+  }, [suppFrom, suppTo])
+  useEffect(() => { if (tab === 'proveedores') loadSupp() }, [tab, loadSupp])
+
   const inputCls = 'input-field bg-card border border-border rounded-lg px-3 py-2 text-sm text-white no-drag'
 
   const filteredArt = artData.filter(r =>
@@ -572,9 +586,10 @@ export default function Reports() {
           { id: 'precios',    label: 'Historial precios' },
           { id: 'fiscal',     label: '⚖ Fiscal' },
           { id: 'comisiones', label: 'Comisiones' },
-          { id: 'sinmov',     label: 'Sin movimiento' },
-          { id: 'vendedoras', label: 'Vendedoras' },
-          { id: 'rentcat',    label: 'Rentabilidad' },
+          { id: 'sinmov',      label: 'Sin movimiento' },
+          { id: 'vendedoras',  label: 'Vendedoras' },
+          { id: 'rentcat',     label: 'Rentabilidad' },
+          { id: 'proveedores', label: 'Proveedores' },
         ].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
@@ -1428,6 +1443,101 @@ export default function Reports() {
                     </div>
                   )
                 })()}
+              </div>
+            </div>
+          )}
+        </div>
+
+      ) : tab === 'proveedores' ? (
+        /* ─── COMPARATIVA MÁRGENES POR PROVEEDOR ──────────────────────── */
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <input type="date" value={suppFrom} onChange={e => setSuppFrom(e.target.value)} className={inputCls} />
+            <span className="text-zinc-600">→</span>
+            <input type="date" value={suppTo} onChange={e => setSuppTo(e.target.value)} className={inputCls} />
+            <button onClick={loadSupp} disabled={suppLoading}
+              className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+              <RefreshCw size={13} className={suppLoading ? 'animate-spin' : ''} /> Actualizar
+            </button>
+            {suppData.length > 0 && (
+              <button onClick={() => {
+                const best = [...suppData].sort((a,b) => b.margin_rate - a.margin_rate)[0]
+                const rows = suppData.map(r => [r.supplier_name, r.product_count, r.units_sold, r.revenue.toFixed(2), r.cost.toFixed(2), r.gross_profit.toFixed(2), r.margin_rate].join(','))
+                const csv = ['Proveedor,Productos,Unidades,Ingresos,Costo,Ganancia,Margen%', ...rows].join('\n')
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }))
+                a.download = `proveedores_${suppFrom}_${suppTo}.csv`; a.click()
+              }}
+                className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors">
+              <Download size={13} /> Exportar CSV
+            </button>
+          </div>
+
+          {suppLoading ? (
+            <div className="py-10 flex justify-center"><div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin"/></div>
+          ) : suppData.length === 0 ? (
+            <EmptyState icon={BarChart3} title="Sin datos de proveedores en el período" />
+          ) : (
+            <div className="space-y-4">
+              {/* Best supplier highlight */}
+              {(() => {
+                const best = [...suppData].filter(r => r.revenue > 0).sort((a,b) => b.margin_rate - a.margin_rate)[0]
+                return best ? (
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-center gap-3">
+                    <TrendingUp size={18} className="text-green-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-white">Tu proveedor más rentable: <span className="text-green-400">{best.supplier_name}</span></p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Margen del {best.margin_rate}% · Ganancia {formatCurrency(best.gross_profit)} en el período</p>
+                    </div>
+                  </div>
+                ) : null
+              })()}
+
+              {/* Bar chart */}
+              <div className="bg-card border border-border rounded-xl p-4">
+                <h3 className="text-sm font-medium text-white mb-4">Ganancia bruta por proveedor</h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={suppData.slice(0, 10)} margin={{ left: -10, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
+                    <XAxis dataKey="supplier_name" tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false}
+                      tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip content={<TT />} />
+                    <Bar dataKey="gross_profit" name="Ganancia" fill="#00c853" radius={[3,3,0,0]} />
+                    <Bar dataKey="revenue" name="Ingresos" fill="#3b82f6" radius={[3,3,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Table */}
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="grid text-[11px] text-zinc-500 uppercase tracking-wider px-4 py-2.5 border-b border-border bg-surface"
+                  style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                  <span>Proveedor</span>
+                  <span className="text-right">Productos</span>
+                  <span className="text-right">Unidades</span>
+                  <span className="text-right">Ingresos</span>
+                  <span className="text-right">Ganancia</span>
+                  <span className="text-right">Margen</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {suppData.map((r, i) => (
+                    <div key={i} className="row-alt grid items-center px-4 py-2.5 text-sm"
+                      style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr' }}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                        <span className="text-white font-medium">{r.supplier_name}</span>
+                      </div>
+                      <span className="text-right text-zinc-400 tabular-nums">{r.product_count}</span>
+                      <span className="text-right text-zinc-300 tabular-nums">{r.units_sold}</span>
+                      <span className="text-right tabular-nums">{formatCurrency(r.revenue)}</span>
+                      <span className="text-right text-green-400 font-medium tabular-nums">{formatCurrency(r.gross_profit)}</span>
+                      <span className={cn('text-right tabular-nums text-xs font-bold', r.margin_rate >= 30 ? 'text-green-400' : r.margin_rate >= 10 ? 'text-amber-400' : 'text-red-400')}>
+                        {r.margin_rate}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

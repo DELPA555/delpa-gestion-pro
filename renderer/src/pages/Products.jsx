@@ -6,6 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, Package, ImagePlus, X, ChevronDown,
   Cloud, CloudOff, CheckSquare, Square, Download, Upload, FileText,
   Layers, Palette, Tag, Percent, Printer, RefreshCw, TrendingUp, TrendingDown,
+  PackageCheck,
 } from 'lucide-react'
 
 function useDebounce(value, delay) {
@@ -45,6 +46,7 @@ function emptyForm(allSizes) {
     barcode: '', name: '', brand: '', category: 'Jeans', color: '',
     cost: '', price: '', min_stock: '5', image_data: '',
     tn_sync: 1,
+    is_consignment: false, consignment_supplier_id: '', consignment_cost: '',
     sizes: allSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })),
   }
 }
@@ -88,7 +90,7 @@ function genEAN13Client() {
   return base + (10 - sum % 10) % 10
 }
 
-function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothingSizes, americanSizes, shoeSizes, categorySizeGroups, isNew }) {
+function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothingSizes, americanSizes, shoeSizes, categorySizeGroups, isNew, suppliers }) {
   const fileRef = useRef()
   const field = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const barcodeRef = useBarcodePreview(form.barcode)
@@ -206,22 +208,56 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <div
-            onClick={() => field('tn_sync', form.tn_sync ? 0 : 1)}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors no-drag',
-              form.tn_sync
-                ? 'border-accent/40 bg-accent/10 text-accent'
-                : 'border-border bg-surface text-zinc-500 hover:text-zinc-300'
-            )}
-          >
-            {form.tn_sync ? <Cloud size={12} /> : <CloudOff size={12} />}
-            {form.tn_sync ? 'Sync TN activo' : 'Sync TN desactivado'}
-          </div>
-        </label>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div
+          onClick={() => field('tn_sync', form.tn_sync ? 0 : 1)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors no-drag cursor-pointer',
+            form.tn_sync
+              ? 'border-accent/40 bg-accent/10 text-accent'
+              : 'border-border bg-surface text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          {form.tn_sync ? <Cloud size={12} /> : <CloudOff size={12} />}
+          {form.tn_sync ? 'Sync TN activo' : 'Sync TN desactivado'}
+        </div>
+        <div
+          onClick={() => field('is_consignment', !form.is_consignment)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors no-drag cursor-pointer',
+            form.is_consignment
+              ? 'border-purple-500/40 bg-purple-500/10 text-purple-400'
+              : 'border-border bg-surface text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          <PackageCheck size={12} />
+          {form.is_consignment ? 'Consignación activa' : 'Marcar como consignación'}
+        </div>
       </div>
+
+      {form.is_consignment && (
+        <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-medium text-purple-400">Configuración de consignación</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Proveedor propietario</label>
+              <select className={inputCls} value={form.consignment_supplier_id}
+                onChange={e => field('consignment_supplier_id', e.target.value)}>
+                <option value="">Sin proveedor</option>
+                {(suppliers || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Costo por unidad (lo que le debés) $</label>
+              <input type="number" min="0" step="0.01" className={inputCls}
+                value={form.consignment_cost}
+                onChange={e => field('consignment_cost', e.target.value)}
+                placeholder="0,00" />
+            </div>
+          </div>
+          <p className="text-[10px] text-zinc-600">Al vender este producto, se registrará automáticamente la deuda con el proveedor.</p>
+        </div>
+      )}
 
       <SizeGrid sizes={form.sizes} onChange={sizes => setForm(f => ({ ...f, sizes }))} />
     </div>
@@ -677,6 +713,8 @@ export default function Products() {
   // Bulk select state
   const [selected, setSelected] = useState(new Set())
   const [bulkModal, setBulkModal] = useState(null) // 'category' | 'discount' | 'labels'
+  const [suppliers, setSuppliers] = useState([])
+  const [consignmentIds, setConsignmentIds] = useState(new Set())
 
   // Import result
   const [importResult, setImportResult] = useState(null)
@@ -709,6 +747,10 @@ export default function Products() {
       try { setCustomCategories(JSON.parse(all.custom_categories || '[]')) } catch {}
       try { setCategorySizeGroups(JSON.parse(all.category_size_groups || '{}')) } catch {}
     }).catch(() => {})
+    api.suppliers.list({ limit: 200 }).then(r => setSuppliers(r.suppliers || [])).catch(() => {})
+    api.consignment.products.list().then(rows => {
+      setConsignmentIds(new Set((rows || []).map(r => r.product_id)))
+    }).catch(() => {})
   }, [])
 
   const load = useCallback(async () => {
@@ -731,8 +773,12 @@ export default function Products() {
   }
 
   const openEdit = async (id) => {
-    const p = await api.products.get(id)
+    const [p, cpRows] = await Promise.all([
+      api.products.get(id),
+      api.consignment.products.list().catch(() => []),
+    ])
     if (!p) return
+    const cp = (cpRows || []).find(r => r.product_id === id)
     const sizeMap = Object.fromEntries((p.sizes || []).map(s => [s.size, s]))
     setForm({
       barcode: p.barcode || '',
@@ -745,6 +791,9 @@ export default function Products() {
       min_stock: p.min_stock,
       image_data: undefined,
       tn_sync: p.tn_sync ?? 1,
+      is_consignment: !!cp,
+      consignment_supplier_id: cp ? String(cp.supplier_id || '') : '',
+      consignment_cost: cp ? String(cp.cost_per_unit || '') : '',
       sizes: allSizes.map(s => ({
         size: s,
         stock: sizeMap[s]?.stock ?? 0,
@@ -760,20 +809,38 @@ export default function Products() {
     if (!form.price || Number(form.price) <= 0) return toast.error('El precio es requerido')
     setSaving(true)
     try {
+      const { is_consignment, consignment_supplier_id, consignment_cost, ...rest } = form
       const payload = {
-        ...form,
+        ...rest,
         cost: Number(form.cost) || 0,
         price: Number(form.price),
         min_stock: Number(form.min_stock) || 5,
         sizes: form.sizes.filter(s => s.stock > 0 || s.min_stock > 0),
       }
+      let savedId = editId
       if (modal === 'create') {
-        await api.products.create(payload)
+        const res = await api.products.create(payload)
+        savedId = res?.id || res
         toast.success('Producto creado')
       } else {
         if (form.image_data === undefined) delete payload.image_data
         await api.products.update(editId, payload)
         toast.success('Producto actualizado')
+      }
+      // Handle consignment
+      if (savedId) {
+        await api.consignment.products.set({
+          product_id: savedId,
+          supplier_id: consignment_supplier_id ? Number(consignment_supplier_id) : null,
+          cost_per_unit: Number(consignment_cost) || 0,
+          active: is_consignment ? 1 : 0,
+        }).catch(() => {})
+        setConsignmentIds(prev => {
+          const next = new Set(prev)
+          if (is_consignment) next.add(savedId)
+          else next.delete(savedId)
+          return next
+        })
       }
       setModal(null)
       load()
@@ -1174,6 +1241,9 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                           {variants.length > 0 && (
                             <span className="text-[10px] text-zinc-500 bg-surface px-1.5 py-0.5 rounded font-mono">{variants.length}v</span>
                           )}
+                          {consignmentIds.has(p.id) && (
+                            <span className="text-[9px] text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded font-medium">CONSIG</span>
+                          )}
                         </div>
                         <p className="text-xs text-zinc-500 truncate">{[p.brand, p.color].filter(Boolean).join(' · ') || p.barcode || '—'}</p>
                       </div>
@@ -1337,6 +1407,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
           shoeSizes={shoeSizes}
           categorySizeGroups={categorySizeGroups}
           isNew={modal === 'create'}
+          suppliers={suppliers}
         />
         <div className="flex justify-between gap-3 mt-6 pt-4 border-t border-border">
           <div>

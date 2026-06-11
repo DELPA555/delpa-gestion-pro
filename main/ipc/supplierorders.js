@@ -131,7 +131,8 @@ ipcMain.handle('supplierorders:convertToEntry', (_, id) => {
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description,new_data) VALUES ('CREATE','stockentries',?,?,?)`)
       .run(lastInsertRowid, `Ingreso desde pedido ${order.order_number}`, JSON.stringify({ from_order: order.order_number }))
 
-    return { entryId: lastInsertRowid }
+    const productIds = [...new Set(Object.values(grouped).map(g => g.product_id).filter(Boolean))]
+    return { entryId: lastInsertRowid, productIds }
   })
   return { ok: true, ...run() }
 })

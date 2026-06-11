@@ -517,8 +517,23 @@ export default function SupplierOrders() {
   const convertToEntry = async (id) => {
     if (!confirm('Esto creará un Ingreso de Mercadería con los productos del pedido y actualizará el stock. ¿Continuar?')) return
     try {
-      await api.supplierOrders.convertToEntry(id)
+      const res = await api.supplierOrders.convertToEntry(id)
       toast.success('Ingreso de mercadería creado exitosamente')
+      // Offer consignment registration
+      const isConsig = confirm('¿Estos productos son en consignación? (registra deuda al proveedor por cada venta)')
+      if (isConsig) {
+        const order = await api.supplierOrders.get(id).catch(() => null)
+        const productIds = res?.productIds || []
+        for (const productId of productIds) {
+          await api.consignment.products.set({
+            product_id: productId,
+            supplier_id: order?.supplier_id || null,
+            cost_per_unit: 0,
+            active: 1,
+          }).catch(() => {})
+        }
+        if (productIds.length > 0) toast.success(`${productIds.length} producto(s) marcados como consignación`)
+      }
       loadOrders()
     } catch (e) { toast.error(e.message || 'Error al convertir') }
   }

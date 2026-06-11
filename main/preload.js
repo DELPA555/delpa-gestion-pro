@@ -76,6 +76,12 @@ const CHANNELS = [
   'consignment:liquidation:get', 'consignment:sales:record',
   'ivabook:ventas', 'ivabook:compras', 'ivabook:exportCSV', 'ivabook:exportSIAP', 'ivabook:emailContador',
   'monthlySummary:send',
+  'intelligence:stockSpecular',
+  'cashflow:projection',
+  'breakeven:data',
+  'supplieranalytics:margins',
+  'onboarding:status', 'onboarding:dismiss', 'onboarding:reset',
+  'health:score',
 ]
 
 contextBridge.exposeInMainWorld('electron', {

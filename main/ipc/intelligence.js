@@ -181,3 +181,32 @@ ipcMain.handle('intelligence:stockBreaks', () => {
   results.sort((a, b) => a.days_left - b.days_left)
   return results.slice(0, 30)
 })
+
+ipcMain.handle('intelligence:stockSpecular', () => {
+  const db = getDB()
+  const cutoff60 = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  const rows = db.prepare(`
+    SELECT p.id as product_id, p.name as product_name, p.category, p.cost, p.price,
+           ps.size, ps.stock,
+           COALESCE(rec.sold, 0) as sold_60d
+    FROM products p
+    JOIN product_sizes ps ON ps.product_id = p.id
+    LEFT JOIN (
+      SELECT si.product_id, si.size, SUM(si.quantity) as sold
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id AND s.voided = 0
+      WHERE s.created_at >= ?
+      GROUP BY si.product_id, si.size
+    ) rec ON rec.product_id = p.id AND rec.size = ps.size
+    WHERE p.active = 1 AND ps.stock >= 5 AND COALESCE(rec.sold, 0) = 0
+    ORDER BY ps.stock * COALESCE(p.cost, 0) DESC
+    LIMIT 20
+  `).all(cutoff60)
+
+  return rows.map(r => ({
+    ...r,
+    capital_inmovilizado: r.stock * (r.cost || 0),
+    discount_price: Math.round((r.price || 0) * 0.7),
+  }))
+})

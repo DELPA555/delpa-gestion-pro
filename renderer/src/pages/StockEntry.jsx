@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   PackagePlus, Plus, Trash2, X, ChevronLeft, ChevronRight,
-  Tag, ChevronDown, ChevronUp, Search, ToggleLeft, ToggleRight,
+  Tag, ChevronDown, ChevronUp, Search, ToggleLeft, ToggleRight, PackageCheck,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import PageHeader from '@/components/shared/PageHeader'
@@ -40,6 +40,7 @@ function newCard() {
     product_price: 0,
     cost: '',
     sizes: [],
+    is_consignment: false,
     new_product: { name: '', brand: '', category: 'Jeans', color: '', price: '', barcode: '' },
   }
 }
@@ -263,6 +264,26 @@ function ProductCard({ card, onUpdate, onRemove, showRemove }) {
               </p>
             )}
           </div>
+
+          {/* Consignment toggle (only for existing products) */}
+          {card.product_id && (
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => update({ is_consignment: !card.is_consignment })}
+                className={`no-drag flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                  card.is_consignment
+                    ? 'border-purple-500/40 bg-purple-500/10 text-purple-400'
+                    : 'border-border text-zinc-600 hover:text-zinc-300'
+                }`}
+              >
+                <PackageCheck size={11} />
+                {card.is_consignment ? 'Consignación activa' : 'Marcar como consignación'}
+              </button>
+              {card.is_consignment && (
+                <span className="text-[10px] text-zinc-600">Se registrará deuda al proveedor cuando se venda</span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -336,6 +357,16 @@ function EntryModal({ onClose, onSaved }) {
 
       if (res.ok) {
         toast.success(`Ingreso confirmado: ${totalUnitsCalc} unidades de ${validCards.length} producto${validCards.length !== 1 ? 's' : ''}`)
+        // Register consignment products
+        const consignCards = validCards.filter(c => !c.is_new && c.is_consignment && c.product_id)
+        for (const c of consignCards) {
+          await api.consignment.products.set({
+            product_id: c.product_id,
+            supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
+            cost_per_unit: Number(c.cost) || 0,
+            active: 1,
+          }).catch(() => {})
+        }
         setSavedCards(validCards)
       } else {
         toast.error(res.error || 'Error al guardar')

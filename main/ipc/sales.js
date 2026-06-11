@@ -73,6 +73,34 @@ ipcMain.handle('sales:create', (_, {
       try { updModTime?.run(it.productId, sz) } catch {}
     }
 
+    // Auto-record consignment sales
+    try {
+      const checkConsign = db.prepare(
+        `SELECT cp.cost_per_unit, cp.supplier_id, s.name as supplier_name
+         FROM consignment_products cp
+         LEFT JOIN suppliers s ON s.id = cp.supplier_id
+         WHERE cp.product_id = ? AND cp.active = 1`
+      )
+      const insConsignSale = db.prepare(
+        `INSERT INTO consignment_sales
+           (sale_id, product_id, product_name, size, quantity, cost_per_unit, total_cost, supplier_id, supplier_name, sold_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+      )
+      for (const it of items) {
+        if (!it.productId) continue
+        const cp = checkConsign.get(it.productId)
+        if (cp) {
+          insConsignSale.run(
+            saleId, it.productId, it.productName, it.size || 'N/A',
+            it.quantity, cp.cost_per_unit, it.quantity * (cp.cost_per_unit || 0),
+            cp.supplier_id, cp.supplier_name || ''
+          )
+        }
+      }
+    } catch (e) {
+      console.error('[CONSIGNMENT] Error al registrar venta consignada:', e.message)
+    }
+
     // Account movements for Cuenta Corriente portions
     if (isMulti) {
       const ccPayments = payments.filter(p => p.paymentMethod === 'Cuenta Corriente')

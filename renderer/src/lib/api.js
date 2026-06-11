@@ -293,6 +293,24 @@ export const api = {
   intelligence: {
     recommendations: () => inv('intelligence:recommendations'),
     stockBreaks:     () => inv('intelligence:stockBreaks'),
+    stockSpecular:   () => inv('intelligence:stockSpecular'),
+  },
+  cashflow: {
+    projection: () => inv('cashflow:projection'),
+  },
+  breakeven: {
+    data: () => inv('breakeven:data'),
+  },
+  supplieranalytics: {
+    margins: (p) => inv('supplieranalytics:margins', p),
+  },
+  onboarding: {
+    status:  () => inv('onboarding:status'),
+    dismiss: () => inv('onboarding:dismiss'),
+    reset:   () => inv('onboarding:reset'),
+  },
+  health: {
+    score: () => inv('health:score'),
   },
   vouchers: {
     list:     (p)    => inv('voucher:list', p),

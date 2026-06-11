@@ -30,6 +30,7 @@ import SupplierOrders from './pages/SupplierOrders'
 import Vouchers from './pages/Vouchers'
 import Consignment from './pages/Consignment'
 import SetupWizard from './pages/SetupWizard'
+import Onboarding from './components/Onboarding'
 import { api } from './lib/api'
 import { toast } from 'sonner'
 
@@ -252,6 +253,7 @@ function AppContent() {
     <HashRouter>
       <SessionTimeoutWatcher />
       <ChangelogModal />
+      <Onboarding />
       <Layout licenseInfo={licenseInfo}>
         <AnimatedRoutes />
       </Layout>

@@ -1,4 +1,19 @@
 {
+  "v1.2.5": {
+    "fecha": "2026-06-11",
+    "mejoras": [
+      "Auto-registro de ventas en consignación: al vender un producto marcado como consignación, se genera automáticamente la deuda con el proveedor sin ningún paso extra",
+      "Ingreso de Mercadería: toggle por producto '¿Es consignación?' — al confirmar el ingreso se registra automáticamente como mercadería en consignación para ese proveedor",
+      "Productos: toggle 'Marcar como consignación' en el formulario de alta/edición con selector de proveedor y costo por unidad — badge CONSIG visible en la lista",
+      "Pedidos a Proveedores: al recibir un pedido, pregunta si los productos son en consignación y los registra automáticamente",
+      "Nuevo widget Dashboard: Stock especular — detecta productos con stock ≥5 unidades sin movimiento en 60 días, muestra capital inmovilizado y precio de liquidación sugerido (30% de descuento)",
+      "Nuevo widget Dashboard: Flujo de caja proyectado — proyección a 30 días con gráfico de área, alerta de días con balance negativo y semáforo verde/amarillo/rojo",
+      "Nuevo widget Dashboard: Punto de equilibrio del mes — barra de progreso hacia los gastos fijos cubiertos, mensaje '¡Ya cubriste los gastos!' cuando se alcanza",
+      "Nuevo widget Dashboard: Score de salud del negocio (0-100) — 5 categorías de 20 puntos cada una (ventas, stock, clientes, rentabilidad, configuración) con tips para mejorar",
+      "Nuevo tab en Reportes: Comparativa márgenes por proveedor — gráfico de barras, tabla con ingresos/ganancia/margen por proveedor y destacado del más rentable",
+      "Onboarding guiado: checklist de 8 tareas para los primeros pasos (agregar producto, proveedor, cliente, hacer una venta, etc.) con barra de progreso y botones de acceso directo"
+    ]
+  },
   "v1.2.4": {
     "fecha": "2026-06-11",
     "mejoras": [
