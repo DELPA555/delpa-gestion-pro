@@ -9,7 +9,7 @@ ipcMain.handle('exchanges:create', (_, data) => {
     clientId, clientName,
     returnedProductId, returnedProductName, returnedSize, returnedQty, returnedPrice,
     newProductId, newProductName, newSize, newQty, newPrice,
-    resolution, notes, sellerName,
+    resolution, paymentMethod, notes, sellerName,
   } = data
 
   const qtyReturned = Number(returnedQty) || 0
@@ -53,6 +53,14 @@ ipcMain.handle('exchanges:create', (_, data) => {
       db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(credit, clientId)
       db.prepare(`INSERT INTO account_movements (client_id,type,amount,notes) VALUES (?,'payment',?,'Crédito por cambio de mercadería')`)
         .run(clientId, credit)
+    }
+    // Register cashbox movement when client pays the difference in cash
+    if (resolution === 'paid' && difference > 0) {
+      const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+      if (cashbox) {
+        db.prepare(`INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,'ingreso',?,?,?)`)
+          .run(cashbox.id, `Diferencia cambio — ${clientName || 'cliente'}`, difference, paymentMethod || 'Efectivo')
+      }
     }
 
     const { lastInsertRowid } = db.prepare(`
@@ -104,6 +112,14 @@ ipcMain.handle('returns:create', (_, data) => {
       db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(total, clientId)
       db.prepare(`INSERT INTO account_movements (client_id,type,amount,sale_id,notes) VALUES (?,'payment',?,?,'Devolución acreditada a cuenta corriente')`)
         .run(clientId, total, originalSaleId || null)
+    }
+    // Register cashbox egreso when refund is paid in cash
+    if (resolution === 'cash' && total > 0) {
+      const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+      if (cashbox) {
+        db.prepare(`INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,'egreso',?,?,'Efectivo')`)
+          .run(cashbox.id, `Devolución — ${clientName || 'cliente'}`, total)
+      }
     }
 
     const { lastInsertRowid } = db.prepare(`

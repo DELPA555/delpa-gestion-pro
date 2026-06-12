@@ -79,6 +79,11 @@ function checkWaitlistArrivals(db, processedItems) {
     }
     if (arrived.length > 0) {
       BrowserWindow.getAllWindows()[0]?.webContents.send('waitlist:arrivals', arrived)
+      // Send email notification to each client if they have email registered
+      const { sendWaitlistArrivalEmail } = require('./email')
+      for (const entry of arrived) {
+        sendWaitlistArrivalEmail(entry).catch(() => {})
+      }
     }
     sendWaitlistCount()
     return arrived

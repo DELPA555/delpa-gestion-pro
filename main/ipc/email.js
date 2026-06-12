@@ -873,4 +873,33 @@ ipcMain.handle('email:sendStockReport', async () => {
   }
 })
 
-module.exports = { sendCashboxReport, sendInventoryReport, sendPointsSummaryAsync, sendExpiryNotification }
+async function sendWaitlistArrivalEmail(entry) {
+  const s = getEmailConfig()
+  if (!s.email_host || !s.email_user || !s.email_pass) return
+  if (!entry.client_phone) return
+  const db = getDB()
+  const client = db.prepare("SELECT email FROM clients WHERE phone=? AND email!='' AND active=1 LIMIT 1").get(entry.client_phone)
+  if (!client?.email) return
+  const biz = Object.fromEntries(
+    db.prepare("SELECT key,value FROM settings WHERE key LIKE 'business_%'").all().map(r => [r.key, r.value])
+  )
+  const transporter = buildTransporter(s)
+  await transporter.sendMail({
+    from: `"${biz.business_name || 'DELPA'}" <${s.email_user}>`,
+    to: client.email,
+    subject: `¡Tu producto llegó! — ${entry.product_name}`,
+    html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111">
+      <h2 style="margin-bottom:8px">¡Buenas noticias, ${entry.client_name}!</h2>
+      <p>El producto que estabas esperando ya está disponible:</p>
+      <div style="background:#f5f5f5;border-radius:8px;padding:16px;margin:16px 0;font-size:15px">
+        <strong>${entry.product_name}</strong>
+        ${entry.size  ? `<br><span style="color:#555">Talle: ${entry.size}</span>`  : ''}
+        ${entry.color ? `<br><span style="color:#555">Color: ${entry.color}</span>` : ''}
+      </div>
+      <p>Acercate al local o comunicate con nosotros para reservarlo antes de que se agote.</p>
+      <p style="color:#888;font-size:12px;margin-top:24px">${biz.business_name || ''} ${biz.business_phone ? `— ${biz.business_phone}` : ''}</p>
+    </div>`,
+  })
+}
+
+module.exports = { sendCashboxReport, sendInventoryReport, sendPointsSummaryAsync, sendExpiryNotification, sendWaitlistArrivalEmail }

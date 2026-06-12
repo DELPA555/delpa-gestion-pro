@@ -734,7 +734,8 @@ export default function Sales() {
       const saleData = await api.sales.get(saleId)
       // Mark voucher as used if applied
       if (valeCode) {
-        try { await api.vouchers.use({ code: valeCode, sale_id: saleId }) } catch {}
+        try { await api.vouchers.use({ code: valeCode, sale_id: saleId }) }
+        catch { toast.warning('Venta registrada. El vale no pudo marcarse como usado — verificarlo en Vales.') }
       }
       setLastSale(saleData)
       // Track points for ticket
