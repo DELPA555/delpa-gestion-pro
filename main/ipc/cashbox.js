@@ -77,12 +77,44 @@ ipcMain.handle('cashbox:current', () =>
   getDB().prepare("SELECT * FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get() || null
 )
 
+ipcMain.handle('cashbox:currentAll', () =>
+  getDB().prepare("SELECT * FROM cashbox WHERE status='open' ORDER BY opened_at ASC").all()
+)
+
+ipcMain.handle('cashbox:todaySummary', () => {
+  const db = getDB()
+  const openCbs = db.prepare("SELECT * FROM cashbox WHERE status='open' ORDER BY opened_at ASC").all()
+  if (openCbs.length === 0) return null
+  let totalOpening = 0, totalSales = 0, totalExpenses = 0, expectedCash = 0
+  for (const cb of openCbs) {
+    totalOpening += (cb.opening_cash || 0)
+    const byMethod = getSalesByMethod(db, cb.id)
+    const cashSales = getCashSales(db, cb.id)
+    const exp = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=?").get(cb.id).total
+    const cashManIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso' AND payment_method='Efectivo'").get(cb.id).total
+    const cashManOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso' AND payment_method='Efectivo'").get(cb.id).total
+    totalSales    += byMethod.reduce((s, m) => s + m.total, 0)
+    totalExpenses += exp
+    expectedCash  += (cb.opening_cash || 0) + cashSales + cashManIn - cashManOut - exp
+  }
+  return {
+    openCount: openCbs.length,
+    shifts: openCbs.map(c => c.shift || `#${c.id}`),
+    totalOpening,
+    totalSales,
+    totalExpenses,
+    expectedCash,
+  }
+})
+
 ipcMain.handle('cashbox:open', (_, { openingCash, notes, shift }) => {
   const db = getDB()
-  if (db.prepare("SELECT id FROM cashbox WHERE status='open'").get())
-    throw new Error('Ya hay una caja abierta')
-  const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes,shift) VALUES (?,?,?)').run(openingCash || 0, notes || '', shift || '')
-  const shiftInfo = shift ? ` (turno: ${shift})` : ''
+  const shiftVal = shift || ''
+  // Allow multiple cashboxes open simultaneously, but not the same shift twice
+  if (db.prepare("SELECT id FROM cashbox WHERE status='open' AND shift=?").get(shiftVal))
+    throw new Error(shiftVal ? `El turno "${shiftVal}" ya tiene una caja abierta` : 'Ya hay una caja sin turno abierta')
+  const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes,shift) VALUES (?,?,?)').run(openingCash || 0, notes || '', shiftVal)
+  const shiftInfo = shiftVal ? ` (turno: ${shiftVal})` : ''
   db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('OPEN','cashbox',?,?)`).run(id, `Caja abierta con $${openingCash || 0}${shiftInfo}`)
   return id
 })

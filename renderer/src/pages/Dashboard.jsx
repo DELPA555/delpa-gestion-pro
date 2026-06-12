@@ -109,8 +109,7 @@ export default function Dashboard() {
   const [healthScore, setHealthScore] = useState(null)
   const [healthDrilldown, setHealthDrilldown] = useState(false)
   const [lowStock, setLowStock] = useState([])
-  const [cashbox, setCashbox] = useState(null)
-  const [cashSummary, setCashSummary] = useState(null)
+  const [todayCash, setTodayCash] = useState(null)
   const [todayBirthdays, setTodayBirthdays] = useState([])
   const [birthdayMsg, setBirthdayMsg] = useState('Feliz cumple [nombre]! 🎁')
   const [loading, setLoading] = useState(true)
@@ -131,7 +130,7 @@ export default function Dashboard() {
         api.dashboard.salesTrend(),
         api.dashboard.salesByPayment(),
         api.dashboard.lowStock(),
-        api.cashbox.current(),
+        api.cashbox.todaySummary(),
         api.clients.birthdays(),
         api.settings.get('birthday_message'),
         api.dashboard.weekComparison(),
@@ -149,13 +148,9 @@ export default function Dashboard() {
       setTrend(t.map(d => ({ ...d, day: d.day.slice(5) })))
       setByPayment(p.map(it => ({ ...it, fill: PAYMENT_COLORS[it.payment_method] || '#6b7280' })))
       setLowStock(l)
-      setCashbox(cb)
+      setTodayCash(cb)
       setTodayBirthdays(bdays || [])
       if (bmsg) setBirthdayMsg(bmsg)
-      if (cb?.id) {
-        const summary = await api.cashbox.summary(cb.id)
-        setCashSummary(summary)
-      }
 
       // Week comparison
       const thisWeek = getWeekBounds(0)
@@ -344,25 +339,27 @@ export default function Dashboard() {
       </div>
 
       {/* Cash breakdown */}
-      {cashbox && cashSummary && (
+      {todayCash && (
         <motion.div
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.38 }}
           className="bg-card border border-border rounded-xl p-4"
         >
           <h3 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
-            <Wallet size={14} className="text-accent" /> Desglose de caja (sesión actual)
+            <Wallet size={14} className="text-accent" />
+            Desglose de caja
+            {todayCash.openCount > 1 && (
+              <span className="ml-1 text-xs bg-accent/15 text-accent px-2 py-0.5 rounded-full">
+                {todayCash.openCount} turnos
+              </span>
+            )}
           </h3>
           <div className="grid grid-cols-4 gap-3 text-sm">
             {[
-              { label: 'Apertura', value: cashbox.opening_cash, color: 'text-zinc-300' },
-              { label: 'Ventas efectivo', value: cashSummary.cash_sales ?? 0, color: 'text-green-400' },
-              { label: 'Gastos', value: cashSummary.total_expenses ?? 0, color: 'text-red-400' },
-              {
-                label: 'Neto esperado',
-                value: (cashbox.opening_cash ?? 0) + (cashSummary.cash_sales ?? 0) - (cashSummary.total_expenses ?? 0),
-                color: 'text-accent font-bold',
-              },
+              { label: 'Apertura', value: todayCash.totalOpening, color: 'text-zinc-300' },
+              { label: 'Total ventas', value: todayCash.totalSales, color: 'text-green-400' },
+              { label: 'Gastos', value: todayCash.totalExpenses, color: 'text-red-400' },
+              { label: 'Efectivo esperado', value: todayCash.expectedCash, color: 'text-accent font-bold' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-surface rounded-lg p-3 border border-border">
                 <p className="text-[11px] text-zinc-600 uppercase tracking-wider mb-1">{label}</p>

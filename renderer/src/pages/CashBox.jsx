@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { Wallet, Lock, Unlock, History, Plus, ArrowUpCircle, ArrowDownCircle, Printer } from 'lucide-react'
@@ -164,9 +164,11 @@ ${manualMovements.length > 0 ? `
 }
 
 export default function CashBox() {
-  const [cashbox, setCashbox] = useState(null)
+  const [cashboxes, setCashboxes] = useState([])   // all open cashboxes
+  const [cashbox, setCashbox] = useState(null)     // selected/active cashbox
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
+  const activeCbIdRef = useRef(null)
   const [tab, setTab] = useState('actual')
   const [openModal, setOpenModal] = useState(false)
   const [closeModal, setCloseModal] = useState(false)
@@ -192,10 +194,14 @@ export default function CashBox() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const cb = await api.cashbox.current()
-      setCashbox(cb)
-      if (cb) {
-        const s = await api.cashbox.summary(cb.id)
+      const cbs = await api.cashbox.currentAll()
+      setCashboxes(cbs)
+      const prevId = activeCbIdRef.current
+      const active = cbs.find(c => c.id === prevId) || cbs[cbs.length - 1] || null
+      activeCbIdRef.current = active?.id ?? null
+      setCashbox(active)
+      if (active) {
+        const s = await api.cashbox.summary(active.id)
         setSummary(s)
       } else setSummary(null)
     } finally { setLoading(false) }
@@ -271,9 +277,11 @@ export default function CashBox() {
       const realCash = efectivoRaw !== '' && efectivoRaw !== undefined ? Number(efectivoRaw) : null
       const closedId = cashbox.id
       const res = await api.cashbox.close({ cashboxId: cashbox.id, realCash, notes: closeNotes, paymentCounts })
-      toast.success(`Caja cerrada. Diferencia: ${formatCurrency(res.difference)}`)
+      toast.success(`${cashbox.shift ? `Turno ${cashbox.shift} cerrado` : 'Caja cerrada'}. Diferencia: ${formatCurrency(res.difference)}`)
       setCloseModal(false)
       setLastClosedId(closedId)
+      // Re-select another open cashbox if one remains
+      activeCbIdRef.current = null
       load()
     } catch (e) { toast.error(e.message) }
     finally { setProcessing(false) }
@@ -320,7 +328,13 @@ export default function CashBox() {
       exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}
       className="p-6"
     >
-      <PageHeader title="Caja" subtitle={cashbox ? `Abierta desde ${formatDateTime(cashbox.opened_at)}${cashbox.shift ? ` — Turno ${cashbox.shift}` : ''}` : 'Sin caja abierta'}
+      <PageHeader
+        title="Caja"
+        subtitle={
+          cashboxes.length === 0 ? 'Sin caja abierta' :
+          cashboxes.length === 1 ? `Abierta desde ${formatDateTime(cashbox.opened_at)}${cashbox.shift ? ` — Turno ${cashbox.shift}` : ''}` :
+          `${cashboxes.length} turnos abiertos`
+        }
         actions={
           <div className="flex gap-2">
             {cashbox && (
@@ -328,14 +342,47 @@ export default function CashBox() {
                 <Plus size={14} /> Movimiento
               </button>
             )}
-            {!cashbox ? (
-              <button onClick={() => { setOpenCash(''); setOpenModal(true) }} className="no-drag btn-primary flex items-center gap-2 text-sm px-4 py-2 rounded-lg"><Unlock size={15} /> Abrir caja</button>
-            ) : (
-              <button onClick={openCloseModal} className="no-drag flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white text-sm px-4 py-2 rounded-lg font-medium transition-colors"><Lock size={15} /> Cerrar caja</button>
+            {cashbox && (
+              <button onClick={openCloseModal} className="no-drag flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white text-sm px-4 py-2 rounded-lg font-medium transition-colors">
+                <Lock size={15} /> Cerrar {cashbox.shift ? `turno ${cashbox.shift}` : 'caja'}
+              </button>
             )}
+            <button
+              onClick={() => { setOpenCash(''); setOpenModal(true) }}
+              className={cn('no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-colors',
+                cashboxes.length === 0 ? 'btn-primary' : 'border border-border text-zinc-400 hover:text-white hover:border-zinc-500'
+              )}
+            >
+              <Unlock size={15} /> {cashboxes.length === 0 ? 'Abrir caja' : 'Nuevo turno'}
+            </button>
           </div>
         }
       />
+
+      {/* Shift selector — only shown when multiple cashboxes are open */}
+      {cashboxes.length > 1 && (
+        <div className="flex gap-2 mb-4 flex-wrap items-center">
+          <span className="text-xs text-zinc-500 uppercase tracking-wider">Turno:</span>
+          {cashboxes.map(cb => (
+            <button
+              key={cb.id}
+              onClick={() => {
+                activeCbIdRef.current = cb.id
+                setCashbox(cb)
+                api.cashbox.summary(cb.id).then(setSummary).catch(() => setSummary(null))
+              }}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                cb.id === cashbox?.id
+                  ? 'bg-accent/10 border-accent text-accent'
+                  : 'border-border text-zinc-400 hover:text-white'
+              )}
+            >
+              {cb.shift || `Caja #${cb.id}`}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex border-b border-border mb-5">
         {[
@@ -474,18 +521,24 @@ export default function CashBox() {
           <div>
             <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Turno</label>
             <div className="flex gap-2 flex-wrap">
-              {shiftOptions.map(s => (
-                <button key={s} onClick={() => setOpenShift(s)}
+              {shiftOptions.map(s => {
+                const alreadyOpen = cashboxes.some(c => c.shift === s)
+                return (
+                  <button key={s} onClick={() => !alreadyOpen && setOpenShift(s)} disabled={alreadyOpen}
+                    className={cn('px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
+                      alreadyOpen ? 'border-border text-zinc-700 opacity-50 cursor-not-allowed' :
+                      openShift === s ? 'bg-accent/10 border-accent text-accent' : 'border-border text-zinc-500 hover:text-zinc-300')}>
+                    {s}{alreadyOpen ? ' ✓' : ''}
+                  </button>
+                )
+              })}
+              {!cashboxes.some(c => c.shift === '') && (
+                <button onClick={() => setOpenShift('')}
                   className={cn('px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
-                    openShift === s ? 'bg-accent/10 border-accent text-accent' : 'border-border text-zinc-500 hover:text-zinc-300')}>
-                  {s}
+                    openShift === '' ? 'bg-zinc-700 border-zinc-600 text-zinc-200' : 'border-border text-zinc-600 hover:text-zinc-400')}>
+                  Sin turno
                 </button>
-              ))}
-              <button onClick={() => setOpenShift('')}
-                className={cn('px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
-                  openShift === '' ? 'bg-zinc-700 border-zinc-600 text-zinc-200' : 'border-border text-zinc-600 hover:text-zinc-400')}>
-                Sin turno
-              </button>
+              )}
             </div>
           </div>
           <div>
