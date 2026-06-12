@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   PackageMinus, Plus, Trash2, Search, ChevronLeft, ChevronRight,
-  FileDown, MessageCircle, CheckCircle, Truck, RefreshCw,
+  FileDown, MessageCircle, CheckCircle, Truck, RefreshCw, XCircle,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -413,6 +413,17 @@ function HistorialView({ onNew }) {
                   <button onClick={() => updateStatus(detail.id, 'confirmed')}
                     className="no-drag flex items-center gap-1.5 px-3 py-2 text-sm bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition-colors">
                     <CheckCircle size={13} /> Confirmado por proveedor
+                  </button>
+                )}
+                {(detail.status === 'pending' || detail.status === 'sent') && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('¿Cancelar este egreso? El stock descontado será restaurado.')) {
+                        updateStatus(detail.id, 'cancelled')
+                      }
+                    }}
+                    className="no-drag flex items-center gap-1.5 px-3 py-2 text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors">
+                    <XCircle size={13} /> Cancelar egreso
                   </button>
                 )}
               </div>

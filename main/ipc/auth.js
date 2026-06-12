@@ -5,14 +5,30 @@ const crypto = require('crypto')
 let currentSession = null
 
 function hashPassword(pass) {
-  return crypto.createHash('sha256').update(String(pass)).digest('hex')
+  const salt = crypto.randomBytes(16).toString('hex')
+  const hash = crypto.pbkdf2Sync(String(pass), salt, 100000, 64, 'sha512').toString('hex')
+  return `pbkdf2:${salt}:${hash}`
+}
+
+function verifyPassword(pass, stored) {
+  if (stored.startsWith('pbkdf2:')) {
+    const [, salt, expected] = stored.split(':')
+    const actual = crypto.pbkdf2Sync(String(pass), salt, 100000, 64, 'sha512').toString('hex')
+    return actual === expected
+  }
+  // Legacy SHA256 — accepted on login, auto-upgraded below
+  return crypto.createHash('sha256').update(String(pass)).digest('hex') === stored
 }
 
 ipcMain.handle('auth:login', (_, { username, password }) => {
   const db = getDB()
   const user = db.prepare('SELECT * FROM users WHERE username=? AND active=1').get(username)
   if (!user) return { ok: false, error: 'Usuario no encontrado o inactivo' }
-  if (user.password_hash !== hashPassword(password)) return { ok: false, error: 'Contraseña incorrecta' }
+  if (!verifyPassword(password, user.password_hash)) return { ok: false, error: 'Contraseña incorrecta' }
+  // Auto-upgrade legacy SHA256 hash to PBKDF2 on first successful login
+  if (!user.password_hash.startsWith('pbkdf2:')) {
+    try { db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(password), user.id) } catch {}
+  }
   currentSession = { id: user.id, username: user.username, role: user.role, seller_name: user.seller_name || '' }
   try {
     db.prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('LOGIN','auth',?,?)")

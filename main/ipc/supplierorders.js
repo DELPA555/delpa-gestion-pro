@@ -94,6 +94,7 @@ ipcMain.handle('supplierorders:convertToEntry', (_, id) => {
   const db = getDB()
   const order = db.prepare('SELECT * FROM supplier_orders WHERE id=?').get(id)
   if (!order) throw new Error('Pedido no encontrado')
+  if (order.status === 'received') throw new Error('Este pedido ya fue ingresado al stock')
   let items
   try { items = JSON.parse(order.items_json || '[]') } catch { items = [] }
 

@@ -134,8 +134,27 @@ ipcMain.handle('egreso:create', (_, data) => {
 
 ipcMain.handle('egreso:updateStatus', (_, { id, status }) => {
   const db = getDB()
-  if (!['pending','sent','confirmed'].includes(status)) return { ok: false, error: 'Estado inválido' }
-  db.prepare('UPDATE stock_egresos SET status=? WHERE id=?').run(status, id)
+  if (!['pending', 'sent', 'confirmed', 'cancelled'].includes(status)) return { ok: false, error: 'Estado inválido' }
+  const egreso = db.prepare('SELECT * FROM stock_egresos WHERE id=?').get(id)
+  if (!egreso) return { ok: false, error: 'Egreso no encontrado' }
+  if (egreso.status === 'cancelled') return { ok: false, error: 'El egreso ya fue cancelado' }
+
+  if (status === 'cancelled') {
+    db.transaction(() => {
+      const items = db.prepare('SELECT * FROM stock_egreso_items WHERE egreso_id=?').all(id)
+      for (const item of items) {
+        if (item.product_id && item.size) {
+          db.prepare('UPDATE product_sizes SET stock=stock+?, stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?')
+            .run(item.quantity, item.product_id, item.size)
+        }
+      }
+      db.prepare('UPDATE stock_egresos SET status=? WHERE id=?').run('cancelled', id)
+      db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('UPDATE','egresos',?,?)`)
+        .run(id, `Egreso ${egreso.number} cancelado — stock restaurado (${items.length} items)`)
+    })()
+  } else {
+    db.prepare('UPDATE stock_egresos SET status=? WHERE id=?').run(status, id)
+  }
   return { ok: true }
 })
 
