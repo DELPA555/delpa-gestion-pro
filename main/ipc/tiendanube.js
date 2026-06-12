@@ -367,7 +367,9 @@ async function syncStockItems(items) {
       })
       db.prepare('UPDATE product_sizes SET tn_last_synced=CURRENT_TIMESTAMP WHERE product_id=? AND size=?')
         .run(item.productId, item.size)
-    } catch {}
+    } catch (e) {
+      console.error(`[TN syncStock] Error al sincronizar productId=${item.productId} size="${item.size}":`, e.message)
+    }
   }
 }
 
@@ -375,7 +377,7 @@ async function syncStockItems(items) {
 function syncStockAfterSale(items) {
   const token = getSetting('tn_access_token')
   if (!token) return
-  syncStockItems(items).catch(() => {})
+  syncStockItems(items).catch(e => console.error('[TN syncStockAfterSale]', e.message))
 }
 
 // ─── Orders ─────────────────────────────────────────────────────────────────
@@ -690,7 +692,9 @@ async function autoSync() {
     try {
       const orders = await tnFetch('/orders?status=open&per_page=50&fields=id,number,status,total,created_at,customer,products')
       if (Array.isArray(orders)) sendToRenderer('tn:orders', { count: orders.length })
-    } catch {}
+    } catch (e) {
+      console.error('[TN autoSync] Error al obtener pedidos:', e.message)
+    }
 
     // Delta stock sync: only variants where stock changed since last TN sync
     const totalCount = db.prepare('SELECT COUNT(*) as count FROM tn_variant_map').get()?.count || 0
@@ -710,7 +714,9 @@ async function autoSync() {
         })
         db.prepare('UPDATE product_sizes SET tn_last_synced=CURRENT_TIMESTAMP WHERE product_id=? AND size=?')
           .run(m.productId, m.size)
-      } catch {}
+      } catch (e) {
+        console.error(`[TN autoSync] Error al sincronizar variant ${m.tn_variant_id} (productId=${m.productId} size="${m.size}"):`, e.message)
+      }
     }
 
     const lastSync = new Date().toISOString()

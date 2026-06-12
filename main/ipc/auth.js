@@ -3,6 +3,7 @@ const { getDB } = require('../../database/db')
 const crypto = require('crypto')
 
 let currentSession = null
+const SESSION_TTL = 8 * 60 * 60 * 1000 // 8 hours
 
 function hashPassword(pass) {
   const salt = crypto.randomBytes(16).toString('hex')
@@ -29,7 +30,7 @@ ipcMain.handle('auth:login', (_, { username, password }) => {
   if (!user.password_hash.startsWith('pbkdf2:')) {
     try { db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(password), user.id) } catch {}
   }
-  currentSession = { id: user.id, username: user.username, role: user.role, seller_name: user.seller_name || '' }
+  currentSession = { id: user.id, username: user.username, role: user.role, seller_name: user.seller_name || '', loginAt: Date.now() }
   try {
     db.prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('LOGIN','auth',?,?)")
       .run(user.id, `Inicio de sesión: ${user.username}`)
@@ -59,7 +60,14 @@ ipcMain.handle('auth:lastUser', (_, username) => {
   return { username: row?.value || '' }
 })
 
-ipcMain.handle('auth:session', () => currentSession)
+ipcMain.handle('auth:session', () => {
+  if (!currentSession) return null
+  if (Date.now() - currentSession.loginAt > SESSION_TTL) {
+    currentSession = null
+    return null
+  }
+  return currentSession
+})
 
 ipcMain.handle('auth:users:list', () => {
   return getDB()
