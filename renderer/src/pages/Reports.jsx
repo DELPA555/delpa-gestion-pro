@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+﻿import { useState, useCallback, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -92,7 +92,7 @@ function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, f
           <button onClick={() => {
             const rows = ivaVentas.ventas.map(r => [r.fecha,r.numero||'',r.tipo,r.cliente,r.neto.toFixed(2),r.iva.toFixed(2),r.total.toFixed(2),r.cae||''].join(','))
             const csv = ['Fecha,Número,Tipo,Cliente,Neto,IVA,Total,CAE',...rows].join('\n')
-            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download=`iva_ventas_${fiscalFrom}_${fiscalTo}.csv`; a.click()
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv'})); a.download=`iva_ventas_${fiscalFrom}_${fiscalTo}.csv`; a.click()
           }} disabled={!ivaVentas.ventas.length} className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors disabled:opacity-50">
             <Download size={13}/> CSV para contador
           </button>
@@ -251,7 +251,7 @@ function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, f
           <button onClick={() => {
             const rows = mono12m.meses.map(r=>[r.mes,r.operaciones,r.facturado.toFixed(2),mono12m.limiteMensual.toFixed(2),(r.facturado/mono12m.limiteMensual*100).toFixed(1)+'%'].join(','))
             const csv = ['Mes,Operaciones,Facturado,Límite Mensual,Uso %',...rows].join('\n')
-            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download='monotributo_control.csv'; a.click()
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv'})); a.download='monotributo_control.csv'; a.click()
           }} className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors">
             <Download size={13}/> Exportar para el contador
           </button>
@@ -1465,12 +1465,13 @@ export default function Reports() {
                 const rows = suppData.map(r => [r.supplier_name, r.product_count, r.units_sold, r.revenue.toFixed(2), r.cost.toFixed(2), r.gross_profit.toFixed(2), r.margin_rate].join(','))
                 const csv = ['Proveedor,Productos,Unidades,Ingresos,Costo,Ganancia,Margen%', ...rows].join('\n')
                 const a = document.createElement('a')
-                a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }))
+                a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv' }))
                 a.download = `proveedores_${suppFrom}_${suppTo}.csv`; a.click()
               }}
                 className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors">
               <Download size={13} /> Exportar CSV
             </button>
+            )}
           </div>
 
           {suppLoading ? (
