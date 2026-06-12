@@ -51,7 +51,14 @@ function createTables(db) {
       notes TEXT DEFAULT '',
       balance REAL DEFAULT 0,
       active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      birth_date TEXT DEFAULT '',
+      city TEXT DEFAULT '',
+      province TEXT DEFAULT '',
+      total_spent REAL DEFAULT 0,
+      purchase_count INTEGER DEFAULT 0,
+      last_purchase TEXT DEFAULT '',
+      points INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS cashbox (
@@ -763,6 +770,13 @@ function createTables(db) {
   addColumnIfMissing(db, 'cashbox', 'shift',             "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'sales',   'voucher_code',      "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'sales',   'voucher_discount',  'REAL DEFAULT 0')
+  addColumnIfMissing(db, 'clients', 'birth_date',     "TEXT DEFAULT ''")
+  addColumnIfMissing(db, 'clients', 'city',           "TEXT DEFAULT ''")
+  addColumnIfMissing(db, 'clients', 'province',       "TEXT DEFAULT ''")
+  addColumnIfMissing(db, 'clients', 'total_spent',    'REAL DEFAULT 0')
+  addColumnIfMissing(db, 'clients', 'purchase_count', 'INTEGER DEFAULT 0')
+  addColumnIfMissing(db, 'clients', 'last_purchase',  "TEXT DEFAULT ''")
+  addColumnIfMissing(db, 'clients', 'points',         'INTEGER DEFAULT 0')
 
   // One-time migration: generate size_barcode for all existing sizes that don't have one
   try {

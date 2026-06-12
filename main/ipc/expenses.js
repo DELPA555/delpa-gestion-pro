@@ -16,14 +16,23 @@ ipcMain.handle('expenses:list', (_, { page = 1, limit = 25, from, to } = {}) => 
 ipcMain.handle('expenses:create', (_, { concept, category, amount, paymentMethod, notes }) => {
   const db = getDB()
   const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
-  const { lastInsertRowid: id } = db.prepare(
-    'INSERT INTO expenses (concept,category,amount,payment_method,cashbox_id,notes) VALUES (?,?,?,?,?,?)'
-  ).run(concept, category || 'General', amount, paymentMethod || 'Efectivo', cashbox?.id || null, notes || '')
-  db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('CREATE','expenses',?,?)`).run(id, `Gasto: ${concept} $${amount}`)
-  return id
+  return db.transaction(() => {
+    const { lastInsertRowid: id } = db.prepare(
+      'INSERT INTO expenses (concept,category,amount,payment_method,cashbox_id,notes) VALUES (?,?,?,?,?,?)'
+    ).run(concept, category || 'General', amount, paymentMethod || 'Efectivo', cashbox?.id || null, notes || '')
+    db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('CREATE','expenses',?,?)`).run(id, `Gasto: ${concept} $${amount}`)
+    return id
+  })()
 })
 
 ipcMain.handle('expenses:delete', (_, id) => {
-  getDB().prepare('DELETE FROM expenses WHERE id=?').run(id)
+  const db = getDB()
+  const expense = db.prepare('SELECT concept, amount FROM expenses WHERE id=?').get(id)
+  if (!expense) return false
+  db.transaction(() => {
+    db.prepare('DELETE FROM expenses WHERE id=?').run(id)
+    db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('DELETE','expenses',?,?)`)
+      .run(id, `Gasto eliminado: ${expense.concept} $${expense.amount}`)
+  })()
   return true
 })

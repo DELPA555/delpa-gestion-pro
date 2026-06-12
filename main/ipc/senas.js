@@ -26,6 +26,9 @@ ipcMain.handle('senas:create', (_, data) => {
     totalPrice, advanceAmount, deadline, notes, sellerName,
   } = data
 
+  if ((advanceAmount || 0) > (totalPrice || 0)) {
+    return { ok: false, error: 'La seña no puede superar el precio total' }
+  }
   const remaining = (totalPrice || 0) - (advanceAmount || 0)
 
   const run = db.transaction(() => {
@@ -34,7 +37,7 @@ ipcMain.handle('senas:create', (_, data) => {
       const row = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(productId, size)
       if (!row || row.stock < 1) throw new Error(`Sin stock de ${productName} T.${size}`)
       db.prepare('UPDATE product_sizes SET stock=stock-1 WHERE product_id=? AND size=?').run(productId, size)
-      try { db.prepare('UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?').run(productId, size) } catch {}
+      db.prepare('UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?').run(productId, size)
     }
 
     // Generate correlative seña number

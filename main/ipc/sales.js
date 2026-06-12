@@ -57,9 +57,7 @@ ipcMain.handle('sales:create', (_, {
       VALUES (?,?,?,?,?,?,?,?)
     `)
     const updStock = db.prepare(`UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?`)
-    let updModTime = null
-    try { updModTime = db.prepare(`UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?`) } catch {}
-
+    const updModTime = db.prepare(`UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?`)
     const updStockNull = db.prepare(`UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND (size IS NULL OR size='')`)
     for (const it of items) {
       insItem.run(saleId, it.productId, it.productName, it.size, it.quantity, it.unitPrice, it.unitCost || 0, it.discount || 0)
@@ -70,7 +68,7 @@ ipcMain.handle('sales:create', (_, {
         const r2 = updStockNull.run(it.quantity, it.productId)
         console.log('[SALE] Fallback N/A:', r2.changes > 0 ? 'match NULL/""' : 'no match (sin stock trackeado)')
       }
-      try { updModTime?.run(it.productId, sz) } catch {}
+      updModTime.run(it.productId, sz)
     }
 
     // Auto-record consignment sales
@@ -132,29 +130,30 @@ ipcMain.handle('sales:create', (_, {
       .run(saleId, `Venta ${saleNumber} registrada $${total}${isFacturada ? ' [FACTURADA]' : ''}`,
            JSON.stringify({ total, paymentMethod: effectiveMethod, items: items.length, saleNumber, cae: cae || null }))
 
-    return { saleId, saleNumber, itemsForSync: items }
+    // Points: earn (dentro de la transaction para garantía ACID)
+    let earnedPoints = 0
+    if (clientId) {
+      const enabled = db.prepare("SELECT value FROM settings WHERE key='points_enabled'").get()?.value
+      if (enabled === '1') {
+        const perPesos = parseInt(db.prepare("SELECT value FROM settings WHERE key='points_per_pesos'").get()?.value || '1000', 10)
+        earnedPoints = Math.floor(total / perPesos)
+        if (earnedPoints > 0) {
+          db.prepare('UPDATE clients SET points=points+? WHERE id=?').run(earnedPoints, clientId)
+          db.prepare('INSERT INTO client_points_log (client_id,type,amount,sale_id,notes) VALUES (?,?,?,?,?)')
+            .run(clientId, 'earn', earnedPoints, saleId, `Puntos ganados en venta ${saleNumber}`)
+        }
+      }
+    }
+
+    return { saleId, saleNumber, itemsForSync: items, earnedPoints }
   })
   const result = run()
 
-  // Points: earn (fire-and-forget after transaction)
-  if (clientId) {
+  // Points email (fire-and-forget, sin bloquear la venta)
+  if (clientId && result.earnedPoints > 0) {
     try {
-      const db2 = getDB()
-      const enabled = db2.prepare("SELECT value FROM settings WHERE key='points_enabled'").get()?.value
-      if (enabled === '1') {
-        const perPesos = parseInt(db2.prepare("SELECT value FROM settings WHERE key='points_per_pesos'").get()?.value || '1000', 10)
-        const earned = Math.floor(total / perPesos)
-        if (earned > 0) {
-          db2.prepare('UPDATE clients SET points=points+? WHERE id=?').run(earned, clientId)
-          db2.prepare('INSERT INTO client_points_log (client_id,type,amount,sale_id,notes) VALUES (?,?,?,?,?)')
-            .run(clientId, 'earn', earned, result.saleId, `Puntos ganados en venta ${result.saleNumber}`)
-          // Fire-and-forget points summary email
-          try {
-            const { sendPointsSummaryAsync } = require('./email')
-            sendPointsSummaryAsync({ clientId, saleId: result.saleId, saleNumber: result.saleNumber, saleTotal: total, earned })
-          } catch {}
-        }
-      }
+      const { sendPointsSummaryAsync } = require('./email')
+      sendPointsSummaryAsync({ clientId, saleId: result.saleId, saleNumber: result.saleNumber, saleTotal: total, earned: result.earnedPoints })
     } catch {}
   }
 

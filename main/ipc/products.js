@@ -71,20 +71,56 @@ ipcMain.handle('products:list', (_, { page = 1, search = '', category = '', bran
     ${where} GROUP BY p.id ORDER BY p.name ASC LIMIT ? OFFSET ?
   `).all(...params, limit, offset)
 
-  const sizesStmt    = db.prepare(`SELECT size, stock, min_stock, size_barcode FROM product_sizes WHERE product_id=? ORDER BY ${SIZE_ORDER}`)
-  const variantsStmt = db.prepare(`
-    SELECT v.id, v.name, v.color, COALESCE(v.tn_sync,1) as tn_sync, v.image_data, v.price, v.cost,
-           COALESCE(SUM(ps.stock),0) as total_stock
-    FROM products v LEFT JOIN product_sizes ps ON ps.product_id=v.id
-    WHERE v.parent_product_id=? AND v.active=1 GROUP BY v.id ORDER BY v.color ASC
-  `)
-  const varSizesStmt = db.prepare(`SELECT size, stock, min_stock, size_barcode FROM product_sizes WHERE product_id=? ORDER BY ${SIZE_ORDER}`)
+  if (rows.length === 0) return { products: [], total: count, pages: Math.ceil(count / limit) }
+
+  const ids = rows.map(p => p.id)
+  const ph  = ids.map(() => '?').join(',')
+
+  // One query for all sizes of this page
+  const allSizes = db.prepare(
+    `SELECT product_id, size, stock, min_stock, size_barcode FROM product_sizes WHERE product_id IN (${ph}) ORDER BY ${SIZE_ORDER}`
+  ).all(...ids)
+
+  // One query for all color variants of this page
+  const allVariants = db.prepare(
+    `SELECT v.id, v.parent_product_id, v.name, v.color, COALESCE(v.tn_sync,1) as tn_sync,
+            v.image_data, v.price, v.cost, COALESCE(SUM(ps.stock),0) as total_stock
+     FROM products v LEFT JOIN product_sizes ps ON ps.product_id=v.id
+     WHERE v.parent_product_id IN (${ph}) AND v.active=1 GROUP BY v.id ORDER BY v.color ASC`
+  ).all(...ids)
+
+  // One query for all variant sizes
+  const variantIds = allVariants.map(v => v.id)
+  const allVariantSizes = variantIds.length > 0
+    ? db.prepare(
+        `SELECT product_id, size, stock, min_stock, size_barcode FROM product_sizes
+         WHERE product_id IN (${variantIds.map(() => '?').join(',')}) ORDER BY ${SIZE_ORDER}`
+      ).all(...variantIds)
+    : []
+
+  // Group in JS — O(N) linear pass instead of N round-trips
+  const sizesByPid = {}
+  for (const s of allSizes) {
+    if (!sizesByPid[s.product_id]) sizesByPid[s.product_id] = []
+    sizesByPid[s.product_id].push(s)
+  }
+  const variantsByPid = {}
+  for (const v of allVariants) {
+    if (!variantsByPid[v.parent_product_id]) variantsByPid[v.parent_product_id] = []
+    variantsByPid[v.parent_product_id].push(v)
+  }
+  const varSizesByPid = {}
+  for (const s of allVariantSizes) {
+    if (!varSizesByPid[s.product_id]) varSizesByPid[s.product_id] = []
+    varSizesByPid[s.product_id].push(s)
+  }
 
   return {
-    products: rows.map(p => {
-      const variants = variantsStmt.all(p.id).map(v => ({ ...v, sizes: varSizesStmt.all(v.id) }))
-      return { ...p, sizes: sizesStmt.all(p.id), variants }
-    }),
+    products: rows.map(p => ({
+      ...p,
+      sizes: sizesByPid[p.id] || [],
+      variants: (variantsByPid[p.id] || []).map(v => ({ ...v, sizes: varSizesByPid[v.id] || [] })),
+    })),
     total: count,
     pages: Math.ceil(count / limit),
   }

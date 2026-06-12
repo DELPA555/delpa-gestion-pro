@@ -63,10 +63,13 @@ ipcMain.handle('cashbox:movements', (_, cashboxId) => {
 })
 
 ipcMain.handle('cashbox:addMovement', (_, { cashboxId, type, concept, amount, paymentMethod }) => {
+  if (!cashboxId) throw new Error('Caja no especificada')
+  if (!concept || !String(concept).trim()) throw new Error('El concepto es obligatorio')
+  if (!amount || Number(amount) <= 0) throw new Error('El monto debe ser mayor a cero')
   const db = getDB()
   const { lastInsertRowid } = db.prepare(
     'INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,?,?,?,?)'
-  ).run(cashboxId, type, concept, Math.abs(amount), paymentMethod || 'Efectivo')
+  ).run(cashboxId, type, concept, Number(amount), paymentMethod || 'Efectivo')
   return lastInsertRowid
 })
 

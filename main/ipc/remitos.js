@@ -80,6 +80,11 @@ ipcMain.handle('remito:updateStatus', (_, { id, status, applyStock }) => {
           db.prepare('UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?')
             .run(qty, pid, sz)
         }
+        // Add to destination
+        if (remito.dest_sucursal_id) {
+          db.prepare('UPDATE product_sizes SET stock=stock+? WHERE product_id=? AND size=?')
+            .run(qty, pid, sz)
+        }
       }
     }
 
