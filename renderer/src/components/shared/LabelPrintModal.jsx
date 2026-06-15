@@ -14,7 +14,9 @@ function genSVGLabel(value) {
     JsBarcode(svg, String(value), {
       format: isEAN ? 'EAN13' : 'CODE128',
       width: 2,
-      height: 55,
+      // alto interno bajo a propósito: el CSS escala el SVG a 13mm de alto, así el
+      // código sale MÁS ANCHO y llena la etiqueta QL-700 (barras nítidas, módulo width:2).
+      height: 42,
       displayValue: false,
       margin: 2,
       background: '#ffffff',
@@ -139,13 +141,13 @@ ${svgStr ? `<div class="bc">${svgStr}</div>` : ''}
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiquetas Brother</title>
 <style>
-@page{size:62mm 29mm;margin:1.5mm}
+@page{size:62mm 29mm;margin:1mm}
 *{box-sizing:border-box;margin:0;padding:0}
 body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:Arial,sans-serif}
-.e{width:59mm;height:26mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-after:always;overflow:hidden;gap:0.4mm}
+.e{width:62mm;height:27mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-after:always;overflow:hidden;gap:0.4mm}
 /* width:auto conserva el ancho de módulo (igual que A4) → barras nítidas. NO forzar width. */
-.bc{max-width:57mm;margin:0 auto;display:flex;justify-content:center;overflow:hidden}
-.bc svg{height:13mm !important;width:auto !important;max-width:57mm}
+.bc{width:100%;max-width:60mm;margin:0 auto;display:flex;justify-content:center;overflow:hidden}
+.bc svg{height:13mm !important;width:auto !important;max-width:60mm}
 .n{font-size:9pt;font-weight:bold;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58mm}
 .d{font-size:9pt;font-weight:bold;line-height:1.15}
 .siva{font-size:7pt;color:#333;line-height:1.1}
