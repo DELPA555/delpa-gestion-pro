@@ -228,6 +228,11 @@ function createTables(db) {
       ('business_phone',         ''),
       ('business_cuit',          ''),
       ('business_logo',          ''),
+      ('business_instagram',     ''),
+      ('business_facebook',      ''),
+      ('business_whatsapp',      ''),
+      ('business_website',       ''),
+      ('business_hours',         ''),
       ('custom_sizes',           '[]'),
       ('custom_categories',      '[]'),
       ('custom_payment_methods', '[]');
@@ -770,6 +775,7 @@ function createTables(db) {
   addColumnIfMissing(db, 'cashbox', 'shift',             "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'sales',   'voucher_code',      "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'sales',   'voucher_discount',  'REAL DEFAULT 0')
+  addColumnIfMissing(db, 'stock_entries', 'is_consignment', 'INTEGER DEFAULT 0')
   addColumnIfMissing(db, 'clients', 'birth_date',     "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'city',           "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'province',       "TEXT DEFAULT ''")

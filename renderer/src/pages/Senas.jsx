@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { HandCoins, Plus, X, CheckCircle, Clock, XCircle, AlertTriangle, Printer, MessageSquare } from 'lucide-react'
 import { api } from '@/lib/api'
+import { bizContactFooterHtml } from '@/lib/printFooter'
 import { formatCurrency, cn, debounce } from '@/lib/utils'
 import Modal from '@/components/shared/Modal'
 import PageHeader from '@/components/shared/PageHeader'
@@ -58,6 +59,7 @@ ${pointsInfo && pointsInfo.enabled && seña.clientName ? `
 ${pointsInfo.total >= (pointsInfo.minRedeem || 5) ? `<div class="c" style="font-size:7.5pt;margin:2pt 0">Podés canjear ${pointsInfo.total} pts = ${fmtMoney(pointsInfo.total * (pointsInfo.value || 0))} de descuento</div>` : ''}` : ''}
 <div class="div"></div>
 <div class="ft">Conserve este ticket para retirar su mercadería.<br>Sin este comprobante no se realizará la entrega.</div>
+${bizContactFooterHtml(biz)}
 <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),900)}<\/script>
 </body></html>`
   const w = window.open('', '_blank', 'width=450,height=700')

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { Plus, FileText, Printer, ShieldCheck, AlertCircle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { bizContactFooterHtml } from '@/lib/printFooter'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import Modal from '@/components/shared/Modal'
 import Pagination from '@/components/shared/Pagination'
@@ -61,6 +62,7 @@ ${inv.cae ? `
   ${inv.cae_fch_vto ? `<p style="font-size:11px">Vto. CAE: ${String(inv.cae_fch_vto).replace(/(\d{4})(\d{2})(\d{2})/, '$3/$2/$1')}</p>` : ''}
   ${inv.cbte_nro && inv.pto_venta ? `<p style="font-size:11px">N°: ${String(inv.pto_venta).padStart(4,'0')}-${String(inv.cbte_nro).padStart(8,'0')}</p>` : ''}
 </div>` : `<p style="margin-top:24px;font-size:10px;color:#666">Comprobante interno — no válido como factura fiscal</p>`}
+${bizContactFooterHtml(biz)}
 </body></html>`
   const w = window.open('', '_blank', 'width=800,height=900')
   w.document.write(html)

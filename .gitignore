@@ -54,3 +54,4 @@ main/*.pem
 /.next/
 next-env.d.ts
 *.tsbuildinfo
+robosmdp/

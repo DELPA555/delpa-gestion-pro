@@ -72,6 +72,18 @@ function getSurchargeKey(paymentMethod, installments) {
   return paymentMethod
 }
 
+// Pie con datos de contacto del negocio (solo campos completos) para tickets/comprobantes
+function bizContactFooterHtml(biz = {}) {
+  const lines = []
+  if (biz.business_instagram) lines.push(`📱 Instagram: @${String(biz.business_instagram).replace(/^@/, '')}`)
+  if (biz.business_facebook)  lines.push(`📘 Facebook: ${biz.business_facebook}`)
+  if (biz.business_whatsapp)  lines.push(`💬 WhatsApp: ${biz.business_whatsapp}`)
+  if (biz.business_website)   lines.push(`🌐 ${biz.business_website}`)
+  if (biz.business_hours)     lines.push(`🕐 Horario: ${biz.business_hours}`)
+  if (!lines.length) return ''
+  return `<div class="divider"></div>${lines.map(l => `<p class="center" style="font-size:11px;margin:2px 0">${l}</p>`).join('')}`
+}
+
 function printTicket(sale, biz = {}, pointsInfo = null) {
   const bizName = biz.business_name || 'DELPA'
   const logoHtml = biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin:0 auto 4px" alt="logo">` : ''
@@ -140,6 +152,7 @@ ${pointsInfo && pointsInfo.enabled && sale.client_name ? `
 ${pointsInfo.total >= (pointsInfo.minRedeem || 5) ? `<p class="center" style="font-size:11px;margin:2px 0">Podés canjear ${pointsInfo.total} pts = $${(pointsInfo.total * (pointsInfo.value || 0)).toLocaleString('es-AR')} de descuento</p>` : ''}` : ''}
 <div class="divider"></div>
 <p class="center" style="margin-top:4px">¡Gracias por su compra!</p>
+${bizContactFooterHtml(biz)}
 </body></html>`
 
   const w = window.open('', '_blank', 'width=400,height=600')
@@ -196,6 +209,7 @@ ${(sale.items || []).map(it => `
 `).join('')}
 <div class="divider"></div>
 <p class="center" style="margin-top:6px;font-size:11px">Conservá este ticket para cambios</p>
+${bizContactFooterHtml(biz)}
 </body></html>`
 
   const w = window.open('', '_blank', 'width=400,height=500')
@@ -2110,7 +2124,7 @@ export default function Sales() {
               <p className="text-zinc-500 text-xs mt-1">Ticket sin CAE registrado</p>
             </div>
 
-            <button onClick={() => { printTicket(postSaleModal, biz); setPostSaleModal(null) }}
+            <button onClick={() => { printTicketFetched(postSaleModal, biz); setPostSaleModal(null) }}
               className="w-full flex items-center justify-center gap-2 border border-border rounded-lg py-2.5 text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors">
               <Printer size={15} /> Imprimir ticket
             </button>

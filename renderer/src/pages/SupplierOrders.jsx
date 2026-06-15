@@ -7,6 +7,7 @@ import {
   MessageCircle, PackagePlus, AlertTriangle,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { bizContactFooterHtml } from '@/lib/printFooter'
 import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
 import EmptyState from '@/components/shared/EmptyState'
@@ -267,6 +268,7 @@ ${order.notes ? `<div class="notes-box" style="margin-top:16px"><strong>Observac
 </div>
 
 <div class="footer">Por favor confirmar disponibilidad de los productos. ${bizName} — ${new Date().toLocaleDateString('es-AR')}</div>
+${bizContactFooterHtml(biz)}
 
 <script>window.onload=()=>{window.print();window.close()}<\/script>
 </body></html>`

@@ -3,9 +3,10 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   PackagePlus, Plus, Trash2, X, ChevronLeft, ChevronRight,
-  Tag, ChevronDown, ChevronUp, Search, ToggleLeft, ToggleRight, PackageCheck,
+  Tag, ChevronDown, ChevronUp, Search, ToggleLeft, ToggleRight, PackageCheck, FileText,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { bizContactFooterHtml } from '@/lib/printFooter'
 import PageHeader from '@/components/shared/PageHeader'
 import LabelPrintModal from '@/components/shared/LabelPrintModal'
 
@@ -332,6 +333,8 @@ function EntryModal({ onClose, onSaved }) {
         product_id: c.is_new ? null : c.product_id,
         product_name: c.is_new ? c.new_product.name : c.product_name,
         cost: Number(c.cost) || 0,
+        is_consignment: !!c.is_consignment,
+        color: c.is_new ? (c.new_product.color || '') : (c.product_color || ''),
         sizes: c.sizes.filter(sz => Number(sz.qty) > 0).map(sz => ({ size: sz.size, qty: Number(sz.qty) })),
         new_product: c.is_new ? {
           name: c.new_product.name.trim(),
@@ -529,11 +532,132 @@ function EntryModal({ onClose, onSaved }) {
   )
 }
 
+function EntryDetailModal({ id, onClose }) {
+  const [entry, setEntry] = useState(null)
+  const [biz, setBiz] = useState({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let ok = true
+    Promise.all([api.stockentry.get(id), api.settings.getAll().catch(() => ({}))])
+      .then(([e, b]) => { if (ok) { setEntry(e); setBiz(b || {}) } })
+      .catch(() => toast.error('Error al cargar el detalle'))
+      .finally(() => { if (ok) setLoading(false) })
+    return () => { ok = false }
+  }, [id])
+
+  const fmt = (v) => '$' + Number(v || 0).toLocaleString('es-AR')
+
+  const exportPDF = () => {
+    if (!entry) return
+    const rows = (entry.items || []).map(it =>
+      (it.sizes || []).map(sz => `<tr>
+        <td>${it.product_name || ''}</td>
+        <td style="text-align:center">${sz.size}</td>
+        <td style="text-align:center">${it.color || '—'}</td>
+        <td style="text-align:right">${sz.qty}</td>
+        <td style="text-align:right">${fmt(it.cost)}</td>
+        <td style="text-align:right">${fmt((Number(sz.qty) || 0) * (Number(it.cost) || 0))}</td>
+      </tr>`).join('')
+    ).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ingreso #${entry.id}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:24px;color:#1a1a1a;font-size:12px}
+h1{font-size:18px;margin-bottom:2px}.muted{color:#666;font-size:11px;margin:1px 0}
+table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #ccc;padding:6px 8px}
+th{background:#f3f3f3;text-align:left;font-size:11px}.tot{margin-top:12px;text-align:right;font-size:13px;font-weight:bold}
+.cons{display:inline-block;margin-top:6px;color:#a855f7;font-weight:bold}
+@media print{@page{size:A4;margin:14mm}}</style></head><body>
+<h1>Ingreso de Mercadería #${entry.id}</h1>
+<p class="muted">Fecha: ${entry.date} · Registrado: ${new Date(entry.created_at).toLocaleString('es-AR')}</p>
+${entry.supplier_name ? `<p class="muted">Proveedor: ${entry.supplier_name}</p>` : ''}
+${entry.notes ? `<p class="muted">Notas: ${entry.notes}</p>` : ''}
+${entry.is_consignment ? `<p class="cons">⚑ Mercadería en consignación</p>` : ''}
+<table><thead><tr><th>Producto</th><th style="text-align:center">Talle</th><th style="text-align:center">Color</th><th style="text-align:right">Cant.</th><th style="text-align:right">Costo u.</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="tot">Total unidades: ${entry.total_units} &nbsp;·&nbsp; Total costo: ${fmt(entry.total_cost)}</p>
+${bizContactFooterHtml(biz)}
+<script>window.onload=()=>{window.print();setTimeout(()=>window.close(),900)}<\/script>
+</body></html>`
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (w) { w.document.write(html); w.document.close() }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 pt-10 overflow-y-auto" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl w-full max-w-3xl mb-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <PackageCheck size={18} className="text-accent" />
+            <h2 className="font-semibold text-white">Detalle de ingreso {entry ? `#${entry.id}` : ''}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={exportPDF} disabled={!entry}
+              className="no-drag flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-zinc-300 hover:text-white hover:border-accent transition-colors disabled:opacity-40">
+              <FileText size={13} /> Exportar PDF
+            </button>
+            <button onClick={onClose} className="text-zinc-500 hover:text-white no-drag transition-colors"><X size={18} /></button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="px-6 py-12 text-center text-zinc-500 text-sm">Cargando...</div>
+        ) : !entry ? (
+          <div className="px-6 py-12 text-center text-zinc-500 text-sm">No se encontró el ingreso</div>
+        ) : (
+          <div className="px-6 py-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-zinc-500 text-xs">Fecha del hecho</span><p className="text-zinc-200">{entry.date}</p></div>
+              <div><span className="text-zinc-500 text-xs">Registrado</span><p className="text-zinc-200">{new Date(entry.created_at).toLocaleString('es-AR')}</p></div>
+              <div><span className="text-zinc-500 text-xs">Proveedor</span><p className="text-zinc-200">{entry.supplier_name || '—'}</p></div>
+              <div><span className="text-zinc-500 text-xs">Consignación</span><p className={entry.is_consignment ? 'text-violet-400 font-medium' : 'text-zinc-400'}>{entry.is_consignment ? 'Sí ⚑' : 'No'}</p></div>
+              {entry.notes ? <div className="col-span-2"><span className="text-zinc-500 text-xs">Notas</span><p className="text-zinc-300">{entry.notes}</p></div> : null}
+            </div>
+
+            <div className="border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface text-xs text-zinc-500">
+                    <th className="px-3 py-2 text-left font-medium">Producto</th>
+                    <th className="px-3 py-2 text-center font-medium">Talle</th>
+                    <th className="px-3 py-2 text-center font-medium">Color</th>
+                    <th className="px-3 py-2 text-right font-medium">Cant.</th>
+                    <th className="px-3 py-2 text-right font-medium">Costo u.</th>
+                    <th className="px-3 py-2 text-right font-medium">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(entry.items || []).flatMap((it, ii) =>
+                    (it.sizes || []).map((sz, si) => (
+                      <tr key={`${ii}-${si}`} className="border-b border-border/50">
+                        <td className="px-3 py-2 text-zinc-200">{it.product_name}{it.is_consignment ? <span className="text-violet-400 text-xs ml-1">⚑</span> : null}</td>
+                        <td className="px-3 py-2 text-center text-zinc-400">{sz.size}</td>
+                        <td className="px-3 py-2 text-center text-zinc-400">{it.color || '—'}</td>
+                        <td className="px-3 py-2 text-right text-zinc-300 tabular-nums">{sz.qty}</td>
+                        <td className="px-3 py-2 text-right text-zinc-400 tabular-nums">{fmt(it.cost)}</td>
+                        <td className="px-3 py-2 text-right text-zinc-200 tabular-nums">{fmt((Number(sz.qty) || 0) * (Number(it.cost) || 0))}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-6 text-sm">
+              <div className="text-right"><span className="text-zinc-500 text-xs block">Total unidades</span><span className="text-white font-semibold tabular-nums">{entry.total_units}</span></div>
+              <div className="text-right"><span className="text-zinc-500 text-xs block">Total costo</span><span className="text-white font-semibold tabular-nums">{fmt(entry.total_cost)}</span></div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function StockEntry() {
   const [entries, setEntries] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
+  const [detailId, setDetailId] = useState(null)
   const [page, setPage] = useState(1)
   const LIMIT = 30
 
@@ -596,7 +720,8 @@ export default function StockEntry() {
                 </td>
               </tr>
             ) : entries.map((e, idx) => (
-              <tr key={e.id} className={`border-b border-border/50 ${idx % 2 === 1 ? 'bg-white/[0.018]' : ''} hover:bg-accent/[0.035] transition-colors`}>
+              <tr key={e.id} onClick={() => setDetailId(e.id)} title="Ver detalle"
+                className={`border-b border-border/50 cursor-pointer ${idx % 2 === 1 ? 'bg-white/[0.018]' : ''} hover:bg-accent/[0.035] transition-colors`}>
                 <td className="px-4 py-3 text-zinc-600 text-xs">#{e.id}</td>
                 <td className="px-4 py-3 text-zinc-300">{e.date}</td>
                 <td className="px-4 py-3 text-zinc-300">{e.supplier_name || <span className="text-zinc-600">—</span>}</td>
@@ -629,6 +754,7 @@ export default function StockEntry() {
       )}
 
       {modal && <EntryModal onClose={() => setModal(false)} onSaved={() => { setModal(false); load() }} />}
+      {detailId && <EntryDetailModal id={detailId} onClose={() => setDetailId(null)} />}
     </motion.div>
   )
 }

@@ -96,6 +96,92 @@ function whatsappUrl(client, message) {
   return `https://wa.me/${wp}?text=${text}`
 }
 
+function ChannelSalesCard() {
+  const [period, setPeriod] = useState('day')
+  const [local, setLocal] = useState({ total: 0, count: 0 })
+  const [tn, setTn] = useState({ connected: false, total: 0, count: 0 })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let ok = true
+    setLoading(true)
+    Promise.all([
+      api.dashboard.localSalesPeriod(period).catch(() => ({ total: 0, count: 0 })),
+      api.tn.salesPeriod(period).catch(() => ({ connected: false, total: 0, count: 0 })),
+    ]).then(([l, t]) => {
+      if (!ok) return
+      setLocal(l || { total: 0, count: 0 })
+      setTn(t || { connected: false, total: 0, count: 0 })
+    }).finally(() => { if (ok) setLoading(false) })
+    return () => { ok = false }
+  }, [period])
+
+  const localTotal = Number(local.total) || 0
+  const tnTotal = Number(tn.total) || 0
+  const total = localTotal + tnTotal
+  const pct = (v) => total > 0 ? Math.round(v / total * 100) : 0
+  const data = [
+    { name: 'Local', value: localTotal, fill: '#22c55e' },
+    { name: 'Tienda Nube', value: tnTotal, fill: '#3b82f6' },
+  ]
+  const periods = [['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']]
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Ventas totales por canal</h3>
+          <p className="text-[11px] text-zinc-500">Local + Tienda Nube</p>
+        </div>
+        <div className="flex gap-1 bg-surface border border-border rounded-lg p-0.5">
+          {periods.map(([id, lbl]) => (
+            <button key={id} onClick={() => setPeriod(id)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors no-drag ${period === id ? 'bg-accent text-black' : 'text-zinc-400 hover:text-white'}`}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center text-zinc-600 text-sm">Cargando...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm text-zinc-300"><span className="w-2.5 h-2.5 rounded-sm bg-green-500"></span>Local</span>
+              <span className="text-sm text-white tabular-nums">{formatCurrency(localTotal)} <span className="text-zinc-500 text-xs">({pct(localTotal)}%)</span></span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-sm text-zinc-300"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500"></span>Tienda Nube</span>
+              <span className="text-sm text-white tabular-nums">{tn.connected
+                ? <>{formatCurrency(tnTotal)} <span className="text-zinc-500 text-xs">({pct(tnTotal)}%)</span></>
+                : <span className="text-zinc-600 text-xs">No conectada</span>}</span>
+            </div>
+            <div className="border-t border-border pt-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-white">TOTAL</span>
+              <span className="text-lg font-bold text-accent tabular-nums">{formatCurrency(total)}</span>
+            </div>
+            <p className="text-[11px] text-zinc-600">{(local.count || 0) + (tn.count || 0)} ventas · Local {local.count || 0} · TN {tn.count || 0}</p>
+          </div>
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} layout="vertical" margin={{ left: 6, right: 18 }}>
+                <XAxis type="number" hide />
+                <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} width={84} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={26}>
+                  {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [trend, setTrend] = useState([])
@@ -272,6 +358,9 @@ export default function Dashboard() {
           )}
         </>
       )}
+
+      {/* Ventas totales por canal (Local + Tienda Nube) */}
+      <ChannelSalesCard />
 
       {/* Charts */}
       <div className="grid grid-cols-3 gap-4">

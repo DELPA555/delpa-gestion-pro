@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { Tag, Plus, Printer, Trash2, Search, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react'
 import { api } from '@/lib/api'
+import { bizContactFooterHtml } from '@/lib/printFooter'
 import { cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
 import Modal from '@/components/shared/Modal'
@@ -26,7 +27,9 @@ function formatValue(v) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v.value)
 }
 
-function printVoucherPDF(voucher, bizName = 'DELPA') {
+function printVoucherPDF(voucher, biz = {}) {
+  const bizName = (typeof biz === 'string' ? biz : biz.business_name) || 'DELPA'
+  if (typeof biz === 'string') biz = {}
   const fmt = (v) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v)
   const valueDisplay = voucher.type === 'percent' ? `${voucher.value}% DE DESCUENTO` : `${fmt(voucher.value)} DE DESCUENTO`
   const expDisplay = voucher.expires_at ? `Válido hasta: ${new Date(voucher.expires_at).toLocaleDateString('es-AR')}` : 'Sin fecha de vencimiento'
@@ -77,6 +80,7 @@ function printVoucherPDF(voucher, bizName = 'DELPA') {
     <div class="footer">
       <div class="expiry">${expDisplay}</div>
       ${voucher.client_name ? `<div class="client-info">Para: ${voucher.client_name}</div>` : ''}
+      ${bizContactFooterHtml(biz, { marginTop: '8px' })}
     </div>
   </div>
   <button class="print-btn" onclick="window.print()">🖨 Imprimir vale</button>
@@ -98,7 +102,7 @@ export default function Vouchers() {
   const [search, setSearch] = useState('')
   const [createModal, setCreateModal] = useState(false)
   const [processing, setProcessing] = useState(false)
-  const [bizName, setBizName] = useState('DELPA')
+  const [biz, setBiz] = useState({})
 
   const [form, setForm] = useState({
     type: 'fixed',
@@ -122,7 +126,7 @@ export default function Vouchers() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    api.settings.get('business_name').then(v => { if (v) setBizName(v) }).catch(() => {})
+    api.settings.getAll().then(a => setBiz(a || {})).catch(() => {})
   }, [])
 
   const handleCreate = async () => {
@@ -141,7 +145,7 @@ export default function Vouchers() {
       setForm({ type: 'fixed', value: '', client_name: '', expires_at: '', conditions: '' })
       load()
       // Auto-print
-      setTimeout(() => printVoucherPDF(voucher, bizName), 300)
+      setTimeout(() => printVoucherPDF(voucher, biz), 300)
     } catch (e) {
       toast.error(e.message || 'Error al crear vale')
     } finally { setProcessing(false) }
@@ -246,7 +250,7 @@ export default function Vouchers() {
                 </span>
                 <span className={cn('text-[11px] px-2 py-0.5 rounded-full border font-medium text-center', status.cls)}>{status.label}</span>
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => printVoucherPDF(v, bizName)} title="Reimprimir"
+                  <button onClick={() => printVoucherPDF(v, biz)} title="Reimprimir"
                     className="no-drag p-1.5 text-zinc-600 hover:text-zinc-200 rounded transition-colors">
                     <Printer size={13} />
                   </button>

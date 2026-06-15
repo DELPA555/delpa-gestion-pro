@@ -3,6 +3,7 @@ const fs   = require('fs')
 const path = require('path')
 const os   = require('os')
 const { getDB } = require('../../database/db')
+const { getBizContact, bizFooterHtml } = require('../lib/bizFooter')
 
 function getEmailConfig() {
   const db = getDB()
@@ -382,6 +383,7 @@ ipcMain.handle('email:sendSaleInvoice', async (_, { saleId, toEmail }) => {
           ${caeFmtVto ? `<p style="margin:3px 0;font-size:12px"><strong>Vto. CAE:</strong> ${caeFmtVto}</p>` : ''}
         </div>` : ''}
         <p style="color:#aaa;font-size:11px;margin-top:24px;border-top:1px solid #eee;padding-top:8px">Enviado desde ${bizName} Gestión.</p>
+        ${bizFooterHtml(getBizContact())}
       </div>`
 
     const transporter = buildTransporter(s)
@@ -450,6 +452,7 @@ function buildTicketEmailHtml(sale, items, biz) {
       ${caeFmtVto ? `<p style="margin:2px 0"><strong>Vto. CAE:</strong> ${caeFmtVto}</p>` : ''}
     </div>` : ''}
     <p style="color:#aaa;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:6px">Gracias por su compra. Enviado desde ${bizName}.</p>
+    ${bizFooterHtml(getBizContact())}
   </div>`
 }
 
@@ -661,6 +664,7 @@ function buildPointsEmailHtml(data, biz) {
       ${biz.business_address || biz.business_phone ? `${biz.business_address || ''}${biz.business_address && biz.business_phone ? ' · ' : ''}${biz.business_phone ? 'Tel: ' + biz.business_phone : ''}<br>` : ''}
       Enviado automáticamente por ${bizName} Gestión PRO.
     </p>
+    ${bizFooterHtml(getBizContact())}
   </div>`
 }
 
@@ -898,6 +902,7 @@ async function sendWaitlistArrivalEmail(entry) {
       </div>
       <p>Acercate al local o comunicate con nosotros para reservarlo antes de que se agote.</p>
       <p style="color:#888;font-size:12px;margin-top:24px">${biz.business_name || ''} ${biz.business_phone ? `— ${biz.business_phone}` : ''}</p>
+      ${bizFooterHtml(getBizContact())}
     </div>`,
   })
 }

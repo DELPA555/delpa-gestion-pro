@@ -212,7 +212,7 @@ function BackupSection() {
 
 export default function Settings() {
   const [tab, setTab] = useState('business')
-  const [form, setForm] = useState({ business_name: '', business_address: '', business_phone: '', business_cuit: '', business_logo: '', birthday_message: '', current_sucursal_id: '' })
+  const [form, setForm] = useState({ business_name: '', business_address: '', business_phone: '', business_cuit: '', business_logo: '', business_instagram: '', business_facebook: '', business_whatsapp: '', business_website: '', business_hours: '', birthday_message: '', current_sucursal_id: '' })
   const [sizes, setSizes] = useState([])
   const [categories, setCategories] = useState([])
   const [categorySizeGroups, setCategorySizeGroups] = useState({})
@@ -292,6 +292,11 @@ export default function Settings() {
         business_phone:       all.business_phone       || '',
         business_cuit:        all.business_cuit        || '',
         business_logo:        all.business_logo        || '',
+        business_instagram:   all.business_instagram   || '',
+        business_facebook:    all.business_facebook    || '',
+        business_whatsapp:    all.business_whatsapp    || '',
+        business_website:     all.business_website     || '',
+        business_hours:       all.business_hours       || '',
         birthday_message:     all.birthday_message     || 'Feliz cumple [nombre]! 🎁 Pasate por el local, te tenemos un regalo especial 🎉',
         current_sucursal_id:  all.current_sucursal_id  || '',
       })
@@ -650,6 +655,33 @@ export default function Settings() {
             <div>
               <label className={labelCls}>CUIT</label>
               <input className={inputCls} value={form.business_cuit} onChange={e => f('business_cuit', e.target.value)} placeholder="20-12345678-9" />
+            </div>
+          </div>
+
+          {/* Datos de contacto (aparecen en tickets, facturas, emails y PDFs) */}
+          <div className="pt-2 border-t border-border/60">
+            <p className="text-xs font-medium text-zinc-400 mb-3">Contacto y redes (se muestran en el pie de tickets, facturas, emails y PDFs)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Instagram</label>
+                <input className={inputCls} value={form.business_instagram} onChange={e => f('business_instagram', e.target.value)} placeholder="@petalorosa" />
+              </div>
+              <div>
+                <label className={labelCls}>Facebook</label>
+                <input className={inputCls} value={form.business_facebook} onChange={e => f('business_facebook', e.target.value)} placeholder="/petalorosa o link" />
+              </div>
+              <div>
+                <label className={labelCls}>WhatsApp de contacto</label>
+                <input className={inputCls} value={form.business_whatsapp} onChange={e => f('business_whatsapp', e.target.value)} placeholder="+54 9 223 555-1234" />
+              </div>
+              <div>
+                <label className={labelCls}>Sitio web</label>
+                <input className={inputCls} value={form.business_website} onChange={e => f('business_website', e.target.value)} placeholder="www.misitio.com" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className={labelCls}>Horarios de atención</label>
+              <input className={inputCls} value={form.business_hours} onChange={e => f('business_hours', e.target.value)} placeholder="Lun a Vie 9 a 19hs · Sáb 9 a 13hs" />
             </div>
           </div>
 

@@ -5,6 +5,7 @@ export const api = {
     stats:              () => inv('dashboard:stats'),
     salesTrend:         () => inv('dashboard:salesTrend'),
     salesByPayment:     () => inv('dashboard:salesByPayment'),
+    localSalesPeriod:   (p) => inv('dashboard:localSalesPeriod', p),
     lowStock:           () => inv('dashboard:lowStock'),
     weekComparison:     () => inv('dashboard:weekComparison'),
     heatmap:            () => inv('dashboard:heatmap'),
@@ -357,5 +358,6 @@ export const api = {
     syncCustomers:  ()    => inv('tn:syncCustomers'),
     importCustomer: (id)  => inv('tn:importCustomer', id),
     salesToday:     ()    => inv('tn:salesToday'),
+    salesPeriod:    (p)   => inv('tn:salesPeriod', p),
   },
 }

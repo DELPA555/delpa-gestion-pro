@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Plus, FileBox, Eye, Trash2, CheckCircle, XCircle, Clock, Search, Printer, MessageCircle, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '../lib/api'
+import { bizContactFooterHtml } from '../lib/printFooter'
 
 const fmtDate = s => s ? new Date(s).toLocaleDateString('es-AR') : '—'
 const fmtMoney = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
@@ -72,6 +73,7 @@ ${total > 0 ? `<tr class="total-row"><td colspan="3">Total</td><td style="text-a
 </tbody></table>
 ${remito.notes ? `<div class="notes"><strong>Notas:</strong> ${remito.notes}</div>` : ''}
 <div class="footer">Generado por ${bizName} · DELPA Gestión PRO</div>
+${bizContactFooterHtml(biz)}
 <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),900)}<\/script>
 </body></html>`
 

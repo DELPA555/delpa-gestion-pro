@@ -188,6 +188,42 @@ ipcMain.handle('tn:salesToday', async () => {
   }
 })
 
+// ─── Ventas TN por período (day/week/month) ──────────────────────────────────
+ipcMain.handle('tn:salesPeriod', async (_, period = 'day') => {
+  const token = getSetting('tn_access_token')
+  const storeId = getSetting('tn_store_id')
+  if (!token || !storeId) return { connected: false, total: 0, count: 0 }
+  try {
+    const now = new Date()
+    const arMs = now.getTime() - (now.getTimezoneOffset() + 180) * 60000
+    const arDate = new Date(arMs)
+    const y = arDate.getUTCFullYear()
+    const m = String(arDate.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(arDate.getUTCDate()).padStart(2, '0')
+    let minIso
+    if (period === 'month') {
+      minIso = `${y}-${m}-01T00:00:00-0300`
+    } else if (period === 'week') {
+      const wk = new Date(arDate.getTime() - 7 * 86400000)
+      minIso = `${wk.getUTCFullYear()}-${String(wk.getUTCMonth() + 1).padStart(2, '0')}-${String(wk.getUTCDate()).padStart(2, '0')}T00:00:00-0300`
+    } else {
+      minIso = `${y}-${m}-${d}T00:00:00-0300`
+    }
+    let page = 1, total = 0, count = 0
+    while (page <= 20) {
+      const orders = await tnFetch(`/orders?created_at_min=${encodeURIComponent(minIso)}&payment_status=paid&per_page=200&page=${page}`)
+      const arr = Array.isArray(orders) ? orders : []
+      total += arr.reduce((s, o) => s + parseFloat(o.total || '0'), 0)
+      count += arr.length
+      if (arr.length < 200) break
+      page++
+    }
+    return { connected: true, total, count }
+  } catch (e) {
+    return { connected: true, total: 0, count: 0, error: e.message }
+  }
+})
+
 // ─── Disconnect ──────────────────────────────────────────────────────────────
 
 ipcMain.handle('tn:disconnect', () => {

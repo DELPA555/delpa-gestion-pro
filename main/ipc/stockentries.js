@@ -54,7 +54,23 @@ ipcMain.handle('stockentry:get', (_, id) => {
   const db = getDB()
   const entry = db.prepare('SELECT * FROM stock_entries WHERE id=?').get(id)
   if (!entry) return null
-  try { entry.items = JSON.parse(entry.items_json || '[]') } catch { entry.items = [] }
+  let items = []
+  try { items = JSON.parse(entry.items_json || '[]') } catch { items = [] }
+  // Enriquecer cada item: color (desde products si falta), unidades y subtotal de costo
+  let totalUnits = 0, totalCost = 0
+  for (const it of items) {
+    if (!it.color && it.product_id) {
+      try { it.color = db.prepare('SELECT color FROM products WHERE id=?').get(it.product_id)?.color || '' } catch { it.color = '' }
+    }
+    const units = (it.sizes || []).reduce((s, sz) => s + (Number(sz.qty) || 0), 0)
+    it.units = units
+    it.line_cost = units * (Number(it.cost) || 0)
+    totalUnits += units
+    totalCost += it.line_cost
+  }
+  entry.items = items
+  entry.total_units = totalUnits
+  entry.total_cost = entry.total || totalCost
   return entry
 })
 
@@ -121,19 +137,26 @@ ipcMain.handle('stockentry:create', (_, data) => {
       }
 
       generateSizeBarcodes(db, productId)
-      processedItems.push({ product_id: productId, product_name: productName, sizes, cost: item.cost })
+      processedItems.push({
+        product_id: productId, product_name: productName, sizes,
+        cost: Number(item.cost) || 0,
+        color: item.color || '',
+        is_consignment: !!item.is_consignment,
+      })
     }
 
+    const entryIsConsignment = processedItems.some(i => i.is_consignment) ? 1 : 0
     const { lastInsertRowid } = db.prepare(`
-      INSERT INTO stock_entries (supplier_id, supplier_name, date, notes, total, items_json)
-      VALUES (?,?,?,?,?,?)
+      INSERT INTO stock_entries (supplier_id, supplier_name, date, notes, total, items_json, is_consignment)
+      VALUES (?,?,?,?,?,?,?)
     `).run(
       supplier_id || null,
       supplier_name || '',
       date || new Date().toISOString().split('T')[0],
       notes || '',
       Number(total) || 0,
-      JSON.stringify(processedItems)
+      JSON.stringify(processedItems),
+      entryIsConsignment
     )
 
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description,new_data) VALUES ('CREATE','stockentries',?,'Ingreso de mercadería',?)`)

@@ -52,6 +52,17 @@ ipcMain.handle('dashboard:salesTrend', () =>
   `).all()
 )
 
+// Ventas LOCALES por período (day/week/month) para la comparativa por canal
+ipcMain.handle('dashboard:localSalesPeriod', (_, period = 'day') => {
+  const db = getDB()
+  let where
+  if (period === 'week') where = "created_at >= datetime('now','localtime','-7 days')"
+  else if (period === 'month') where = "strftime('%Y-%m',created_at,'localtime')=strftime('%Y-%m','now','localtime')"
+  else where = "date(created_at,'localtime')=date('now','localtime')"
+  const r = db.prepare(`SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count FROM sales WHERE voided=0 AND ${where}`).get()
+  return { total: r.total, count: r.count }
+})
+
 ipcMain.handle('dashboard:salesByPayment', () =>
   getDB().prepare(`
     SELECT payment_method, COUNT(*) as count, SUM(total) as total
