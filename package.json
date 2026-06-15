@@ -1,6 +1,6 @@
 {
   "name": "panel-financiero",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "main": "main/index.js",
   "scripts": {

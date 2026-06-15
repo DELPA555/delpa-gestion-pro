@@ -4,8 +4,9 @@ import JsBarcode from 'jsbarcode'
 
 const fmtPrice = v => new Intl.NumberFormat('es-AR').format(Math.round(Number(v) || 0))
 
-// width:2 = mínimo recomendado para impresión confiable de EAN-13
-function genSVG(value, barHeight = 60, fontSize = 8) {
+// Igual que A4 (displayValue:false, width:2): conserva el ancho de módulo natural
+// → barras nítidas y escaneables. El tamaño final se controla con CSS height + width:auto.
+function genSVGLabel(value) {
   if (!value) return ''
   try {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -13,9 +14,8 @@ function genSVG(value, barHeight = 60, fontSize = 8) {
     JsBarcode(svg, String(value), {
       format: isEAN ? 'EAN13' : 'CODE128',
       width: 2,
-      height: barHeight,
-      displayValue: true,
-      fontSize,
+      height: 55,
+      displayValue: false,
       margin: 2,
       background: '#ffffff',
       lineColor: '#000000',
@@ -128,12 +128,11 @@ td{width:40.6mm;height:21.2mm;padding:0 1.25mm;vertical-align:middle;text-align:
 export function printBrother(labels) {
   const divs = labels.map((l, i) => {
     const p2 = fmtPrice(Number(l.price) / 1.21)
-    const svgStr = l.barcode ? genSVG(l.barcode, 90, 10) : ''
+    const svgStr = l.barcode ? genSVGLabel(l.barcode) : ''
     return `<div class="e"${i === labels.length - 1 ? ' style="page-break-after:auto"' : ''}>
 ${svgStr ? `<div class="bc">${svgStr}</div>` : ''}
 <p class="n">${l.name}</p>
-<p class="d">Talle: ${l.size}</p>
-<p class="pr">$${fmtPrice(l.price)}</p>
+<p class="d">T.${l.size} · $${fmtPrice(l.price)}</p>
 <p class="siva">s/IVA: $${p2}</p>
 </div>`
   }).join('')
@@ -142,14 +141,14 @@ ${svgStr ? `<div class="bc">${svgStr}</div>` : ''}
 <style>
 @page{size:62mm 29mm;margin:1.5mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif}
-.e{width:59mm;height:26mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-after:always;overflow:hidden;gap:0}
-.bc{max-width:55mm;width:55mm;display:flex;justify-content:center;overflow:hidden}
-.bc svg{width:55mm !important;height:auto !important;max-height:17mm}
-.n{font-size:11pt;font-weight:bold;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58mm}
-.d{font-size:10pt;line-height:1.1}
-.pr{font-size:12pt;font-weight:bold;line-height:1.15}
-.siva{font-size:10pt;color:#333;line-height:1.1}
+body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:Arial,sans-serif}
+.e{width:59mm;height:26mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-after:always;overflow:hidden;gap:0.4mm}
+/* width:auto conserva el ancho de módulo (igual que A4) → barras nítidas. NO forzar width. */
+.bc{max-width:57mm;margin:0 auto;display:flex;justify-content:center;overflow:hidden}
+.bc svg{height:13mm !important;width:auto !important;max-width:57mm}
+.n{font-size:9pt;font-weight:bold;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58mm}
+.d{font-size:9pt;font-weight:bold;line-height:1.15}
+.siva{font-size:7pt;color:#333;line-height:1.1}
 </style></head><body>
 ${divs}
 <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),900)}<\/script>
