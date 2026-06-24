@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
-  AreaChart, Area,
+  AreaChart, Area, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp } from 'lucide-react'
@@ -166,12 +166,14 @@ function ChannelSalesCard() {
           </div>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} layout="vertical" margin={{ left: 6, right: 18 }}>
+              <BarChart data={data} layout="vertical" margin={{ left: 6, right: 78 }}>
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} width={84} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={26}>
                   {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                  <LabelList dataKey="value" position="right" formatter={(v) => formatCurrency(v)}
+                    style={{ fill: '#e5e7eb', fontSize: 11, fontWeight: 600 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -773,8 +775,12 @@ export default function Dashboard() {
               <DollarSign size={14} className="text-accent" /> Rentabilidad real del mes
             </h3>
             <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Ventas del mes</span>
+                <span className="font-semibold tabular-nums text-zinc-300">{formatCurrency(monthlyProfit.monthlySales)}</span>
+              </div>
               {[
-                { label: 'Ventas del mes', value: monthlyProfit.monthlySales, color: 'text-green-400' },
+                { label: 'Ganancia bruta', value: monthlyProfit.grossProfit, color: 'text-green-400' },
                 { label: 'Gastos variables', value: -monthlyProfit.monthlyExpenses, color: 'text-red-400' },
                 { label: 'Gastos fijos', value: -monthlyProfit.fixedCostsTotal, color: 'text-amber-400' },
               ].map(({ label, value, color }) => (
@@ -787,6 +793,12 @@ export default function Dashboard() {
                 <span className="text-sm font-medium text-white">Ganancia neta</span>
                 <span className={`text-base font-bold tabular-nums ${monthlyProfit.realProfit >= 0 ? 'text-accent' : 'text-red-400'}`}>
                   {formatCurrency(monthlyProfit.realProfit)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-600">Margen sobre ventas</span>
+                <span className={`font-semibold tabular-nums ${monthlyProfit.margin >= 0 ? 'text-accent/80' : 'text-red-400'}`}>
+                  {monthlyProfit.margin.toFixed(1)}%
                 </span>
               </div>
             </div>

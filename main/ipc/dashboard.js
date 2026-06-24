@@ -177,6 +177,17 @@ ipcMain.handle('dashboard:monthlyProfit', () => {
     FROM sales WHERE voided=0
       AND strftime('%Y-%m', created_at,'localtime') = strftime('%Y-%m','now','localtime')
   `).get()
+  // Ganancia bruta real = Σ (precio_venta - precio_costo) × cantidad por item.
+  // Se excluyen los items sin costo cargado (unit_cost 0 o NULL): no se puede
+  // saber su ganancia, así que no aportan ni al numerador ni al margen.
+  const grossProfit = db.prepare(`
+    SELECT COALESCE(SUM((si.unit_price - si.unit_cost) * si.quantity),0) as total,
+           COALESCE(SUM(si.unit_price * si.quantity),0) as revenueWithCost
+    FROM sale_items si JOIN sales s ON s.id=si.sale_id
+    WHERE s.voided=0
+      AND si.unit_cost IS NOT NULL AND si.unit_cost > 0
+      AND strftime('%Y-%m', s.created_at,'localtime') = strftime('%Y-%m','now','localtime')
+  `).get()
   const monthlyExpenses = db.prepare(`
     SELECT COALESCE(SUM(amount),0) as total
     FROM expenses
@@ -197,12 +208,18 @@ ipcMain.handle('dashboard:monthlyProfit', () => {
   const projected = monthlySales.total + (avgDaily.avg * daysLeft)
   const monthlyGoalSetting = db.prepare("SELECT value FROM settings WHERE key='monthly_goal'").get()
   const monthlyGoal = parseFloat(monthlyGoalSetting?.value || '0')
+  // Ganancia neta = ganancia bruta − gastos variables − gastos fijos del mes.
+  const realProfit = grossProfit.total - monthlyExpenses.total - fixedCostsTotal.total
+  // Margen % = ganancia neta / ventas totales × 100.
+  const margin = monthlySales.total > 0 ? (realProfit / monthlySales.total) * 100 : 0
   return {
     monthlySales: monthlySales.total,
     monthlyCount: monthlySales.count,
+    grossProfit: grossProfit.total,
     monthlyExpenses: monthlyExpenses.total,
     fixedCostsTotal: fixedCostsTotal.total,
-    realProfit: monthlySales.total - monthlyExpenses.total - fixedCostsTotal.total,
+    realProfit,
+    margin,
     projected,
     monthlyGoal,
     dayOfMonth,

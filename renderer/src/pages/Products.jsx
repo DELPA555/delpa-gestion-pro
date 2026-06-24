@@ -95,6 +95,35 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
   const field = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const barcodeRef = useBarcodePreview(form.barcode)
 
+  // ── Calculadora de precio desde ganancia deseada ────────────────────────────
+  // El % de ganancia NO se guarda en la DB: vive solo en el estado del formulario.
+  const round2 = (n) => Math.round(n * 100) / 100
+  const markupFromCostPrice = (cost, price) =>
+    (cost > 0 && price > 0) ? String(Math.round((price - cost) / cost * 100)) : ''
+  const [markup, setMarkup] = useState(() => markupFromCostPrice(Number(form.cost), Number(form.price)))
+
+  const onMarkupChange = (v) => {
+    setMarkup(v)
+    const cost = Number(form.cost), m = Number(v)
+    if (cost > 0 && v !== '' && !isNaN(m)) field('price', String(round2(cost * (1 + m / 100))))
+  }
+  const onCostChange = (v) => {
+    field('cost', v)
+    const cost = Number(v), m = Number(markup)
+    if (cost > 0 && markup !== '' && !isNaN(m)) {
+      // hay un % objetivo cargado → recalcular el precio con el nuevo costo
+      field('price', String(round2(cost * (1 + m / 100))))
+    } else {
+      // sin % objetivo → derivar el % desde el precio actual
+      setMarkup(markupFromCostPrice(cost, Number(form.price)))
+    }
+  }
+  const onPriceChange = (v) => {
+    field('price', v)
+    setMarkup(markupFromCostPrice(Number(form.cost), Number(v)))
+  }
+  const gananciaUnidad = Number(form.price) - Number(form.cost)
+
   const handleImage = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -181,16 +210,21 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div>
           <label className={labelCls}>Costo $</label>
           <input type="number" min="0" step="0.01" className={inputCls} value={form.cost}
-            onChange={e => field('cost', e.target.value)} placeholder="0,00" />
+            onChange={e => onCostChange(e.target.value)} placeholder="0,00" />
+        </div>
+        <div>
+          <label className={labelCls}>Ganancia deseada %</label>
+          <input type="number" min="0" step="1" className={inputCls} value={markup}
+            onChange={e => onMarkupChange(e.target.value)} placeholder="Ej: 80" />
         </div>
         <div>
           <label className={labelCls}>Precio venta $</label>
           <input type="number" min="0" step="0.01" className={`${inputCls} border-accent/40`} value={form.price}
-            onChange={e => field('price', e.target.value)} placeholder="0,00" />
+            onChange={e => onPriceChange(e.target.value)} placeholder="0,00" />
         </div>
         <div>
           <label className={labelCls}>Stock mínimo global</label>
@@ -199,12 +233,14 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         </div>
       </div>
 
-      {form.cost > 0 && form.price > 0 && (
+      {Number(form.cost) > 0 && Number(form.price) > 0 && (
         <div className="text-xs text-zinc-500 bg-[#0a0a0a] rounded-lg px-3 py-2">
-          Margen: <span className="text-green-400 font-semibold">
-            {(((Number(form.price) - Number(form.cost)) / Number(form.cost)) * 100).toFixed(1)}%
+          Ganancia: <span className={`font-semibold ${gananciaUnidad >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {formatCurrency(gananciaUnidad)}
           </span>
-          {' · '}Ganancia por unidad: <span className="text-green-400 font-semibold">{formatCurrency(Number(form.price) - Number(form.cost))}</span>
+          {' '}por unidad <span className={gananciaUnidad >= 0 ? 'text-green-400' : 'text-red-400'}>
+            ({((gananciaUnidad / Number(form.cost)) * 100).toFixed(0)}%)
+          </span>
         </div>
       )}
 

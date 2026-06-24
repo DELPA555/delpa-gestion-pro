@@ -1,4 +1,16 @@
 {
+  "v1.6.0": {
+    "fecha": "2026-06-24",
+    "mejoras": [
+      "Productos: nueva calculadora de precio — cargás la 'Ganancia deseada %' y el precio de venta se completa solo (costo × (1 + %/100)); si cambiás el precio a mano, el % se recalcula automáticamente",
+      "El formulario muestra en tiempo real la ganancia por unidad y el % sobre el costo",
+      "Dashboard: el gráfico 'Ventas por canal' ahora muestra los montos sobre las barras, legibles en modo oscuro"
+    ],
+    "correcciones": [
+      "Dashboard: la 'Rentabilidad real del mes' ahora calcula la ganancia correctamente usando (precio − costo) × cantidad de cada item vendido, en lugar de tomar el total de ventas como ganancia",
+      "Se agregó el margen sobre ventas y los items sin costo cargado ya no inflan la ganancia (se excluyen del cálculo)"
+    ]
+  },
   "v1.5.0": {
     "fecha": "2026-06-24",
     "mejoras": [
