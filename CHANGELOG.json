@@ -1,4 +1,10 @@
 {
+  "v1.6.3": {
+    "fecha": "2026-06-24",
+    "correcciones": [
+      "Mercado Pago: corregida la creación de sucursal — se quitó un campo de país que la API rechazaba (causa del error HTTP 400). Ahora la sucursal y el punto de venta se crean correctamente"
+    ]
+  },
   "v1.6.2": {
     "fecha": "2026-06-24",
     "correcciones": [

@@ -203,12 +203,14 @@ ipcMain.handle('mp:createPos', async (_, { posName, storeId: manualStoreId } = {
       const storeBody = {
         name: posName || 'Mi Local',
         external_id: STORE_EXTERNAL_ID,
+        // NOTA: la API de sucursales de MP NO acepta `country` dentro de location;
+        // incluirlo devuelve HTTP 400. Campos válidos: street_number, street_name,
+        // city_name, state_name, latitude, longitude, reference.
         location: {
           street_number: '1',
           street_name: 'General Paz',
           city_name: 'Mar del Plata',
           state_name: 'Buenos Aires',
-          country: 'AR',
           latitude: -38.0023,
           longitude: -57.5575,
           reference: 'Local',
