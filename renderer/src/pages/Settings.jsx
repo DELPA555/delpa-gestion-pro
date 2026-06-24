@@ -243,6 +243,7 @@ export default function Settings() {
   const [mpQrPdfUrl, setMpQrPdfUrl] = useState(null)
   const [mpPosExternalId, setMpPosExternalId] = useState('')
   const [mpSavingExternalId, setMpSavingExternalId] = useState(false)
+  const [mpLinking, setMpLinking] = useState(false)
 
   // Tienda Nube
   const [tnStatus, setTnStatus] = useState({ connected: false })
@@ -1397,15 +1398,19 @@ export default function Settings() {
                       onClick={async () => {
                         setMpSavingExternalId(true)
                         try {
-                          await api.mp.saveConfig({ posExternalId: mpPosExternalId.trim() })
-                          setMpPosData(prev => ({ ...prev, external_id: mpPosExternalId.trim() }))
-                          toast.success('External ID guardado')
+                          // Verifica el token y persiste user_id, pos_id y el QR del POS
+                          const res = await api.mp.linkExistingPos({ posExternalId: mpPosExternalId.trim() })
+                          if (!res.ok) return toast.error(res.error || 'No se pudo vincular el POS')
+                          setMpPosData(res)
+                          if (res.qr_image) setMpQrImageUrl(res.qr_image)
+                          if (res.qr_pdf)   setMpQrPdfUrl(res.qr_pdf)
+                          toast.success('Punto de venta vinculado y verificado')
                         } catch (e) { toast.error(e.message || 'Error') }
                         finally { setMpSavingExternalId(false) }
                       }}
                       className="no-drag btn-primary px-4 py-2 rounded-lg text-sm whitespace-nowrap disabled:opacity-50"
                     >
-                      {mpSavingExternalId ? 'Guardando…' : 'Guardar'}
+                      {mpSavingExternalId ? 'Verificando…' : 'Guardar y verificar'}
                     </button>
                   </div>
                   <p className="text-xs text-zinc-600 mt-1">Debe coincidir exactamente con el External ID del POS en tu cuenta de Mercado Pago.</p>
@@ -1498,6 +1503,37 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
                   {mpCreatingPos ? 'Configurando... (puede tardar unos segundos)' : 'Configurar punto de venta'}
                 </button>
                 {!mpToken && <p className="text-xs text-amber-500">Guardá el Access Token antes de continuar.</p>}
+
+                {/* Alternativa: vincular un POS ya existente en la cuenta MP */}
+                <div className="border-t border-border pt-3 mt-1 space-y-2">
+                  <p className="text-xs text-zinc-500">¿Ya tenés un punto de venta creado en Mercado Pago? Vinculalo por su External ID (no crea uno nuevo).</p>
+                  <div className="flex gap-2">
+                    <input
+                      className={`${inputCls} font-mono`}
+                      value={mpPosExternalId}
+                      onChange={e => setMpPosExternalId(e.target.value)}
+                      placeholder="petalogestion"
+                    />
+                    <button
+                      disabled={mpLinking || !mpToken || !mpPosExternalId.trim()}
+                      onClick={async () => {
+                        setMpLinking(true)
+                        try {
+                          const res = await api.mp.linkExistingPos({ posExternalId: mpPosExternalId.trim() })
+                          if (!res.ok) return toast.error(res.error || 'No se pudo vincular el POS')
+                          setMpPosData(res)
+                          if (res.qr_image) setMpQrImageUrl(res.qr_image)
+                          if (res.qr_pdf)   setMpQrPdfUrl(res.qr_pdf)
+                          toast.success('Punto de venta vinculado correctamente')
+                        } catch (e) { toast.error(e.message || 'Error') }
+                        finally { setMpLinking(false) }
+                      }}
+                      className="no-drag flex items-center gap-2 px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors whitespace-nowrap disabled:opacity-40"
+                    >
+                      {mpLinking ? 'Vinculando…' : 'Vincular POS existente'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

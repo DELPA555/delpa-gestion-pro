@@ -1,4 +1,15 @@
 {
+  "v1.6.1": {
+    "fecha": "2026-06-24",
+    "mejoras": [
+      "Mercado Pago QR: nuevo botón 'Vincular POS existente' en Configuración — conecta un punto de venta ya creado en tu cuenta por su External ID, sin crear uno nuevo",
+      "El botón del External ID ahora es 'Guardar y verificar': comprueba el token y el POS contra Mercado Pago y guarda el QR automáticamente"
+    ],
+    "correcciones": [
+      "Mercado Pago: se eliminaron datos de punto de venta fijos en el código; ahora las credenciales (token, usuario, POS) se guardan correctamente en la configuración",
+      "Se dejó de registrar información del token en los logs al cobrar con QR"
+    ]
+  },
   "v1.6.0": {
     "fecha": "2026-06-24",
     "mejoras": [

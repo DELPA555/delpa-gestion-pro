@@ -54,7 +54,7 @@ const CHANNELS = [
   'senas:withdraw', 'senas:cancel', 'senas:checkExpired',
   'sellers:list', 'sellers:add', 'sellers:update', 'sellers:delete',
   'mp:getConfig', 'mp:saveConfig', 'mp:testConnection', 'mp:checkPayment',
-  'mp:createPos', 'mp:getPos', 'mp:createOrder', 'mp:pollOrder', 'mp:cancelOrder',
+  'mp:createPos', 'mp:linkExistingPos', 'mp:getPos', 'mp:createOrder', 'mp:pollOrder', 'mp:cancelOrder',
   'stockentry:list', 'stockentry:get', 'stockentry:create',
   'supplierorders:list', 'supplierorders:get', 'supplierorders:create', 'supplierorders:update',
   'supplierorders:delete', 'supplierorders:convertToEntry', 'supplierorders:lowStock',

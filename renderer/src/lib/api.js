@@ -160,6 +160,7 @@ export const api = {
     testConnection:(d)       => inv('mp:testConnection', d),
     checkPayment:  (d)       => inv('mp:checkPayment', d),
     createPos:     (d)       => inv('mp:createPos', d),
+    linkExistingPos:(d)      => inv('mp:linkExistingPos', d),
     getPos:        ()        => inv('mp:getPos'),
     createOrder:   (d)       => inv('mp:createOrder', d),
     pollOrder:     (d)       => inv('mp:pollOrder', d),

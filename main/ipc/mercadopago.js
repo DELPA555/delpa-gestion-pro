@@ -74,11 +74,66 @@ ipcMain.handle('mp:getConfig', () => {
   return { configured: !!cfg.token, ...cfg }
 })
 
-ipcMain.handle('mp:saveConfig', (_, { token, sandbox, posExternalId } = {}) => {
+ipcMain.handle('mp:saveConfig', (_, { token, sandbox, posExternalId, userId, posId } = {}) => {
   if (token          !== undefined) setSetting('mp_access_token',    token || '')
   if (sandbox        !== undefined) setSetting('mp_sandbox',         sandbox ? '1' : '0')
-  if (posExternalId  !== undefined && posExternalId.trim()) setSetting('mp_pos_external_id', posExternalId.trim())
+  if (posExternalId  !== undefined && String(posExternalId).trim()) setSetting('mp_pos_external_id', String(posExternalId).trim())
+  if (userId         !== undefined && String(userId).trim())        setSetting('mp_user_id',         String(userId).trim())
+  if (posId          !== undefined && String(posId).trim())         setSetting('mp_pos_id',          String(posId).trim())
   return { ok: true }
+})
+
+// ─── mp:linkExistingPos — vincula un POS ya creado (sin crear uno nuevo) ──────
+// Verifica el token con /users/me y busca el POS por su external_id, persistiendo
+// user_id, pos_id y los datos del QR en settings. Es la forma "limpia" de
+// configurar credenciales cuando el POS ya existe en la cuenta de Mercado Pago.
+ipcMain.handle('mp:linkExistingPos', async (_, { posExternalId } = {}) => {
+  try {
+    const token = getToken()
+    if (!token) return { ok: false, error: 'Configurá el Access Token primero' }
+    const externalId = (posExternalId || getSetting('mp_pos_external_id') || POS_EXTERNAL_ID).trim()
+
+    // PASO 1: verificar token + obtener user_id
+    const meRes = await mpRequest('GET', '/users/me', null, token)
+    if (!meRes.body?.id) {
+      return { ok: false, error: `Token inválido o sin permisos: ${meRes.body?.message || meRes.body?.error || 'HTTP ' + meRes.status}` }
+    }
+    const userId = meRes.body.id
+    setSetting('mp_user_id', String(userId))
+
+    // PASO 2: buscar el POS por external_id
+    const listRes = await mpRequest('GET', `/pos?external_id=${encodeURIComponent(externalId)}`, null, token)
+    const results = listRes.body?.results || (Array.isArray(listRes.body) ? listRes.body : [])
+    const pos = results.find(p => p.external_id === externalId) || results[0]
+    if (!pos?.id) {
+      return { ok: false, error: `No se encontró un POS con External ID "${externalId}" en esta cuenta. Verificá el External ID o creá el punto de venta.` }
+    }
+
+    const qrImage = pos.qr?.image || ''
+    const qrPdf   = pos.qr?.template_document || ''
+    const qrData  = pos.qr?.qr_data || ''
+
+    setSetting('mp_pos_external_id', externalId)
+    setSetting('mp_pos_id',          String(pos.id))
+    setSetting('mp_pos_name',        pos.name || 'Caja principal')
+    setSetting('mp_qr_data',         qrData)
+    setSetting('mp_qr_image',        qrImage)
+    setSetting('mp_qr_pdf',          qrPdf)
+
+    return {
+      ok: true,
+      user_id:     String(userId),
+      pos_id:      String(pos.id),
+      external_id: externalId,
+      pos_name:    pos.name || 'Caja principal',
+      qr_image:    qrImage,
+      qr_pdf:      qrPdf,
+      qr_data:     qrData,
+    }
+  } catch (e) {
+    console.error('[MP] linkExistingPos exception:', e.message)
+    return { ok: false, error: e.message }
+  }
 })
 
 ipcMain.handle('mp:testConnection', async (_, { token } = {}) => {
@@ -240,41 +295,14 @@ ipcMain.handle('mp:getPos', () => getPosConfig())
 
 ipcMain.handle('mp:createOrder', async (_, { amount, externalReference }) => {
   try {
-    let cfg = getPosConfig()
+    const cfg = getPosConfig()
     if (!cfg.token) return { ok: false, error: 'Access Token no configurado' }
 
-    // Pre-seed: si el external_id está vacío o es el viejo default incorrecto, corregirlo
-    const BAD_DEFAULTS = ['', 'DELPACAJA1', 'DELPA1']
-    if (BAD_DEFAULTS.includes(cfg.external_id)) {
-      setSetting('mp_pos_external_id', POS_EXTERNAL_ID)
-      setSetting('mp_pos_id',          '132581975')
-      setSetting('mp_user_id',         '3429544372')
-      cfg = getPosConfig()
-    }
-
     const posExternalId = cfg.external_id || POS_EXTERNAL_ID
+    if (!posExternalId) return { ok: false, error: 'Punto de venta no configurado (External ID)' }
+
     const tokenEnv = cfg.token.startsWith('TEST-') ? 'SANDBOX' : cfg.token.startsWith('APP_USR-') ? 'PRODUCCIÓN' : 'DESCONOCIDO'
-
-    console.log('=== MP CREATE ORDER ===')
-    console.log('token env:       ', tokenEnv)
-    console.log('token (primeros 20):', cfg.token.slice(0, 20) + '...')
-    console.log('user_id:         ', cfg.user_id || '(no guardado)')
-    console.log('pos_id:          ', cfg.pos_id  || '(no guardado)')
-    console.log('external_pos_id: ', posExternalId)
-    console.log('monto:           ', amount)
-
-    // ── DEBUG: verificar usuario ─────────────────────────────────────────────
-    console.log('\n[MP DEBUG] GET /users/me')
-    const meRes = await mpRequest('GET', '/users/me', null, cfg.token)
-    console.log('[MP DEBUG] /users/me → HTTP', meRes.status)
-    console.log('[MP DEBUG] /users/me body:', JSON.stringify(meRes.body, null, 2))
-
-    // ── DEBUG: verificar que el POS existe ───────────────────────────────────
-    const posId = cfg.pos_id || '132581975'
-    console.log(`\n[MP DEBUG] GET /pos/${posId}`)
-    const posRes = await mpRequest('GET', `/pos/${posId}`, null, cfg.token)
-    console.log(`[MP DEBUG] /pos/${posId} → HTTP`, posRes.status)
-    console.log(`[MP DEBUG] /pos/${posId} body:`, JSON.stringify(posRes.body, null, 2))
+    console.log(`[MP] createOrder → env:${tokenEnv} pos:${posExternalId} monto:${amount}`)
 
     const amountStr = Number(amount).toFixed(2)
     const ref       = externalReference || `DELPA-${Date.now()}`
@@ -303,17 +331,9 @@ ipcMain.handle('mp:createOrder', async (_, { amount, externalReference }) => {
       }],
     }
 
-    console.log('\n[MP] POST https://api.mercadopago.com/v1/orders')
-    console.log('[MP] X-Idempotency-Key:', idempotencyKey)
-    console.log('[MP] Body:', JSON.stringify(body, null, 2))
-
     const res = await mpRequest('POST', '/v1/orders', body, cfg.token, {
       'X-Idempotency-Key': idempotencyKey,
     })
-
-    console.log('\n[MP] POST /v1/orders → HTTP', res.status)
-    console.log('[MP] Response completa:', JSON.stringify(res.body, null, 2))
-    console.log('=== FIN MP CREATE ORDER ===\n')
 
     if (res.status === 200 || res.status === 201) {
       const orderId = res.body.id || res.body.order_id
