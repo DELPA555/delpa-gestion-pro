@@ -39,6 +39,7 @@ const NAV_VENDEDOR = [
   { to: '/ventas',   label: 'Ventas',   Icon: ShoppingCart },
   { to: '/clientes', label: 'Clientes', Icon: Users },
   { to: '/caja',     label: 'Caja',     Icon: Wallet },
+  { to: '/gastos',   label: 'Gastos',   Icon: Receipt },
   { to: '/pedidos',  label: 'Pedidos',  Icon: ClipboardList },
   { to: '/senas',    label: 'Señas',    Icon: HandCoins },
 ]
@@ -141,7 +142,7 @@ export default function Sidebar() {
         >
           <LogOut size={11} /> Cerrar sesión
         </button>
-        <div className="text-[10px] text-zinc-700">v1.2.6 · DELPA</div>
+        <div className="text-[10px] text-zinc-700">v1.5.0 · DELPA</div>
       </div>
     </aside>
   )

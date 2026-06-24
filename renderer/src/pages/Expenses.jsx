@@ -9,11 +9,14 @@ import Pagination from '@/components/shared/Pagination'
 import PageHeader from '@/components/shared/PageHeader'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
+import { useAuth } from '@/context/AuthContext'
 
 const CATEGORIES = ['Alquiler','Servicios','Sueldos','Flete','Bolsas/Empaques','Marketing','Impuestos','Limpieza','Mantenimiento','General','Otro']
 const METHODS = ['Efectivo','Transferencia','Mercado Pago','Tarjeta','Otro']
 
 export default function Expenses() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [data, setData] = useState({ expenses: [], total: 0, pages: 1 })
   const [page, setPage] = useState(1)
   const [from, setFrom] = useState('')
@@ -61,16 +64,18 @@ export default function Expenses() {
       exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}
       className="p-6"
     >
-      <PageHeader title="Gastos" subtitle={data.total > 0 ? `Total: ${formatCurrency(totalExpenses)}` : `${data.total} gastos`}
+      <PageHeader title={isAdmin ? 'Gastos' : 'Gastos de hoy'} subtitle={data.total > 0 ? `Total: ${formatCurrency(totalExpenses)}` : `${data.total} gastos`}
         actions={<button onClick={() => setModal(true)} className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg"><Plus size={15} /> Nuevo gasto</button>} />
 
-      <div className="flex gap-3 mb-4">
-        <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }}
-          className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-white outline-none no-drag" />
-        <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1) }}
-          className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-white outline-none no-drag" />
-        {(from || to) && <button onClick={() => { setFrom(''); setTo(''); setPage(1) }} className="text-zinc-500 hover:text-white p-2"><X size={14} /></button>}
-      </div>
+      {isAdmin && (
+        <div className="flex gap-3 mb-4">
+          <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }}
+            className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-white outline-none no-drag" />
+          <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1) }}
+            className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-white outline-none no-drag" />
+          {(from || to) && <button onClick={() => { setFrom(''); setTo(''); setPage(1) }} className="text-zinc-500 hover:text-white p-2"><X size={14} /></button>}
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"
@@ -87,7 +92,9 @@ export default function Expenses() {
                 <span className="text-zinc-400">{e.category}</span>
                 <span className="text-zinc-400">{e.payment_method}</span>
                 <span className="text-right text-white font-medium tabular-nums">{formatCurrency(e.amount)}</span>
-                <button onClick={() => remove(e.id, e.concept)} className="p-1.5 text-zinc-600 hover:text-red-400 rounded ml-2"><Trash2 size={13} /></button>
+                {isAdmin
+                  ? <button onClick={() => remove(e.id, e.concept)} className="p-1.5 text-zinc-600 hover:text-red-400 rounded ml-2"><Trash2 size={13} /></button>
+                  : <span className="ml-2" />}
               </div>
             ))}
         </div>

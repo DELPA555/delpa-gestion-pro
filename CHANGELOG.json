@@ -1,4 +1,13 @@
 {
+  "v1.5.0": {
+    "fecha": "2026-06-24",
+    "mejoras": [
+      "Las vendedoras ahora pueden registrar gastos durante su turno desde el nuevo acceso 'Gastos' en el menú",
+      "La vendedora ve únicamente los gastos del día de hoy y puede cargar nuevos (concepto, monto, categoría y medio de pago)",
+      "Cada gasto que carga la vendedora queda asociado automáticamente a la caja abierta de su turno",
+      "Por seguridad, solo el dueño/admin puede eliminar gastos y consultar gastos de días anteriores"
+    ]
+  },
   "v1.2.6": {
     "fecha": "2026-06-11",
     "correcciones": [

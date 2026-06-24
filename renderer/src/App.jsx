@@ -53,7 +53,7 @@ class PageErrorBoundary extends Component {
   }
 }
 
-const VENDEDOR_ROUTES = ['/ventas', '/clientes', '/caja', '/pedidos', '/senas']
+const VENDEDOR_ROUTES = ['/ventas', '/clientes', '/caja', '/pedidos', '/senas', '/gastos']
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutos
 
 function AnimatedRoutes() {
@@ -70,13 +70,13 @@ function AnimatedRoutes() {
         <Route path="/caja"         element={<PageErrorBoundary><CashBox /></PageErrorBoundary>} />
         <Route path="/pedidos"      element={<PageErrorBoundary><Orders /></PageErrorBoundary>} />
         <Route path="/senas"        element={<PageErrorBoundary><Senas /></PageErrorBoundary>} />
+        <Route path="/gastos"       element={<PageErrorBoundary><Expenses /></PageErrorBoundary>} />
         {isAdmin && <>
           <Route path="/dashboard"    element={<PageErrorBoundary><Dashboard /></PageErrorBoundary>} />
           <Route path="/productos"    element={<PageErrorBoundary><Products /></PageErrorBoundary>} />
           <Route path="/cuentas"      element={<PageErrorBoundary><Accounts /></PageErrorBoundary>} />
           <Route path="/proveedores"  element={<PageErrorBoundary><Suppliers /></PageErrorBoundary>} />
           <Route path="/compras"      element={<PageErrorBoundary><Purchases /></PageErrorBoundary>} />
-          <Route path="/gastos"       element={<PageErrorBoundary><Expenses /></PageErrorBoundary>} />
           <Route path="/reportes"     element={<PageErrorBoundary><Reports /></PageErrorBoundary>} />
           <Route path="/facturacion"  element={<PageErrorBoundary><Invoices /></PageErrorBoundary>} />
           <Route path="/auditoria"    element={<PageErrorBoundary><Audit /></PageErrorBoundary>} />
