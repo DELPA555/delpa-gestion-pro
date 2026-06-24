@@ -1,4 +1,10 @@
 {
+  "v1.6.4": {
+    "fecha": "2026-06-24",
+    "correcciones": [
+      "Mercado Pago: si la sucursal o el punto de venta ya existían en tu cuenta, ahora se reutilizan automáticamente en lugar de dar error (Mercado Pago los reportaba como 'ya asignado' y la configuración fallaba)"
+    ]
+  },
   "v1.6.3": {
     "fecha": "2026-06-24",
     "correcciones": [

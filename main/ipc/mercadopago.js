@@ -231,25 +231,37 @@ ipcMain.handle('mp:createPos', async (_, { posName, storeId: manualStoreId } = {
       if (storeRes.body.id) {
         storeId = storeRes.body.id
         console.log('[MP] store creada — id:', storeId)
-      } else if (storeRes.status === 409) {
-        // Store already exists — fetch and use the first one matching our external_id
-        console.log('[MP] PASO 2 → store ya existe (409), buscando con GET /users/' + userId + '/stores')
-        const listRes = await mpRequest('GET', `/users/${userId}/stores`, null, token)
-        const stores = listRes.body.data || listRes.body.results || listRes.body.stores || []
-        const match = stores.find(s => s.external_id === STORE_EXTERNAL_ID) || stores[0]
-        if (!match?.id) {
-          return { ok: false, error: `Sucursal ya existe pero no se pudo obtener. Respuesta: ${JSON.stringify(listRes.body).slice(0, 200)}` }
-        }
-        storeId = match.id
-        if (match.external_id) storeExternalId = match.external_id
-        console.log('[MP] store existente encontrada — id:', storeId)
       } else {
-        // Log COMPLETO del error de MP — trae el campo exacto que falló.
-        console.error('[MP] Error crear sucursal — HTTP', storeRes.status)
-        console.error('[MP] Error crear sucursal (body completo):', JSON.stringify(storeRes.body, null, 2))
-        return {
-          ok: false,
-          error: `Error al crear sucursal (HTTP ${storeRes.status}): ${mpErrorMessage(storeRes.body)}`,
+        // La sucursal no se creó. Caso más común: ya existe con ese external_id.
+        // MP lo reporta como 409, o como 400 con "external id ... is already
+        // assigned to user ...". En cualquiera de esos casos la reutilizamos.
+        const errText = JSON.stringify(storeRes.body || {}).toLowerCase()
+        const alreadyExists =
+          storeRes.status === 409 ||
+          errText.includes('already') ||
+          errText.includes('assigned') ||
+          errText.includes('exist')
+
+        if (alreadyExists) {
+          console.log('[MP] PASO 2 → la sucursal ya existe, buscando con GET /users/' + userId + '/stores')
+          const listRes = await mpRequest('GET', `/users/${userId}/stores`, null, token)
+          const stores = listRes.body.results || listRes.body.data || listRes.body.stores || []
+          const match = stores.find(s => s.external_id === STORE_EXTERNAL_ID) || stores[0]
+          if (!match?.id) {
+            console.error('[MP] sucursal ya existe pero no se pudo listar:', JSON.stringify(listRes.body, null, 2))
+            return { ok: false, error: `La sucursal "${STORE_EXTERNAL_ID}" ya existe pero no se pudo recuperar. Probá con el Store ID manual. (${mpErrorMessage(storeRes.body)})` }
+          }
+          storeId = match.id
+          if (match.external_id) storeExternalId = match.external_id
+          console.log('[MP] store existente reutilizada — id:', storeId)
+        } else {
+          // Log COMPLETO del error de MP — trae el campo exacto que falló.
+          console.error('[MP] Error crear sucursal — HTTP', storeRes.status)
+          console.error('[MP] Error crear sucursal (body completo):', JSON.stringify(storeRes.body, null, 2))
+          return {
+            ok: false,
+            error: `Error al crear sucursal (HTTP ${storeRes.status}): ${mpErrorMessage(storeRes.body)}`,
+          }
         }
       }
     }
@@ -271,12 +283,16 @@ ipcMain.handle('mp:createPos', async (_, { posName, storeId: manualStoreId } = {
     const posRes = await mpRequest('POST', '/pos', posBody, token)
     let pos
 
+    const posErrText = JSON.stringify(posRes.body || {}).toLowerCase()
+    const posAlreadyExists = posRes.status === 409 ||
+      posErrText.includes('already') || posErrText.includes('assigned') || posErrText.includes('exist')
+
     if (posRes.body.id) {
       pos = posRes.body
       console.log('[MP] POS creado — id:', pos.id)
-    } else if (posRes.status === 409) {
-      // POS already exists — fetch by external_id
-      console.log('[MP] PASO 3 → POS ya existe (409), buscando con GET /pos')
+    } else if (posAlreadyExists) {
+      // POS ya existe (MP lo reporta como 409 o como 400 "already assigned") — buscarlo
+      console.log('[MP] PASO 3 → el POS ya existe, buscando con GET /pos')
       const listRes = await mpRequest('GET', `/pos?external_id=${POS_EXTERNAL_ID}`, null, token)
       const results = listRes.body.results || listRes.body || []
       const match = Array.isArray(results)
