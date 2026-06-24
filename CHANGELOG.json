@@ -1,4 +1,10 @@
 {
+  "v1.6.5": {
+    "fecha": "2026-06-24",
+    "correcciones": [
+      "Mercado Pago: ahora sí se recupera correctamente la sucursal que ya existía en tu cuenta (se usaba un endpoint de búsqueda incorrecto). Con esto la configuración del punto de venta deja de fallar y crea el QR"
+    ]
+  },
   "v1.6.4": {
     "fecha": "2026-06-24",
     "correcciones": [

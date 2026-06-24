@@ -62,6 +62,20 @@ function mpErrorMessage(body) {
   return body.message || body.error || JSON.stringify(body)
 }
 
+// Busca una sucursal por external_id usando el endpoint correcto de MP:
+// GET /users/{user_id}/stores/search (devuelve { paging, results: [...] }).
+async function findStoreByExternalId(userId, externalId, token) {
+  // 1) filtrando por external_id
+  let res = await mpRequest('GET', `/users/${userId}/stores/search?external_id=${encodeURIComponent(externalId)}`, null, token)
+  let results = res.body?.results || []
+  let match = results.find(s => s.external_id === externalId)
+  if (match?.id) return match
+  // 2) sin filtro, traer todas y filtrar localmente (por si el filtro falla)
+  res = await mpRequest('GET', `/users/${userId}/stores/search`, null, token)
+  results = res.body?.results || []
+  return results.find(s => s.external_id === externalId) || null
+}
+
 function getPosConfig() {
   return {
     sandbox:          getSetting('mp_sandbox') === '1',
@@ -188,12 +202,10 @@ ipcMain.handle('mp:createPos', async (_, { posName, storeId: manualStoreId } = {
       // El usuario creó la sucursal en el panel de MP y pegó su Store ID.
       storeId = String(manualStoreId).trim()
       console.log('[MP] PASO 2 → usando Store ID manual:', storeId)
-      // Buscar su external_id para poder asociar el POS correctamente.
-      const listRes = await mpRequest('GET', `/users/${userId}/stores`, null, token)
-      const stores = listRes.body?.results || listRes.body?.data || listRes.body?.stores || []
-      const match = stores.find(s => String(s.id) === storeId)
-      if (match?.external_id) {
-        storeExternalId = match.external_id
+      // Obtener su external_id (GET /stores/{id}) para asociar el POS correctamente.
+      const storeGet = await mpRequest('GET', `/stores/${storeId}`, null, token)
+      if (storeGet.body?.external_id) {
+        storeExternalId = storeGet.body.external_id
       } else {
         storeExternalId = ''
         console.warn('[MP] No se encontró external_id para el Store ID manual; se omitirá external_store_id en el POS')
@@ -243,12 +255,10 @@ ipcMain.handle('mp:createPos', async (_, { posName, storeId: manualStoreId } = {
           errText.includes('exist')
 
         if (alreadyExists) {
-          console.log('[MP] PASO 2 → la sucursal ya existe, buscando con GET /users/' + userId + '/stores')
-          const listRes = await mpRequest('GET', `/users/${userId}/stores`, null, token)
-          const stores = listRes.body.results || listRes.body.data || listRes.body.stores || []
-          const match = stores.find(s => s.external_id === STORE_EXTERNAL_ID) || stores[0]
+          console.log('[MP] PASO 2 → la sucursal ya existe, buscando con GET /users/' + userId + '/stores/search')
+          const match = await findStoreByExternalId(userId, STORE_EXTERNAL_ID, token)
           if (!match?.id) {
-            console.error('[MP] sucursal ya existe pero no se pudo listar:', JSON.stringify(listRes.body, null, 2))
+            console.error('[MP] sucursal ya existe pero no se pudo recuperar por external_id', STORE_EXTERNAL_ID)
             return { ok: false, error: `La sucursal "${STORE_EXTERNAL_ID}" ya existe pero no se pudo recuperar. Probá con el Store ID manual. (${mpErrorMessage(storeRes.body)})` }
           }
           storeId = match.id
