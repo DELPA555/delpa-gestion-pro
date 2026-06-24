@@ -51,6 +51,17 @@ function setSetting(key, value) {
 
 function getToken() { return getSetting('mp_access_token') }
 
+// Extrae el mensaje de error más útil de una respuesta de error de MP.
+// Los 400 de MP suelen traer un array `cause` con el detalle por campo.
+function mpErrorMessage(body) {
+  if (!body) return 'Sin respuesta del servidor'
+  if (Array.isArray(body.cause) && body.cause.length) {
+    const causes = body.cause.map(c => c.description || c.message || JSON.stringify(c)).join(' · ')
+    return body.message ? `${body.message} — ${causes}` : causes
+  }
+  return body.message || body.error || JSON.stringify(body)
+}
+
 function getPosConfig() {
   return {
     sandbox:          getSetting('mp_sandbox') === '1',
@@ -154,7 +165,7 @@ ipcMain.handle('mp:testConnection', async (_, { token } = {}) => {
 
 // ─── mp:createPos — 3-step setup: user → store → POS ────────────────────────
 
-ipcMain.handle('mp:createPos', async (_, { posName } = {}) => {
+ipcMain.handle('mp:createPos', async (_, { posName, storeId: manualStoreId } = {}) => {
   try {
     const token = getToken()
     if (!token) return { ok: false, error: 'Configurá el Access Token primero' }
@@ -169,64 +180,90 @@ ipcMain.handle('mp:createPos', async (_, { posName } = {}) => {
     setSetting('mp_user_id', String(userId))
     console.log('[MP] user_id:', userId)
 
-    // ── PASO 2: Crear sucursal ────────────────────────────────────────────
-    const storeName = posName || 'Mi Local'
-    const storeBody = {
-      name: storeName,
-      external_id: STORE_EXTERNAL_ID,
-      location: {
-        street_number: '0',
-        street_name: 'Sin direccion',
-        city_name: 'Mar del Plata',
-        state_name: 'Buenos Aires',
-        latitude: -38.0023,
-        longitude: -57.5575,
-        reference: 'Local principal',
-      },
-      business_hours: {
-        monday:    [{ open: '09:00', close: '20:00' }],
-        tuesday:   [{ open: '09:00', close: '20:00' }],
-        wednesday: [{ open: '09:00', close: '20:00' }],
-        thursday:  [{ open: '09:00', close: '20:00' }],
-        friday:    [{ open: '09:00', close: '20:00' }],
-        saturday:  [{ open: '09:00', close: '20:00' }],
-      },
-    }
-
-    console.log('[MP] PASO 2 → POST /users/' + userId + '/stores')
-    const storeRes = await mpRequest('POST', `/users/${userId}/stores`, storeBody, token)
+    // ── PASO 2: Sucursal (store) — manual o automática ────────────────────
     let storeId
+    let storeExternalId = STORE_EXTERNAL_ID
 
-    if (storeRes.body.id) {
-      storeId = storeRes.body.id
-      console.log('[MP] store creada — id:', storeId)
-    } else if (storeRes.status === 409) {
-      // Store already exists — fetch and use the first one matching our external_id
-      console.log('[MP] PASO 2 → store ya existe (409), buscando con GET /users/' + userId + '/stores')
+    if (manualStoreId && String(manualStoreId).trim()) {
+      // El usuario creó la sucursal en el panel de MP y pegó su Store ID.
+      storeId = String(manualStoreId).trim()
+      console.log('[MP] PASO 2 → usando Store ID manual:', storeId)
+      // Buscar su external_id para poder asociar el POS correctamente.
       const listRes = await mpRequest('GET', `/users/${userId}/stores`, null, token)
-      const stores = listRes.body.data || listRes.body.results || listRes.body.stores || []
-      const match = stores.find(s => s.external_id === STORE_EXTERNAL_ID) || stores[0]
-      if (!match?.id) {
-        return { ok: false, error: `Sucursal ya existe pero no se pudo obtener. Respuesta: ${JSON.stringify(listRes.body).slice(0, 200)}` }
+      const stores = listRes.body?.results || listRes.body?.data || listRes.body?.stores || []
+      const match = stores.find(s => String(s.id) === storeId)
+      if (match?.external_id) {
+        storeExternalId = match.external_id
+      } else {
+        storeExternalId = ''
+        console.warn('[MP] No se encontró external_id para el Store ID manual; se omitirá external_store_id en el POS')
       }
-      storeId = match.id
-      console.log('[MP] store existente encontrada — id:', storeId)
     } else {
-      return { ok: false, error: `Error al crear sucursal (HTTP ${storeRes.status}): ${storeRes.body.message || storeRes.body.error || JSON.stringify(storeRes.body).slice(0, 200)}` }
+      // Creación automática de la sucursal.
+      const storeBody = {
+        name: posName || 'Mi Local',
+        external_id: STORE_EXTERNAL_ID,
+        location: {
+          street_number: '1',
+          street_name: 'General Paz',
+          city_name: 'Mar del Plata',
+          state_name: 'Buenos Aires',
+          country: 'AR',
+          latitude: -38.0023,
+          longitude: -57.5575,
+          reference: 'Local',
+        },
+        business_hours: {
+          monday:    [{ open: '08:00', close: '20:00' }],
+          tuesday:   [{ open: '08:00', close: '20:00' }],
+          wednesday: [{ open: '08:00', close: '20:00' }],
+          thursday:  [{ open: '08:00', close: '20:00' }],
+          friday:    [{ open: '08:00', close: '20:00' }],
+          saturday:  [{ open: '08:00', close: '14:00' }],
+        },
+      }
+
+      console.log('[MP] PASO 2 → POST /users/' + userId + '/stores', JSON.stringify(storeBody))
+      const storeRes = await mpRequest('POST', `/users/${userId}/stores`, storeBody, token)
+
+      if (storeRes.body.id) {
+        storeId = storeRes.body.id
+        console.log('[MP] store creada — id:', storeId)
+      } else if (storeRes.status === 409) {
+        // Store already exists — fetch and use the first one matching our external_id
+        console.log('[MP] PASO 2 → store ya existe (409), buscando con GET /users/' + userId + '/stores')
+        const listRes = await mpRequest('GET', `/users/${userId}/stores`, null, token)
+        const stores = listRes.body.data || listRes.body.results || listRes.body.stores || []
+        const match = stores.find(s => s.external_id === STORE_EXTERNAL_ID) || stores[0]
+        if (!match?.id) {
+          return { ok: false, error: `Sucursal ya existe pero no se pudo obtener. Respuesta: ${JSON.stringify(listRes.body).slice(0, 200)}` }
+        }
+        storeId = match.id
+        if (match.external_id) storeExternalId = match.external_id
+        console.log('[MP] store existente encontrada — id:', storeId)
+      } else {
+        // Log COMPLETO del error de MP — trae el campo exacto que falló.
+        console.error('[MP] Error crear sucursal — HTTP', storeRes.status)
+        console.error('[MP] Error crear sucursal (body completo):', JSON.stringify(storeRes.body, null, 2))
+        return {
+          ok: false,
+          error: `Error al crear sucursal (HTTP ${storeRes.status}): ${mpErrorMessage(storeRes.body)}`,
+        }
+      }
     }
 
     setSetting('mp_store_id', String(storeId))
-    setSetting('mp_store_external_id', STORE_EXTERNAL_ID)
+    setSetting('mp_store_external_id', storeExternalId)
 
     // ── PASO 3: Crear caja (POS) ──────────────────────────────────────────
     const posBody = {
       name: posName || 'Caja 1',
       fixed_amount: true,
       store_id: storeId,
-      external_store_id: STORE_EXTERNAL_ID,
       external_id: POS_EXTERNAL_ID,
       category: 621102,
     }
+    if (storeExternalId) posBody.external_store_id = storeExternalId
 
     console.log('[MP] PASO 3 → POST /pos', JSON.stringify(posBody))
     const posRes = await mpRequest('POST', '/pos', posBody, token)
@@ -257,7 +294,9 @@ ipcMain.handle('mp:createPos', async (_, { posName } = {}) => {
       }
       console.log('[MP] POS existente encontrado — id:', pos.id)
     } else {
-      return { ok: false, error: `Error al crear POS (HTTP ${posRes.status}): ${posRes.body.message || posRes.body.error || JSON.stringify(posRes.body).slice(0, 200)}` }
+      console.error('[MP] Error crear POS — HTTP', posRes.status)
+      console.error('[MP] Error crear POS (body completo):', JSON.stringify(posRes.body, null, 2))
+      return { ok: false, error: `Error al crear POS (HTTP ${posRes.status}): ${mpErrorMessage(posRes.body)}` }
     }
 
     const qrImage = pos.qr?.image || ''

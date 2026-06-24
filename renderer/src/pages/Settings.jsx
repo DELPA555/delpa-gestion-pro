@@ -244,6 +244,7 @@ export default function Settings() {
   const [mpPosExternalId, setMpPosExternalId] = useState('')
   const [mpSavingExternalId, setMpSavingExternalId] = useState(false)
   const [mpLinking, setMpLinking] = useState(false)
+  const [mpManualStoreId, setMpManualStoreId] = useState('')
 
   // Tienda Nube
   const [tnStatus, setTnStatus] = useState({ connected: false })
@@ -1482,12 +1483,27 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
                   />
                   <p className="text-xs text-zinc-600 mt-1">Se usará como nombre de la sucursal en Mercado Pago.</p>
                 </div>
+                <div>
+                  <label className={labelCls}>Store ID (opcional)</label>
+                  <input
+                    className={`${inputCls} font-mono`}
+                    value={mpManualStoreId}
+                    onChange={e => setMpManualStoreId(e.target.value)}
+                    placeholder="Dejalo vacío para crear la sucursal automáticamente"
+                  />
+                  <p className="text-xs text-zinc-600 mt-1">
+                    Si la creación automática falla, creá la sucursal en <span className="text-zinc-400">Mercado Pago → Tu negocio → Sucursales</span> y pegá acá su Store ID. DELPA creará solo el punto de venta (POS) sobre esa sucursal.
+                  </p>
+                </div>
                 <button
                   onClick={async () => {
                     if (!mpToken.trim()) return toast.error('Guardá el Access Token primero')
                     setMpCreatingPos(true)
                     try {
-                      const res = await api.mp.createPos({ posName: mpPosName.trim() || 'Mi Local' })
+                      const res = await api.mp.createPos({
+                        posName: mpPosName.trim() || 'Mi Local',
+                        storeId: mpManualStoreId.trim() || undefined,
+                      })
                       if (!res.ok) return toast.error(res.error || 'Error al configurar punto de venta')
                       setMpPosData(res)
                       if (res.qr_image) setMpQrImageUrl(res.qr_image)
@@ -1500,7 +1516,7 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
                   className="btn-primary no-drag flex items-center gap-2 px-4 py-2 rounded-lg text-sm disabled:opacity-40"
                 >
                   <QrCode size={14} />
-                  {mpCreatingPos ? 'Configurando... (puede tardar unos segundos)' : 'Configurar punto de venta'}
+                  {mpCreatingPos ? 'Configurando... (puede tardar unos segundos)' : (mpManualStoreId.trim() ? 'Crear POS sobre Store ID' : 'Configurar punto de venta')}
                 </button>
                 {!mpToken && <p className="text-xs text-amber-500">Guardá el Access Token antes de continuar.</p>}
 

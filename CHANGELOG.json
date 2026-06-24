@@ -1,4 +1,14 @@
 {
+  "v1.6.2": {
+    "fecha": "2026-06-24",
+    "correcciones": [
+      "Mercado Pago: corregido el error al crear la sucursal automáticamente (faltaba el país y la dirección no era válida)",
+      "Si Mercado Pago rechaza la creación, ahora se muestra el mensaje de error exacto con el campo que falló (antes aparecía cortado)"
+    ],
+    "mejoras": [
+      "Mercado Pago: nuevo campo 'Store ID' opcional — si la creación automática de la sucursal falla, podés crearla a mano en el panel de MP y pegar su ID para que DELPA solo cree el punto de venta"
+    ]
+  },
   "v1.6.1": {
     "fecha": "2026-06-24",
     "mejoras": [
