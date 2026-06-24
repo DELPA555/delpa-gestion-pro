@@ -375,10 +375,15 @@ ipcMain.handle('mp:createOrder', async (_, { amount, externalReference }) => {
     const ref       = externalReference || `DELPA-${Date.now()}`
     const idempotencyKey = crypto.randomUUID()
 
+    // Texto que ve el cliente al escanear el QR: nombre del negocio si está
+    // configurado (ej: "Pago en Petalo"), si no "Pago en comercio".
+    const bizName = getSetting('business_name')
+    const payDescription = bizName ? `Pago en ${bizName}` : 'Pago en comercio'
+
     const body = {
       type: 'qr',
       total_amount: amountStr,
-      description: 'Venta DELPA',
+      description: payDescription,
       external_reference: ref,
       expiration_time: 'PT5M',
       config: {
@@ -391,7 +396,7 @@ ipcMain.handle('mp:createOrder', async (_, { amount, externalReference }) => {
         payments: [{ amount: amountStr }],
       },
       items: [{
-        title: 'Venta en local',
+        title: payDescription,
         unit_price: amountStr,
         quantity: 1,
         unit_measure: 'unit',
