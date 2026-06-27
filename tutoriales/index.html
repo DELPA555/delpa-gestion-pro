@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tutoriales — DELPA Gestión PRO</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--pink:#E91E8C;--pink-dim:#9C1260;--pink-glow:rgba(233,30,140,0.12);--bg:#0A0A0A;--bg2:#111111;--bg3:#181818;--bg4:#222222;--text:#FFFFFF;--text2:#9CA3AF;--text3:#4B5563;--border:#252525;--green:#34D399;--yellow:#F59E0B;--blue:#60A5FA}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.6}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:14px 40px;display:flex;align-items:center;justify-content:space-between;background:rgba(10,10,10,0.95);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:#fff;text-decoration:none}
+.logo span{color:var(--pink)}
+.nav-right{display:flex;gap:16px;align-items:center}
+.nav-tag{background:var(--bg3);border:1px solid var(--border);border-radius:100px;padding:4px 14px;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.btn-wa{background:var(--pink);color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none}
+
+/* HERO */
+.hero{padding:120px 40px 60px;text-align:center;background:radial-gradient(ellipse 60% 40% at 50% 0%,rgba(233,30,140,0.07) 0%,transparent 70%)}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:100px;padding:6px 16px;font-size:12px;color:var(--text2);margin-bottom:24px;font-family:'JetBrains Mono',monospace}
+.hero h1{font-family:'Space Grotesk',sans-serif;font-size:clamp(32px,5vw,60px);font-weight:700;line-height:1.1;margin-bottom:16px;letter-spacing:-1px}
+.hero h1 em{font-style:normal;color:var(--pink)}
+.hero p{color:var(--text2);font-size:18px;max-width:560px;margin:0 auto 40px}
+.search-box{display:flex;gap:12px;max-width:500px;margin:0 auto;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:8px 16px;align-items:center}
+.search-box input{background:none;border:none;outline:none;color:var(--text);font-size:15px;width:100%;font-family:'Inter',sans-serif}
+.search-box span{color:var(--text3);font-size:18px}
+
+/* LAYOUT */
+.layout{display:grid;grid-template-columns:280px 1fr;gap:0;max-width:1400px;margin:0 auto;padding:40px;min-height:100vh}
+
+/* SIDEBAR */
+.sidebar{position:sticky;top:80px;height:calc(100vh - 100px);overflow-y:auto;padding-right:24px;border-right:1px solid var(--border)}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.sidebar-section{margin-bottom:32px}
+.sidebar-section-title{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:3px;color:var(--pink);margin-bottom:12px;padding-left:12px}
+.sidebar-link{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;text-decoration:none;color:var(--text2);font-size:13px;transition:all 0.2s;cursor:pointer;border:none;background:none;width:100%;text-align:left}
+.sidebar-link:hover{background:var(--bg3);color:var(--text)}
+.sidebar-link.active{background:rgba(233,30,140,0.1);color:var(--pink);border-left:2px solid var(--pink)}
+.sidebar-link .sl-icon{font-size:15px;flex-shrink:0}
+.sidebar-link .sl-badge{margin-left:auto;background:var(--green);color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:100px}
+.sidebar-link .sl-badge.new{background:var(--pink)}
+
+/* CONTENT */
+.content{padding-left:48px}
+
+/* MODULE */
+.module{display:none;animation:fadeIn 0.3s ease}
+.module.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.module-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--border)}
+.module-eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--pink);text-transform:uppercase;letter-spacing:3px;margin-bottom:12px}
+.module-title{font-family:'Space Grotesk',sans-serif;font-size:40px;font-weight:700;line-height:1.1;margin-bottom:16px;letter-spacing:-0.5px}
+.module-desc{color:var(--text2);font-size:17px;line-height:1.7;max-width:640px}
+.module-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.mchip{background:var(--bg3);border:1px solid var(--border);border-radius:100px;padding:4px 14px;font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+
+/* STEPS */
+.steps{display:flex;flex-direction:column;gap:32px;margin-bottom:48px}
+.step{display:grid;grid-template-columns:48px 1fr;gap:20px;align-items:start}
+.step-num{width:48px;height:48px;background:linear-gradient(135deg,var(--pink-dim),var(--pink));border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:#fff;flex-shrink:0}
+.step-body{}
+.step-title{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600;margin-bottom:8px}
+.step-desc{color:var(--text2);font-size:15px;line-height:1.7}
+.step-desc strong{color:var(--text);font-weight:600}
+
+/* SCREEN MOCK */
+.screen-mock{background:var(--bg3);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin:24px 0;box-shadow:0 20px 60px rgba(0,0,0,0.4)}
+.screen-bar{background:var(--bg4);padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.screen-dot{width:10px;height:10px;border-radius:50%}
+.screen-title{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text3);margin-left:8px}
+.screen-body{padding:24px}
+
+/* TABLES IN MOCKS */
+.mock-table{width:100%;border-collapse:collapse;font-size:13px}
+.mock-table th{background:var(--bg4);color:var(--text2);padding:8px 12px;text-align:left;font-weight:500;border-bottom:1px solid var(--border)}
+.mock-table td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+.mock-table tr:last-child td{border-bottom:none}
+.mock-table tr:hover td{background:rgba(255,255,255,0.02)}
+
+/* MOCK FORM */
+.mock-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mock-field{display:flex;flex-direction:column;gap:4px}
+.mock-field label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+.mock-field .mf-input{background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px}
+.mock-field .mf-input.pink{border-color:var(--pink);color:var(--pink)}
+.mock-btn{background:var(--pink);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px}
+.mock-btn.s{background:transparent;border:1px solid var(--border);color:var(--text2)}
+
+/* TIPS & WARNINGS */
+.tip-box{background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:16px 20px;margin:20px 0;display:flex;gap:12px;align-items:flex-start}
+.tip-box .tip-icon{font-size:20px;flex-shrink:0;margin-top:2px}
+.tip-box .tip-text{font-size:14px;color:var(--text2);line-height:1.6}
+.tip-box .tip-text strong{color:var(--green)}
+.warn-box{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:16px 20px;margin:20px 0;display:flex;gap:12px;align-items:flex-start}
+.warn-box .tip-text strong{color:var(--yellow)}
+.info-box{background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:12px;padding:16px 20px;margin:20px 0;display:flex;gap:12px;align-items:flex-start}
+.info-box .tip-text strong{color:var(--blue)}
+
+/* SECTION DIVIDER */
+.sec-divider{margin:48px 0;border:none;border-top:1px solid var(--border)}
+.sec-h2{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;margin-bottom:16px;margin-top:40px}
+.sec-h3{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600;margin-bottom:12px;margin-top:28px;color:var(--pink)}
+
+/* KEYBOARD SHORTCUTS */
+.kbd{display:inline-block;background:var(--bg4);border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text2)}
+
+/* PROGRESS BAR */
+.progress-demo{background:var(--bg4);border-radius:8px;padding:16px 20px;margin:16px 0}
+.pd-label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px}
+.pd-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.pd-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--pink-dim),var(--pink))}
+
+/* QUICK NAV */
+.quick-nav{display:flex;flex-wrap:wrap;gap:10px;margin:32px 0;padding:24px;background:var(--bg3);border:1px solid var(--border);border-radius:16px}
+.qn-title{width:100%;font-size:13px;color:var(--text2);margin-bottom:4px}
+.qn-link{background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:13px;color:var(--text2);text-decoration:none;transition:all 0.2s;cursor:pointer;border:none}
+.qn-link:hover{border-color:var(--pink);color:var(--pink);background:none}
+
+/* BADGE */
+.badge-new{background:var(--pink);color:#fff;font-size:10px;font-weight:700;padding:1px 8px;border-radius:100px;font-family:'JetBrains Mono',monospace;vertical-align:middle;margin-left:6px}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr;padding:20px}
+  .sidebar{position:static;height:auto;padding-right:0;border-right:none;border-bottom:1px solid var(--border);padding-bottom:24px;margin-bottom:32px}
+  .content{padding-left:0}
+  nav{padding:14px 20px}
+  .hero{padding:100px 20px 40px}
+  .mock-form{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="https://delpagestion.com.ar" class="logo">DELPA<span>.</span></a>
+  <div class="nav-right">
+    <span class="nav-tag">📚 Centro de ayuda</span>
+    <a href="https://wa.me/5491138574444" class="btn-wa" target="_blank">💬 Soporte</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">📚 Centro de tutoriales · DELPA Gestión PRO v1.6</div>
+  <h1>Aprendé a usar<br><em>DELPA</em> paso a paso</h1>
+  <p>Guías completas para sacarle el máximo provecho a cada módulo del sistema.</p>
+  <div class="search-box">
+    <span>🔍</span>
+    <input type="text" id="search-input" placeholder="Buscar tutorial... (ej: facturar, stock, Tienda Nube)">
+  </div>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Primeros pasos</div>
+      <button class="sidebar-link active" onclick="show('inicio')"><span class="sl-icon">🚀</span> Primeros pasos</button>
+      <button class="sidebar-link" onclick="show('configuracion')"><span class="sl-icon">⚙️</span> Configuración inicial</button>
+      <button class="sidebar-link" onclick="show('licencia')"><span class="sl-icon">🔑</span> Activar licencia</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Ventas y caja</div>
+      <button class="sidebar-link" onclick="show('ventas')"><span class="sl-icon">🏪</span> Registrar una venta</button>
+      <button class="sidebar-link" onclick="show('vuelto')"><span class="sl-icon">💵</span> Vuelto en efectivo <span class="sl-badge new">NEW</span></button>
+      <button class="sidebar-link" onclick="show('descuentos')"><span class="sl-icon">🏷️</span> Descuentos</button>
+      <button class="sidebar-link" onclick="show('mpqr')"><span class="sl-icon">💳</span> Mercado Pago QR</button>
+      <button class="sidebar-link" onclick="show('caja')"><span class="sl-icon">💼</span> Apertura y cierre de caja</button>
+      <button class="sidebar-link" onclick="show('cambios')"><span class="sl-icon">🔄</span> Cambios y devoluciones</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Stock e inventario</div>
+      <button class="sidebar-link" onclick="show('productos')"><span class="sl-icon">📦</span> Cargar productos</button>
+      <button class="sidebar-link" onclick="show('ingreso')"><span class="sl-icon">📥</span> Ingresar mercadería</button>
+      <button class="sidebar-link" onclick="show('etiquetas')"><span class="sl-icon">🏷️</span> Imprimir etiquetas</button>
+      <button class="sidebar-link" onclick="show('inventario')"><span class="sl-icon">🔍</span> Inventario físico</button>
+      <button class="sidebar-link" onclick="show('egreso')"><span class="sl-icon">📤</span> Egreso / Devolución</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Facturación y fiscal</div>
+      <button class="sidebar-link" onclick="show('afip')"><span class="sl-icon">🧾</span> Facturar con AFIP</button>
+      <button class="sidebar-link" onclick="show('fiscal')"><span class="sl-icon">📊</span> Control fiscal</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Integraciones</div>
+      <button class="sidebar-link" onclick="show('tiendanube')"><span class="sl-icon">🛍️</span> Tienda Nube</button>
+      <button class="sidebar-link" onclick="show('drive')"><span class="sl-icon">☁️</span> Google Drive</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Clientes</div>
+      <button class="sidebar-link" onclick="show('clientes')"><span class="sl-icon">👥</span> Gestión de clientes</button>
+      <button class="sidebar-link" onclick="show('fidelizacion')"><span class="sl-icon">⭐</span> Puntos y fidelización</button>
+      <button class="sidebar-link" onclick="show('consignacion')"><span class="sl-icon">🤝</span> Consignación</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">// Reportes</div>
+      <button class="sidebar-link" onclick="show('reportes')"><span class="sl-icon">📋</span> Reportes y análisis</button>
+      <button class="sidebar-link" onclick="show('dashboard')"><span class="sl-icon">📊</span> Dashboard e IA</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- INICIO -->
+    <div id="mod-inicio" class="module active">
+      <div class="module-header">
+        <div class="module-eyebrow">// primeros pasos</div>
+        <div class="module-title">Bienvenido a DELPA</div>
+        <div class="module-desc">Esta guía te va a llevar de cero a tener tu tienda funcionando al 100% en menos de una hora. Seguí los pasos en orden.</div>
+        <div class="module-chips">
+          <span class="mchip">⏱ 45 minutos</span>
+          <span class="mchip">📌 Empezar acá</span>
+        </div>
+      </div>
+
+      <div class="quick-nav">
+        <div class="qn-title">En esta guía:</div>
+        <button class="qn-link" onclick="show('configuracion')">1. Configuración inicial</button>
+        <button class="qn-link" onclick="show('licencia')">2. Activar licencia</button>
+        <button class="qn-link" onclick="show('productos')">3. Cargar productos</button>
+        <button class="qn-link" onclick="show('ventas')">4. Primera venta</button>
+        <button class="qn-link" onclick="show('caja')">5. Cerrar caja</button>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Instalá DELPA en tu PC</div>
+            <div class="step-desc">Descargá el instalador desde el link que te enviamos por WhatsApp. Hacé doble click en <strong>DELPA-Gestion-PRO-Setup.exe</strong> y seguí los pasos del instalador. Requiere <strong>Windows 10 o 11</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Activá tu licencia</div>
+            <div class="step-desc">Al abrir DELPA por primera vez tenés <strong>20 días de prueba gratis</strong>. Para activar la licencia definitiva andá a <strong>Configuración → Licencia</strong> y pegá el código que te enviamos.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Completá los datos de tu negocio</div>
+            <div class="step-desc">Andá a <strong>Configuración → Negocio</strong> y completá: nombre del local, CUIT, dirección, teléfono y logo. Estos datos aparecen en todos los tickets y facturas.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Cargá tus primeros productos</div>
+            <div class="step-desc">Andá al módulo <strong>Productos</strong> y cargá tu catálogo con nombre, categoría, precio de venta, precio de costo y talles disponibles. Podés importar desde Tienda Nube si ya tenés tienda online.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">Hacé tu primera venta de prueba</div>
+            <div class="step-desc">Andá al módulo <strong>Ventas</strong>, buscá un producto, elegí el talle y el medio de pago, y confirmá la venta. Verificá que el stock se descontó correctamente en el módulo Productos.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Consejo:</strong> Conectá Google Drive en Configuración → Pagos & Drive antes de empezar a cargar datos. Así tus backups empiezan desde el primer día.</div>
+      </div>
+    </div>
+
+    <!-- CONFIGURACION -->
+    <div id="mod-configuracion" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// primeros pasos</div>
+        <div class="module-title">Configuración inicial</div>
+        <div class="module-desc">Todo lo que tenés que configurar antes de empezar a vender.</div>
+      </div>
+      <div class="sec-h2">Datos del negocio</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Ir a Configuración → Negocio</div>
+            <div class="step-desc">Hacé click en el ícono de engranaje ⚙️ en el menú lateral izquierdo.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Completar los datos</div>
+            <div class="step-desc">Completá: <strong>Nombre del negocio</strong>, <strong>CUIT</strong> (sin guiones), <strong>Dirección</strong>, <strong>Teléfono</strong>, <strong>Email</strong> e <strong>Instagram</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Subir el logo</div>
+            <div class="step-desc">Hacé click en el botón <strong>Subir logo</strong>. El logo aparece en todos los tickets, facturas y PDFs. Tamaño recomendado: 400×200 px, fondo transparente (PNG).</div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="sec-divider">
+      <div class="sec-h2">Email para cierres de caja</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Activar verificación en 2 pasos en Gmail</div>
+            <div class="step-desc">Entrá a <strong>myaccount.google.com → Seguridad → Verificación en 2 pasos</strong> y activala si no está activa.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Crear contraseña de aplicación</div>
+            <div class="step-desc">Andá a <strong>myaccount.google.com → Seguridad → Contraseñas de aplicaciones</strong>. Elegí <strong>Otra (nombre personalizado)</strong>, escribí "DELPA" y hacé click en Generar. Copiá las 16 letras que aparecen.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Pegar en DELPA</div>
+            <div class="step-desc">En DELPA andá a <strong>Configuración → Email</strong>, ingresá tu Gmail y pegá las 16 letras en el campo <strong>Contraseña de aplicación</strong>. Hacé click en <strong>Probar envío</strong>.</div>
+          </div>
+        </div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Importante:</strong> La contraseña de aplicación son 16 letras sin espacios. Si la contraseña tiene espacios, sacáselos antes de pegarla en DELPA.</div>
+      </div>
+    </div>
+
+    <!-- LICENCIA -->
+    <div id="mod-licencia" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// primeros pasos</div>
+        <div class="module-title">Activar tu licencia</div>
+        <div class="module-desc">DELPA incluye 20 días de prueba gratis. Para activar la licencia definitiva seguí estos pasos.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Obtener tu Hardware ID</div>
+            <div class="step-desc">Andá a <strong>Configuración → Licencia</strong>. Vas a ver tu <strong>Hardware ID</strong> — es un código único de tu PC. Copialo y enviáselo a soporte por WhatsApp al <strong>+54 11 3857-4444</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Recibir el código de activación</div>
+            <div class="step-desc">En minutos te enviamos por WhatsApp un código en formato <strong>XXXXX-XXXXX-XXXXX-XXXXX</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Activar en DELPA</div>
+            <div class="step-desc">Pegá el código en el campo <strong>Código de activación</strong> y hacé click en <strong>Activar</strong>. Listo — DELPA queda activado por el período contratado.</div>
+          </div>
+        </div>
+      </div>
+      <div class="warn-box">
+        <div class="tip-icon">⚠️</div>
+        <div class="tip-text"><strong>Atención:</strong> Si reinstalás Windows o cambiás la placa madre, el Hardware ID cambia. Avisanos y te generamos un nuevo código sin costo adicional.</div>
+      </div>
+    </div>
+
+    <!-- VENTAS -->
+    <div id="mod-ventas" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// ventas y caja</div>
+        <div class="module-title">Registrar una venta</div>
+        <div class="module-desc">El flujo completo para registrar una venta en el punto de venta, desde buscar el producto hasta imprimir el ticket.</div>
+        <div class="module-chips"><span class="mchip">⏱ 5 minutos</span><span class="mchip">🔍 Barcode</span><span class="mchip">💳 Multi-pago</span></div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Abrir el módulo Ventas</div>
+            <div class="step-desc">Hacé click en <strong>Ventas</strong> en el menú lateral. Es el módulo principal del sistema.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Buscar o escanear el producto</div>
+            <div class="step-desc">Podés: <strong>Escanear el código de barras</strong> de la etiqueta con el lector USB (el producto se agrega solo), o <strong>escribir el nombre</strong> en el buscador y seleccionarlo de la lista.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Elegir talle y color</div>
+            <div class="step-desc">Si escaneaste el código de barras, el talle se selecciona automáticamente. Si buscaste por nombre, elegí el talle y color del desplegable.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Agregar más productos si corresponde</div>
+            <div class="step-desc">Repetí el proceso para cada producto. El carrito muestra el total actualizado automáticamente. Podés modificar la cantidad haciendo click en los botones + y -.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">Seleccionar medio de pago</div>
+            <div class="step-desc">Elegí: <strong>Efectivo</strong>, <strong>Transferencia</strong>, <strong>Débito</strong>, <strong>Crédito</strong> o <strong>Mercado Pago QR</strong>. Podés combinar medios de pago haciendo click en <strong>Agregar medio de pago</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <div class="step-title">Confirmar la venta</div>
+            <div class="step-desc">Hacé click en <strong>INGRESAR</strong> para ticket interno o <strong>FACTURAR</strong> para emitir factura electrónica con CAE de AFIP. Se descuenta el stock automáticamente.</div>
+          </div>
+        </div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Modo rápido:</strong> Si escaneás el mismo código dos veces seguidas, DELPA suma 1 unidad en lugar de agregar una línea nueva. Ideal para ventas con varios artículos iguales.</div>
+      </div>
+    </div>
+
+    <!-- VUELTO -->
+    <div id="mod-vuelto" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// ventas y caja</div>
+        <div class="module-title">Vuelto en efectivo <span class="badge-new">NUEVO</span></div>
+        <div class="module-desc">Cuando la clienta paga con efectivo, DELPA calcula automáticamente el vuelto que tenés que darle.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Seleccionar "Efectivo" como medio de pago</div>
+            <div class="step-desc">Al elegir <strong>Efectivo</strong> en la venta, aparece un campo adicional debajo del total.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Ingresar el monto recibido</div>
+            <div class="step-desc">En el campo <strong>"Monto recibido $"</strong> ingresá cuánto te dio la clienta. Por ejemplo, si el total es $45.000 y te dio $50.000, escribís 50000.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Ver el vuelto calculado</div>
+            <div class="step-desc">DELPA muestra automáticamente: <strong>Vuelto: $5.000</strong>. El vuelto también aparece en el ticket impreso para que la clienta lo tenga como referencia.</div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-mock">
+        <div class="screen-bar"><div class="screen-dot" style="background:#FF5F57"></div><div class="screen-dot" style="background:#FFBD2E"></div><div class="screen-dot" style="background:#28CA41"></div><div class="screen-title">DELPA — Módulo Ventas</div></div>
+        <div class="screen-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="mock-field"><label>Total de la venta</label><div class="mf-input">$45.000</div></div>
+            <div class="mock-field"><label>Medio de pago</label><div class="mf-input">💵 Efectivo</div></div>
+            <div class="mock-field"><label>Monto recibido $</label><div class="mf-input pink">$50.000</div></div>
+            <div class="mock-field"><label>Vuelto a dar</label><div class="mf-input" style="color:var(--green);border-color:var(--green);font-weight:700">$5.000 ✓</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="warn-box">
+        <div class="tip-icon">⚠️</div>
+        <div class="tip-text"><strong>Monto insuficiente:</strong> Si ingresás un monto menor al total, DELPA lo muestra en rojo y no te deja confirmar la venta hasta corregirlo.</div>
+      </div>
+    </div>
+
+    <!-- DESCUENTOS -->
+    <div id="mod-descuentos" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// ventas y caja</div>
+        <div class="module-title">Descuentos en ventas</div>
+        <div class="module-desc">Aplicá descuentos por monto fijo o por porcentaje en cualquier venta.</div>
+      </div>
+      <div class="sec-h3">Descuento por monto fijo</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">En la venta, hacer click en "Descuento"</div>
+            <div class="step-desc">Aparece el campo de descuento debajo del carrito. Hacé click en el botón <strong>$ Monto</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Ingresar el monto de descuento</div>
+            <div class="step-desc">Escribí el monto a descontar. Por ejemplo, si querés descontar $5.000, escribís 5000. El total se actualiza automáticamente.</div>
+          </div>
+        </div>
+      </div>
+      <div class="sec-h3">Descuento por porcentaje <span class="badge-new">NUEVO</span></div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Seleccionar "% Porcentaje"</div>
+            <div class="step-desc">En el campo de descuento, hacé click en el botón <strong>% Porcentaje</strong> (al lado del botón $ Monto).</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Ingresar el porcentaje</div>
+            <div class="step-desc">Escribí el porcentaje de descuento. Por ejemplo, para un 20% de descuento, escribís 20. DELPA calcula automáticamente el monto: <strong>-$9.000 (20%)</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Ver el descuento aplicado</div>
+            <div class="step-desc">El ticket muestra el descuento aplicado en porcentaje y en pesos. El total final ya incluye el descuento.</div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-mock">
+        <div class="screen-bar"><div class="screen-dot" style="background:#FF5F57"></div><div class="screen-dot" style="background:#FFBD2E"></div><div class="screen-dot" style="background:#28CA41"></div><div class="screen-title">DELPA — Descuento por porcentaje</div></div>
+        <div class="screen-body">
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <div style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 16px;font-size:13px;color:var(--text2)">$ Monto</div>
+            <div style="background:rgba(233,30,140,0.15);border:1px solid var(--pink);border-radius:8px;padding:8px 16px;font-size:13px;color:var(--pink);font-weight:600">% Porcentaje</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="mock-field"><label>Subtotal</label><div class="mf-input">$45.000</div></div>
+            <div class="mock-field"><label>Descuento %</label><div class="mf-input pink">20%</div></div>
+            <div class="mock-field"><label>Descuento aplicado</label><div class="mf-input" style="color:var(--yellow)">- $9.000 (20%)</div></div>
+            <div class="mock-field"><label>Total final</label><div class="mf-input" style="color:var(--green);font-weight:700">$36.000</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MP QR -->
+    <div id="mod-mpqr" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// ventas y caja</div>
+        <div class="module-title">Cobrar con Mercado Pago QR</div>
+        <div class="module-desc">Cobrá con el QR del mostrador de forma automática. DELPA confirma el pago solo cuando la clienta paga.</div>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Configurar Mercado Pago (primera vez)</div>
+            <div class="step-desc">Andá a <strong>Configuración → Mercado Pago</strong>. Ingresá tu <strong>Access Token de producción</strong> (lo obtenés en mercadopago.com.ar/developers). Hacé click en <strong>Guardar y verificar</strong>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">En la venta, elegir Mercado Pago QR</div>
+            <div class="step-desc">Seleccioná <strong>Mercado Pago</strong> como medio de pago. DELPA envía automáticamente la orden al QR del mostrador con el monto exacto de la venta.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">La clienta escanea el QR</div>
+            <div class="step-desc">La clienta abre la app de Mercado Pago en su celular, escanea el QR del mostrador y paga. DELPA espera la confirmación automáticamente (máximo 5 minutos).</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Pago confirmado automáticamente</div>
+            <div class="step-desc">Cuando el pago se confirma, DELPA muestra <strong>✓ Pago recibido</strong> y registra la venta. No necesitás hacer nada — el sistema detecta el pago solo.</div>
+          </div>
+        </div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Importante:</strong> El QR del mostrador siempre es el mismo. No necesitás imprimir un QR nuevo para cada venta. DELPA actualiza el monto en cada cobro automáticamente.</div>
+      </div>
+    </div>
+
+    <!-- CAJA -->
+    <div id="mod-caja" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// ventas y caja</div>
+        <div class="module-title">Apertura y cierre de caja</div>
+        <div class="module-desc">Gestioná la caja del día con apertura por turno, movimientos manuales y cierre con informe automático por email.</div>
+      </div>
+      <div class="sec-h3">Abrir caja</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Caja → Abrir caja</div><div class="step-desc">Hacé click en el módulo <strong>Caja</strong> y después en <strong>Abrir caja</strong>.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Ingresar el monto inicial</div><div class="step-desc">Ingresá el dinero con el que arranca la caja (el "fondo"). Si no tenés fondo inicial, ponés 0.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Elegir el turno (opcional)</div><div class="step-desc">Si tenés varios turnos (mañana/tarde), elegí el turno correspondiente. DELPA permite tener múltiples cajas abiertas simultáneamente, una por turno.</div></div></div>
+      </div>
+      <div class="sec-h3">Cerrar caja</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Caja → Cerrar caja</div><div class="step-desc">Al final del día o turno, hacé click en <strong>Cerrar caja</strong>.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Contar el efectivo real</div><div class="step-desc">Ingresá el efectivo que contás físicamente en la caja. DELPA compara con lo que debería haber según las ventas y calcula la diferencia.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Recibir el informe por email</div><div class="step-desc">Si tenés el email configurado, DELPA envía automáticamente el informe del día con todas las ventas, gastos y diferencia de caja.</div></div></div>
+      </div>
+    </div>
+
+    <!-- CAMBIOS -->
+    <div id="mod-cambios" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// ventas y caja</div>
+        <div class="module-title">Cambios y devoluciones</div>
+        <div class="module-desc">Registrá un cambio de producto cuando una clienta trae algo para cambiar por otra talla o color.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Ventas → Cambios</div><div class="step-desc">Hacé click en el botón <strong>Cambio</strong> dentro del módulo de Ventas.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Ingresar el producto que devuelve</div><div class="step-desc">Buscá o escaneá el código de barras del producto que trae la clienta. El stock de ese producto se va a sumar automáticamente.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Ingresar el producto nuevo</div><div class="step-desc">Buscá o escaneá el producto que se lleva. Si el nuevo es más caro, se muestra la diferencia a cobrar. Si es más barato, se muestra el monto a devolver.</div></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Confirmar el cambio</div><div class="step-desc">Hacé click en <strong>Confirmar cambio</strong>. El stock se actualiza automáticamente para ambos productos.</div></div></div>
+      </div>
+    </div>
+
+    <!-- PRODUCTOS -->
+    <div id="mod-productos" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// stock e inventario</div>
+        <div class="module-title">Cargar productos</div>
+        <div class="module-desc">Cómo agregar productos al catálogo con talles, colores, precios y códigos de barras.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Productos → Nuevo producto</div><div class="step-desc">Hacé click en el módulo <strong>Productos</strong> y después en el botón <strong>+ Nuevo producto</strong>.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Completar los datos básicos</div><div class="step-desc">Ingresá: <strong>Nombre</strong>, <strong>Marca</strong>, <strong>Categoría</strong>, <strong>Precio de venta</strong> y <strong>Precio de costo</strong>. El precio de costo es fundamental para calcular la rentabilidad real.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Usar la calculadora de precio</div><div class="step-desc">Si conocés el precio de costo y la ganancia que querés tener, ingresá el <strong>% de ganancia</strong> y DELPA calcula el precio de venta automáticamente.</div></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Cargar los talles</div><div class="step-desc">En la grilla de talles, ingresá el stock inicial de cada talle y color. DELPA genera automáticamente el código de barras único para cada combinación de talle y color.</div></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-body"><div class="step-title">Guardar y generar etiquetas</div><div class="step-desc">Hacé click en <strong>Guardar</strong>. Después podés ir a <strong>Etiquetas</strong> para imprimir las etiquetas con código de barras.</div></div></div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Consignación:</strong> Si el producto es de un proveedor en consignación (lo pagás cuando lo vendés), activá el toggle <strong>Producto en consignación</strong> e ingresá el precio de costo acordado.</div>
+      </div>
+    </div>
+
+    <!-- INGRESO -->
+    <div id="mod-ingreso" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// stock e inventario</div>
+        <div class="module-title">Ingresar mercadería</div>
+        <div class="module-desc">Cuando llega mercadería nueva al local, registrala en DELPA para actualizar el stock automáticamente.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Ingreso de Mercadería</div><div class="step-desc">Hacé click en <strong>Ingreso de mercadería</strong> en el menú lateral.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Seleccionar el proveedor</div><div class="step-desc">Elegí el proveedor del que llegó la mercadería. Si es un proveedor nuevo, podés crearlo directamente desde esta pantalla.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Agregar los productos con la grilla de talles</div><div class="step-desc">Buscá el producto y se abre una grilla con todos sus talles. Ingresá la cantidad que llegó de cada talle. Solo se procesan los talles con cantidad mayor a 0.</div></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Confirmar el ingreso</div><div class="step-desc">Hacé click en <strong>Confirmar ingreso</strong>. El stock se suma automáticamente. DELPA te pregunta si querés imprimir etiquetas para los productos que ingresaron.</div></div></div>
+      </div>
+    </div>
+
+    <!-- ETIQUETAS -->
+    <div id="mod-etiquetas" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// stock e inventario</div>
+        <div class="module-title">Imprimir etiquetas</div>
+        <div class="module-desc">Imprimí etiquetas con código de barras para todos tus productos en hoja A4 o en tu impresora Brother QL-700.</div>
+      </div>
+      <div class="sec-h3">Etiquetas en hoja A4 (65 por hoja)</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Etiquetas</div><div class="step-desc">Hacé click en el módulo <strong>Etiquetas</strong> en el menú lateral.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Seleccionar los productos</div><div class="step-desc">Buscá y seleccioná los productos que querés etiquetar. Podés seleccionar múltiples productos a la vez.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Elegir talles y cantidad</div><div class="step-desc">Para cada producto elegí qué talles incluir y cuántas etiquetas de cada talle. Por defecto sugiere la cantidad en stock.</div></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Imprimir</div><div class="step-desc">Hacé click en <strong>Imprimir A4</strong>. Abre una ventana de impresión. Asegurate de imprimir al <strong>100% sin escalar</strong> y con márgenes mínimos para que las etiquetas queden alineadas.</div></div></div>
+      </div>
+      <div class="warn-box">
+        <div class="tip-icon">⚠️</div>
+        <div class="tip-text"><strong>Importante al imprimir:</strong> En el cuadro de impresión, configurá la escala en <strong>100%</strong> (no "Ajustar a la página"). De lo contrario las etiquetas pueden quedar desalineadas.</div>
+      </div>
+      <div class="sec-h3">Etiquetas Brother QL-700</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Conectar la impresora</div><div class="step-desc">Conectá la QL-700 por USB e instalá los drivers de Brother si no los tenés. La impresora debe aparecer como impresora disponible en Windows.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Seleccionar formato QL-700</div><div class="step-desc">En Etiquetas, hacé click en <strong>Imprimir Brother QL-700</strong> en lugar de la opción A4.</div></div></div>
+      </div>
+    </div>
+
+    <!-- INVENTARIO -->
+    <div id="mod-inventario" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// stock e inventario</div>
+        <div class="module-title">Inventario físico</div>
+        <div class="module-desc">Hacé el inventario físico escaneando todos los productos con el lector. DELPA compara automáticamente con el stock del sistema.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Inventario</div><div class="step-desc">Hacé click en el módulo <strong>Inventario</strong> y después en <strong>Nuevo inventario</strong>.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Escanear todos los productos</div><div class="step-desc">Con el lector de código de barras, escaneá todas las prendas sin importar el orden. DELPA lleva la cuenta automáticamente. Si escaneás el mismo código varias veces, suma las unidades.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Finalizar y comparar</div><div class="step-desc">Hacé click en <strong>Finalizar y comparar</strong>. DELPA muestra una tabla con las diferencias: qué productos tienen más stock del esperado (sobrante) y cuáles tienen menos (faltante).</div></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Ajustar el stock (opcional)</div><div class="step-desc">Si querés que el stock del sistema quede igual al inventario real, hacé click en <strong>Ajustar stock</strong>. También podés exportar el informe a PDF.</div></div></div>
+      </div>
+    </div>
+
+    <!-- EGRESO -->
+    <div id="mod-egreso" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// stock e inventario</div>
+        <div class="module-title">Egreso / Devolución a proveedor</div>
+        <div class="module-desc">Cuando devolvés mercadería a un proveedor, registralo en DELPA para descontar el stock y generar el remito.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Egreso de Mercadería</div><div class="step-desc">Hacé click en <strong>Egreso</strong> en el menú lateral.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Seleccionar proveedor y motivo</div><div class="step-desc">Elegí el proveedor y el motivo de la devolución: defecto, talle incorrecto, exceso de stock, etc.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Agregar productos con grilla de talles</div><div class="step-desc">Buscá el producto y usá la grilla de talles para indicar cuántas unidades de cada talle devolvés. El stock actual de cada talle se muestra como referencia.</div></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Confirmar y generar PDF</div><div class="step-desc">Al confirmar, DELPA descuenta el stock automáticamente y genera un PDF con el detalle de la devolución para que el proveedor lo firme.</div></div></div>
+      </div>
+    </div>
+
+    <!-- AFIP -->
+    <div id="mod-afip" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// facturación y fiscal</div>
+        <div class="module-title">Facturar con AFIP</div>
+        <div class="module-desc">Emití facturas electrónicas con CAE automático para monotributistas y responsables inscriptos.</div>
+      </div>
+      <div class="sec-h3">Configuración inicial (solo una vez)</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Obtener el certificado digital de AFIP</div><div class="step-desc">Entrá a <strong>auth.afip.gob.ar</strong> con tu clave fiscal. Andá a <strong>Administrador de Relaciones → Adherir servicio → wsfe</strong>. Después en Certificados Digitales generá un nuevo certificado. Descargá el archivo .crt.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Configurar en DELPA</div><div class="step-desc">Andá a <strong>Configuración → AFIP</strong>. Ingresá tu <strong>CUIT</strong> y el <strong>número de punto de venta</strong>. Subí el certificado .crt y la clave .key. Hacé click en <strong>Probar conexión</strong>.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Elegir régimen fiscal</div><div class="step-desc">Elegí si sos <strong>Monotributista</strong> (y qué categoría A-K) o <strong>Responsable Inscripto</strong>. Esto define cómo DELPA calcula tu situación fiscal.</div></div></div>
+      </div>
+      <div class="sec-h3">Emitir una factura</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">En la venta, hacer click en FACTURAR</div><div class="step-desc">En lugar de INGRESAR, hacé click en <strong>FACTURAR</strong>. Se abre el panel de facturación.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Completar los datos del cliente (opcional)</div><div class="step-desc">Para facturas C no necesitás datos del cliente. Para facturas A o B a RI, ingresá el CUIT del cliente.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Confirmar — CAE automático</div><div class="step-desc">DELPA se conecta a AFIP, obtiene el CAE automáticamente y genera la factura en segundos. El CAE queda guardado en la venta.</div></div></div>
+      </div>
+      <div class="info-box">
+        <div class="tip-icon">ℹ️</div>
+        <div class="tip-text"><strong>Importante:</strong> Para el control de monotributo y posición de IVA, DELPA solo cuenta las ventas con CAE real. Las ventas con ticket interno (botón INGRESAR) no cuentan para el límite fiscal.</div>
+      </div>
+    </div>
+
+    <!-- FISCAL -->
+    <div id="mod-fiscal" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// facturación y fiscal</div>
+        <div class="module-title">Control fiscal</div>
+        <div class="module-desc">Seguí tu situación fiscal en tiempo real — límite de monotributo o posición de IVA para responsables inscriptos.</div>
+      </div>
+      <div class="sec-h3">Para Monotributistas</div>
+      <p style="color:var(--text2);font-size:15px;margin-bottom:20px">El Dashboard muestra una barra de progreso con tu facturación mensual y anual vs el límite de tu categoría.</p>
+      <div class="progress-demo">
+        <div class="pd-label"><span>Facturado este mes</span><span style="color:var(--yellow)">$1.240.000 / $1.820.000 — 68%</span></div>
+        <div class="pd-bar"><div class="pd-fill" style="width:68%;background:linear-gradient(90deg,#92400e,var(--yellow))"></div></div>
+      </div>
+      <div class="progress-demo" style="margin-top:12px">
+        <div class="pd-label"><span>Facturado este año</span><span style="color:var(--green)">$8.900.000 / $21.885.000 — 41%</span></div>
+        <div class="pd-bar"><div class="pd-fill" style="width:41%"></div></div>
+      </div>
+      <div class="warn-box" style="margin-top:20px">
+        <div class="tip-icon">⚠️</div>
+        <div class="tip-text"><strong>Alertas automáticas:</strong> Al llegar al 80% del límite mensual aparece una alerta amarilla. Al 95% aparece una alerta roja. DELPA también proyecta en qué fecha superarías el límite si seguís al mismo ritmo.</div>
+      </div>
+      <hr class="sec-divider">
+      <div class="sec-h3">Para Responsables Inscriptos</div>
+      <p style="color:var(--text2);font-size:15px;margin-bottom:20px">DELPA calcula tu posición ante el IVA mensualmente.</p>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">IVA Débito Fiscal</div><div class="step-desc">Es el IVA de tus ventas con factura. DELPA lo calcula automáticamente de todas las facturas emitidas con CAE.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">IVA Crédito Fiscal</div><div class="step-desc">Es el IVA de tus compras a proveedores. Lo registrás al cargar las compras en el módulo de Proveedores.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Posición neta</div><div class="step-desc">DELPA muestra la diferencia: <strong>Débito − Crédito = Posición</strong>. Si es positiva, es lo que debés pagar. Si es negativa, tenés saldo a favor.</div></div></div>
+      </div>
+    </div>
+
+    <!-- TIENDA NUBE -->
+    <div id="mod-tiendanube" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// integraciones</div>
+        <div class="module-title">Sincronización con Tienda Nube</div>
+        <div class="module-desc">Conectá DELPA con tu tienda online para sincronizar el stock automáticamente en ambas direcciones.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Conectar Tienda Nube</div><div class="step-desc">Andá a <strong>Configuración → Tienda Nube</strong> y hacé click en <strong>Conectar con Tienda Nube</strong>. Se abre el navegador para que autorices el acceso con tu cuenta de TN.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Primera sincronización</div><div class="step-desc">Hacé click en <strong>Sincronizar todo</strong>. DELPA importa todos tus productos de Tienda Nube. Este proceso puede tardar unos minutos dependiendo de la cantidad de productos.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Sincronización automática</div><div class="step-desc">A partir de ahora, cada vez que vendés en el local el stock se actualiza en Tienda Nube automáticamente. Y cuando llega un pedido online, aparece en DELPA para procesarlo.</div></div></div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Delta Sync:</strong> DELPA solo sincroniza los productos que cambiaron de stock, no todos. Esto hace la sincronización mucho más rápida y no sobrecarga la API de Tienda Nube.</div>
+      </div>
+    </div>
+
+    <!-- DRIVE -->
+    <div id="mod-drive" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// integraciones</div>
+        <div class="module-title">Backup en Google Drive</div>
+        <div class="module-desc">DELPA hace backup automático de tu base de datos a Google Drive todos los días.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Conectar Google Drive</div><div class="step-desc">Andá a <strong>Configuración → Pagos & Drive</strong> y hacé click en <strong>Conectar Google Drive</strong>. Se abre el navegador para que autorices con tu cuenta de Google.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Verificar la conexión</div><div class="step-desc">El ícono de nube en el header de DELPA se pone verde cuando Drive está conectado. Si se pone rojo, hacé click en <strong>Reconectar Google Drive</strong>.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Backup automático</div><div class="step-desc">DELPA hace backup automático cada vez que cerrás la caja. También podés hacer backup manual desde Configuración → Google Drive → <strong>Hacer backup ahora</strong>.</div></div></div>
+      </div>
+      <div class="sec-h3">Restaurar un backup</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Ir a Configuración → Google Drive</div><div class="step-desc">Hacé click en <strong>Ver backups</strong>. Se muestran los últimos 30 backups con fecha y hora.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Seleccionar el backup a restaurar</div><div class="step-desc">Elegí el backup de la fecha que querés restaurar y hacé click en <strong>Restaurar</strong>. DELPA se reinicia automáticamente con los datos restaurados.</div></div></div>
+      </div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="mod-clientes" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// clientes</div>
+        <div class="module-title">Gestión de clientes</div>
+        <div class="module-desc">Llevá el historial completo de cada clienta, cuenta corriente y lista de espera.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Crear una clienta nueva</div><div class="step-desc">En el módulo <strong>Clientes</strong>, hacé click en <strong>+ Nueva clienta</strong>. Completá nombre, teléfono, email y fecha de cumpleaños.</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Asignar clienta a una venta</div><div class="step-desc">En el módulo de Ventas, antes de confirmar la venta buscá la clienta en el campo <strong>Clienta</strong>. Así la venta queda en su historial y suma puntos.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Ver historial y cuenta corriente</div><div class="step-desc">En la ficha de la clienta podés ver todas sus compras, saldo de puntos y cuenta corriente (deuda pendiente).</div></div></div>
+      </div>
+      <div class="sec-h3">Lista de espera</div>
+      <p style="color:var(--text2);font-size:15px;margin-bottom:20px">Si una clienta pide un talle que no tenés en stock, lo registrás en la lista de espera. Cuando llega ese producto, DELPA te avisa para que se lo notifiques por WhatsApp.</p>
+    </div>
+
+    <!-- FIDELIZACION -->
+    <div id="mod-fidelizacion" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// clientes</div>
+        <div class="module-title">Puntos y fidelización</div>
+        <div class="module-desc">El programa de puntos premia a las clientas que compran seguido y las incentiva a volver.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Configurar el programa de puntos</div><div class="step-desc">Andá a <strong>Configuración → Fidelización</strong>. Configurá cuántos pesos equivalen a 1 punto (ej: cada $1.000 = 1 punto) y cuánto vale cada punto al canjearlo (ej: 100 puntos = $1.000 de descuento).</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Los puntos se acumulan solos</div><div class="step-desc">Al asignar una clienta a la venta, los puntos se acumulan automáticamente. El ticket muestra: <strong>Puntos ganados hoy: +45 / Puntos acumulados: 320</strong>.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Canjear puntos en una venta</div><div class="step-desc">En el módulo de Ventas, seleccioná la clienta y hacé click en <strong>Canjear puntos</strong>. Se aplica el descuento correspondiente automáticamente.</div></div></div>
+      </div>
+      <div class="sec-h3">Vales de descuento</div>
+      <p style="color:var(--text2);font-size:15px;margin-bottom:20px">Generá vales de descuento imprimibles para regalar o compensar a clientas. Cada vale tiene un código único y fecha de vencimiento. Al usar el código en una venta, DELPA lo valida y aplica el descuento.</p>
+    </div>
+
+    <!-- CONSIGNACION -->
+    <div id="mod-consignacion" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// clientes</div>
+        <div class="module-title">Gestión de consignación</div>
+        <div class="module-desc">Gestioná la mercadería de proveedores que pagás cuando la vendés — sin planillas manuales.</div>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Marcar un producto como consignación</div><div class="step-desc">Al cargar o editar un producto, activá el toggle <strong>Producto en consignación</strong> y seleccioná el proveedor. Ingresá el precio de costo acordado (lo que le pagás al proveedor por cada unidad vendida).</div></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">La deuda se acumula sola</div><div class="step-desc">Cada vez que vendés un producto en consignación, DELPA registra automáticamente la deuda al proveedor. En el módulo <strong>Consignación</strong> podés ver: <strong>"Le debés a Las Locas: $84.000 por 12 unidades vendidas"</strong>.</div></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Liquidar cuando querés</div><div class="step-desc">Cuando querés pagarle al proveedor, andá a <strong>Consignación → Liquidar</strong>. Seleccioná las ventas a liquidar y DELPA genera un PDF con el detalle completo para que el proveedor lo firme.</div></div></div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Badge visual:</strong> Los productos en consignación aparecen con un badge <strong>CONSIG</strong> en la lista de productos para que siempre sepas cuáles son.</div>
+      </div>
+    </div>
+
+    <!-- REPORTES -->
+    <div id="mod-reportes" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// reportes</div>
+        <div class="module-title">Reportes y análisis</div>
+        <div class="module-desc">Todos los reportes que necesitás para tomar decisiones en tu negocio.</div>
+      </div>
+      <div class="sec-h3">Reportes disponibles</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">🏆</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:6px">Ranking de productos</div>
+          <div style="color:var(--text2);font-size:13px">Los productos más vendidos del período con unidades, ingresos y comparativa vs período anterior.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">🎨</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:6px">Análisis de colores</div>
+          <div style="color:var(--text2);font-size:13px">Qué colores se venden más por categoría. Útil para saber qué reponer.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">💳</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:6px">Reporte de deudas</div>
+          <div style="color:var(--text2);font-size:13px">Clientes con cuenta corriente vencida con semáforo y botón de WhatsApp directo.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">📈</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:6px">Comparativa mensual</div>
+          <div style="color:var(--text2);font-size:13px">Este mes vs mes anterior con gráfico de líneas y variación por categoría.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">💰</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:6px">Rentabilidad por categoría</div>
+          <div style="color:var(--text2);font-size:13px">Qué categorías te dejan más margen. Ganancia bruta, costo y margen % por categoría.</div>
+        </div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:24px;margin-bottom:10px">📋</div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:6px">Historial de precios</div>
+          <div style="color:var(--text2);font-size:13px">Cada vez que cambiás el precio de un producto, queda registrado con fecha y valor anterior.</div>
+        </div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Exportar a PDF:</strong> Todos los reportes tienen botón <strong>Exportar PDF</strong> para compartir o imprimir.</div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="mod-dashboard" class="module">
+      <div class="module-header">
+        <div class="module-eyebrow">// reportes</div>
+        <div class="module-title">Dashboard e Inteligencia Artificial</div>
+        <div class="module-desc">El Dashboard es la pantalla principal de DELPA. Muestra un resumen completo del negocio y las recomendaciones de la IA.</div>
+      </div>
+      <div class="sec-h3">Widgets del Dashboard</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">📊</div><div class="step-body"><div class="step-title">Ventas del día</div><div class="step-desc">Total vendido hoy en el local y en Tienda Nube por separado, más el total combinado.</div></div></div>
+        <div class="step"><div class="step-num">💰</div><div class="step-body"><div class="step-title">Rentabilidad real del mes</div><div class="step-desc">Ventas − costo de mercadería − gastos fijos = ganancia neta. No es la venta bruta, es lo que realmente ganaste.</div></div></div>
+        <div class="step"><div class="step-num">🎯</div><div class="step-body"><div class="step-title">Punto de equilibrio</div><div class="step-desc">Cuánto necesitás vender por mes y por día para cubrir todos los gastos fijos. Con barra de progreso del mes.</div></div></div>
+        <div class="step"><div class="step-num">🧠</div><div class="step-body"><div class="step-title">Recomendaciones IA</div><div class="step-desc">Alertas de quiebre de stock inminente, stock especular (productos sin rotación) y recomendaciones de compra basadas en patrones de venta.</div></div></div>
+        <div class="step"><div class="step-num">⭐</div><div class="step-body"><div class="step-title">Score de salud del negocio</div><div class="step-desc">Un número del 0 al 100 que mide qué tan bien configurado y aprovechado está el sistema. Con tips para mejorar.</div></div></div>
+      </div>
+      <div class="tip-box">
+        <div class="tip-icon">💡</div>
+        <div class="tip-text"><strong>Para que el Dashboard sea preciso:</strong> Configurá los <strong>Gastos fijos</strong> en Configuración → Gastos Fijos (alquiler, sueldos, servicios, etc.) y cargá siempre el <strong>precio de costo</strong> de cada producto.</div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /layout -->
+
+<footer style="background:var(--bg2);border-top:1px solid var(--border);padding:32px 40px;text-align:center;margin-top:80px">
+  <div style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px">DELPA<span style="color:var(--pink)">.</span> Gestión PRO</div>
+  <p style="color:var(--text2);font-size:14px;margin-bottom:16px">¿No encontrás lo que buscás? Contactanos.</p>
+  <a href="https://wa.me/5491138574444?text=Hola,%20tengo%20una%20consulta%20sobre%20DELPA" target="_blank" style="background:var(--pink);color:#fff;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none">💬 Soporte por WhatsApp</a>
+  <p style="color:var(--text3);font-size:12px;margin-top:24px">© 2026 DELPA Gestión PRO · delpagestion.com.ar · +54 11 3857-4444</p>
+</footer>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  const mod = document.getElementById('mod-' + id);
+  if (mod) mod.classList.add('active');
+  event?.currentTarget?.classList?.add('active');
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+// Search
+document.getElementById('search-input').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  if (!q) return;
+  const map = {
+    'venta': 'ventas', 'vender': 'ventas', 'cobrar': 'ventas',
+    'vuelto': 'vuelto', 'efectivo': 'vuelto', 'cambio': 'cambios',
+    'descuento': 'descuentos', 'porcentaje': 'descuentos',
+    'mercado pago': 'mpqr', 'qr': 'mpqr', 'mp': 'mpqr',
+    'caja': 'caja', 'cierre': 'caja', 'apertura': 'caja',
+    'producto': 'productos', 'cargar': 'productos',
+    'stock': 'ingreso', 'mercadería': 'ingreso', 'ingreso': 'ingreso',
+    'etiqueta': 'etiquetas', 'codigo de barras': 'etiquetas',
+    'inventario': 'inventario', 'escanear': 'inventario',
+    'afip': 'afip', 'factura': 'afip', 'cae': 'afip',
+    'monotributo': 'fiscal', 'iva': 'fiscal', 'fiscal': 'fiscal',
+    'tienda nube': 'tiendanube', 'online': 'tiendanube',
+    'drive': 'drive', 'backup': 'drive',
+    'cliente': 'clientes', 'clienta': 'clientes',
+    'puntos': 'fidelizacion', 'fidelizacion': 'fidelizacion',
+    'consignacion': 'consignacion', 'proveedor': 'consignacion',
+    'reporte': 'reportes', 'ranking': 'reportes',
+    'dashboard': 'dashboard', 'ia': 'dashboard',
+    'licencia': 'licencia', 'activar': 'licencia',
+  };
+  for (const [key, val] of Object.entries(map)) {
+    if (q.includes(key)) {
+      document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+      document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+      const mod = document.getElementById('mod-' + val);
+      if (mod) { mod.classList.add('active'); window.scrollTo({top:400,behavior:'smooth'}); }
+      break;
+    }
+  }
+});
+
+// Active sidebar on click
+document.querySelectorAll('.sidebar-link').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
