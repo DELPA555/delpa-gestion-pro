@@ -127,7 +127,7 @@ ${(sale.items || []).map(it => `
 `).join('')}
 <div class="divider"></div>
 ${sale.discount > 0 ? `<div class="row"><span>Subtotal:</span><span>${formatCurrency(sale.subtotal)}</span></div>
-<div class="row"><span>Descuento:</span><span>-${formatCurrency(sale.discount)}</span></div>` : ''}
+<div class="row"><span>Descuento${sale.discount_type === 'percent' && sale.discount_value ? ` (${sale.discount_value}%)` : ''}:</span><span>-${formatCurrency(sale.discount)}</span></div>` : ''}
 ${sale.surcharge_rate > 0 ? `<div class="row"><span>Recargo ${sale.surcharge_rate}%:</span><span>+${formatCurrency(sale.total - (sale.subtotal - (sale.discount||0)))}</span></div>` : ''}
 <div class="row bold total"><span>TOTAL:</span><span>${formatCurrency(sale.total)}</span></div>
 ${sale.payments && sale.payments.length > 0
@@ -137,6 +137,8 @@ ${sale.payments && sale.payments.length > 0
   : `<div class="row"><span>Medio de pago:</span><span>${sale.payment_method}${sale.installments > 1 ? ` (${sale.installments} cuotas)` : ''}</span></div>
 ${installLine}`
 }
+${sale.amount_received > 0 ? `<div class="row"><span>Recibido:</span><span>${formatCurrency(sale.amount_received)}</span></div>
+<div class="row bold"><span>Vuelto:</span><span>${formatCurrency(sale.change_given)}</span></div>` : ''}
 ${sale.cae ? `
 <div class="divider"></div>
 <p class="center bold" style="font-size:10px">COMPROBANTE ELECTRÓNICO AFIP/ARCA</p>
@@ -231,6 +233,9 @@ export default function Sales() {
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
   const [discount, setDiscount] = useState(0)
+  const [discountType, setDiscountType] = useState('amount') // 'amount' | 'percent'
+  const [amountReceived, setAmountReceived] = useState('')   // efectivo: monto recibido
+  const receivedRef = useRef(null)
   const [paymentMethod, setPay] = useState('Efectivo')
   const [installments, setInstallments] = useState(1)
   const [voucherType, setVoucherType] = useState('ticket')
@@ -651,7 +656,10 @@ export default function Sales() {
 
   const surchargeRate = surcharges[getSurchargeKey(paymentMethod, installments)] ?? 0
   const subtotal = cart.reduce((s, it) => s + (Number(it.editedPrice) || 0) * it.qty, 0)
-  const discountAmt = Math.min(discount, subtotal)
+  const discountPct = discountType === 'percent' ? Math.min(Math.max(Number(discount) || 0, 0), 100) : 0
+  const discountAmt = discountType === 'percent'
+    ? Math.min(subtotal * discountPct / 100, subtotal)
+    : Math.min(Math.max(Number(discount) || 0, 0), subtotal)
   const clientPoints = selectedClient?.points ?? 0
   const canRedeem = pointsCfg.enabled && clientPoints >= pointsCfg.minRedeem
   const pointsDiscount = redeemPoints && canRedeem ? Math.min(clientPoints * pointsCfg.value, subtotal - discountAmt) : 0
@@ -674,6 +682,12 @@ export default function Sales() {
 
   const total = splitPayment ? splitFinalTotal : singleTotal
 
+  // Vuelto en efectivo (solo medio único = Efectivo)
+  const isCash = !splitPayment && paymentMethod === 'Efectivo'
+  const receivedAmt = Number(amountReceived) || 0
+  const cashInsufficient = isCash && amountReceived !== '' && receivedAmt < total
+  const changeAmt = isCash && receivedAmt >= total ? receivedAmt - total : 0
+
   const updatePaymentRow = (i, field, value) =>
     setPaymentRows(rows => rows.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
 
@@ -692,7 +706,7 @@ export default function Sales() {
   }
 
   const clearCart = () => {
-    setCart([]); setDiscount(0); setSelectedProduct(null); setSelectedSize(null); setQty(1)
+    setCart([]); setDiscount(0); setDiscountType('amount'); setAmountReceived(''); setSelectedProduct(null); setSelectedSize(null); setQty(1)
     setSelectedClient(null); setClientSearch(''); setQuery('')
     setSplitPayment(false); setPaymentRows([{ method: 'Efectivo', baseAmount: '', installments: 1 }])
     setRedeemPoints(false)
@@ -726,6 +740,10 @@ export default function Sales() {
         total,
         subtotal,
         discount: discountAmt,
+        discountType,
+        discountValue: Number(discount) || 0,
+        amountReceived: isCash ? receivedAmt : 0,
+        changeGiven: isCash ? changeAmt : 0,
         pointsRedeemed: redeemPoints && canRedeem ? Math.ceil(pointsDiscount / (pointsCfg.value || 1)) : 0,
         paymentMethod: splitPayment ? 'Múltiple' : paymentMethod,
         notes: '',
@@ -1055,6 +1073,14 @@ export default function Sales() {
     finally { setVoiding(false) }
   }
 
+  // Foco automático en "Monto recibido $" al seleccionar Efectivo
+  useEffect(() => {
+    if (!splitPayment && paymentMethod === 'Efectivo') {
+      const t = setTimeout(() => receivedRef.current?.focus(), 60)
+      return () => clearTimeout(t)
+    }
+  }, [paymentMethod, splitPayment])
+
   useEffect(() => {
     const handler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
@@ -1067,7 +1093,7 @@ export default function Sales() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [tab, cart, paymentMethod, installments, discount, selectedClient, voucherType, seller])
+  }, [tab, cart, paymentMethod, installments, discount, discountType, amountReceived, selectedClient, voucherType, seller])
 
   const openExchangeModal = () => {
     setExchReturnQuery(''); setExchReturnResults([]); setExchReturnProduct(null); setExchReturnSize(null)
@@ -1478,6 +1504,21 @@ export default function Sales() {
                     </div>
                   </div>
                 )}
+                {paymentMethod === 'Efectivo' && (
+                  <div>
+                    <label className={labelCls}>Monto recibido $</label>
+                    <input ref={receivedRef} type="number" min="0" step="0.01"
+                      value={amountReceived}
+                      onChange={e => setAmountReceived(e.target.value)}
+                      placeholder="0,00"
+                      className={cn(inputCls, cashInsufficient ? 'border-red-500/60' : '')} />
+                    {amountReceived !== '' && (
+                      cashInsufficient
+                        ? <p className="text-xs text-red-400 mt-1 font-semibold">Monto insuficiente</p>
+                        : <p className="text-sm text-green-400 mt-1 font-bold tabular-nums">Vuelto: {formatCurrency(changeAmt)}</p>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               /* Split payment mode */
@@ -1573,10 +1614,35 @@ export default function Sales() {
 
             {/* Discount */}
             <div>
-              <label className={labelCls}>Descuento $</label>
-              <input type="number" min="0" step="0.01" value={discount}
-                onChange={e => setDiscount(Math.max(0, Number(e.target.value)))}
-                placeholder="0,00" className={inputCls} />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-zinc-500 uppercase tracking-wider">Descuento</label>
+                <div className="flex gap-1 no-drag">
+                  <button onClick={() => setDiscountType('amount')}
+                    className={cn('px-2.5 py-1 rounded-md text-xs border transition-colors',
+                      discountType === 'amount' ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-200')}>
+                    $ Monto
+                  </button>
+                  <button onClick={() => setDiscountType('percent')}
+                    className={cn('px-2.5 py-1 rounded-md text-xs border transition-colors',
+                      discountType === 'percent' ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-200')}>
+                    % Porcentaje
+                  </button>
+                </div>
+              </div>
+              <input type="number" min="0" step={discountType === 'percent' ? '1' : '0.01'}
+                max={discountType === 'percent' ? 100 : undefined}
+                value={discount}
+                onChange={e => {
+                  let v = Math.max(0, Number(e.target.value))
+                  if (discountType === 'percent') v = Math.min(v, 100)
+                  setDiscount(v)
+                }}
+                placeholder={discountType === 'percent' ? '0 a 100' : '0,00'} className={inputCls} />
+              {discountAmt > 0 && (
+                <p className="text-xs text-red-400 mt-1">
+                  Descuento: -{formatCurrency(discountAmt)}{discountType === 'percent' ? ` (${discountPct}%)` : ''}
+                </p>
+              )}
             </div>
 
             {/* Vale de descuento */}
@@ -1639,7 +1705,7 @@ export default function Sales() {
               </div>
               {discountAmt > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-zinc-500">Descuento</span>
+                  <span className="text-zinc-500">Descuento{discountType === 'percent' ? ` (${discountPct}%)` : ''}</span>
                   <span className="text-red-400 tabular-nums">-{formatCurrency(discountAmt)}</span>
                 </div>
               )}
@@ -1896,7 +1962,7 @@ export default function Sales() {
             </div>
             {detailModal.discount > 0 && (
               <div className="flex justify-between text-sm border-t border-border pt-2">
-                <span className="text-zinc-400">Descuento</span>
+                <span className="text-zinc-400">Descuento{detailModal.discount_type === 'percent' && detailModal.discount_value ? ` (${detailModal.discount_value}%)` : ''}</span>
                 <span className="text-red-400 tabular-nums">-{formatCurrency(detailModal.discount)}</span>
               </div>
             )}
@@ -1904,6 +1970,12 @@ export default function Sales() {
               <span className="text-white">TOTAL</span>
               <span className={cn('text-accent tabular-nums', detailModal.voided && 'line-through text-zinc-500')}>{formatCurrency(detailModal.total)}</span>
             </div>
+            {detailModal.amount_received > 0 && (
+              <div className="flex justify-between text-sm text-zinc-400">
+                <span>Recibido / Vuelto</span>
+                <span className="text-green-400 tabular-nums">{formatCurrency(detailModal.amount_received)} / {formatCurrency(detailModal.change_given)}</span>
+              </div>
+            )}
             {detailModal.installments > 1 && (
               <p className="text-xs text-amber-400 text-right">{detailModal.installments} cuotas de {formatCurrency(detailModal.total / detailModal.installments)} c/u</p>
             )}
