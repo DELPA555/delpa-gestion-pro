@@ -324,9 +324,14 @@ function gatherWeekData() {
     GROUP BY hour ORDER BY count DESC LIMIT 1
   `).all()
 
-  const accountBalances = db.prepare(`
-    SELECT name, balance FROM accounts ORDER BY balance DESC
-  `).all()
+  let accountBalances = []
+  try {
+    accountBalances = db.prepare(`
+      SELECT name, balance FROM clients
+      WHERE balance IS NOT NULL AND balance <> 0
+      ORDER BY balance DESC LIMIT 15
+    `).all()
+  } catch (e) { accountBalances = [] }
 
   return { totalSales: sales.totalSales, totalRevenue: sales.totalRevenue, topProducts, topClients, lowStock, byDay, byHour, accountBalances }
 }
@@ -383,9 +388,14 @@ function gatherMonthData() {
     GROUP BY date ORDER BY total DESC LIMIT 1
   `).get()
 
-  const accountBalances = db.prepare(`
-    SELECT name, balance FROM accounts ORDER BY balance DESC
-  `).all()
+  let accountBalances = []
+  try {
+    accountBalances = db.prepare(`
+      SELECT name, balance FROM clients
+      WHERE balance IS NOT NULL AND balance <> 0
+      ORDER BY balance DESC LIMIT 15
+    `).all()
+  } catch (e) { accountBalances = [] }
 
   return {
     totalSales: sales.totalSales,
