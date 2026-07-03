@@ -5,10 +5,10 @@ import {
   ScanLine, Plus, CheckCircle, AlertTriangle, XCircle,
   TrendingUp, TrendingDown, Minus as MinusIcon,
   FileDown, Mail, RotateCcw, ClipboardList, PackageCheck,
-  Hash, ChevronRight,
+  Hash, ChevronRight, Truck, ArrowLeft,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { formatDateTime, cn } from '@/lib/utils'
+import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
 import Modal from '@/components/shared/Modal'
 
@@ -72,6 +72,14 @@ export default function Inventory() {
   const [emailing, setEmailing]       = useState(false)
   const [barcodeVal, setBarcodeVal]   = useState('')
   const [scanning, setScanning]       = useState(false)
+
+  // ── Stock por proveedor ──
+  const [supplierList, setSupplierList]   = useState([])
+  const [supplierSel, setSupplierSel]     = useState('')
+  const [supplierBlock, setSupplierBlock] = useState(null)
+  const [supplierLoading, setSupplierLoading] = useState(false)
+  const [supplierExporting, setSupplierExporting] = useState(false)
+  const [supplierEmailing, setSupplierEmailing]   = useState(false)
 
   const barcodeRef = useRef(null)
   const listRef    = useRef(null)
@@ -274,6 +282,47 @@ export default function Inventory() {
     }
   }
 
+  // ── Stock por proveedor ─────────────────────────────────────────────────────
+  const openSupplierView = useCallback(async () => {
+    setView('supplier')
+    setSupplierSel(''); setSupplierBlock(null)
+    try { setSupplierList(await api.supplierStock.suppliers()) } catch { setSupplierList([]) }
+  }, [])
+
+  const loadSupplierStock = useCallback(async (supplierId) => {
+    if (!supplierId) { setSupplierBlock(null); return }
+    setSupplierLoading(true)
+    try {
+      const blocks = await api.supplierStock.report({ supplier_id: Number(supplierId) })
+      setSupplierBlock(blocks?.[0] || { supplier: { id: supplierId }, products: [], totals: { product_count: 0, units: 0, value_cost: 0, value_price: 0 } })
+    } catch (e) {
+      toast.error('Error al cargar el stock del proveedor')
+      setSupplierBlock(null)
+    } finally { setSupplierLoading(false) }
+  }, [])
+
+  const exportSupplierPDF = async () => {
+    if (!supplierSel) return
+    setSupplierExporting(true)
+    try {
+      const res = await api.supplierStock.exportPDF({ supplier_id: Number(supplierSel), mode: 'stock' })
+      if (res?.ok) toast.success('PDF guardado')
+      else if (res?.error) toast.error(res.error)
+    } catch (e) { toast.error(e.message || 'Error al exportar PDF') }
+    finally { setSupplierExporting(false) }
+  }
+
+  const emailSupplierStock = async () => {
+    if (!supplierSel) return
+    setSupplierEmailing(true)
+    try {
+      const res = await api.supplierStock.emailSupplier({ supplier_id: Number(supplierSel), mode: 'stock' })
+      if (res?.ok) toast.success(`Enviado a ${res.email}`)
+      else toast.error(res?.error || 'Error al enviar')
+    } catch (e) { toast.error(e.message || 'Error al enviar email') }
+    finally { setSupplierEmailing(false) }
+  }
+
   const totalQty = scanItems.reduce((s, i) => s + i.real_stock, 0)
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -298,10 +347,16 @@ export default function Inventory() {
           title="Inventario Físico"
           subtitle="Conteo por escaneo de código de barras"
           actions={
-            <button onClick={() => setStartModal(true)}
-              className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
-              <Plus size={15} /> Nuevo inventario
-            </button>
+            <div className="flex gap-2">
+              <button onClick={openSupplierView}
+                className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                <Truck size={15} /> Stock por proveedor
+              </button>
+              <button onClick={() => setStartModal(true)}
+                className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
+                <Plus size={15} /> Nuevo inventario
+              </button>
+            </div>
           }
         />
 
@@ -385,6 +440,106 @@ export default function Inventory() {
             </button>
           </div>
         </Modal>
+      </motion.div>
+    )
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER: stock por proveedor
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (view === 'supplier') {
+    const t = supplierBlock?.totals
+    return (
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }} className="p-6 h-full flex flex-col">
+        <PageHeader
+          title="Stock por proveedor"
+          subtitle="Consultá el stock actual de los productos de un proveedor"
+          actions={
+            <button onClick={() => { setView('history'); loadHistory() }}
+              className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+              <ArrowLeft size={15} /> Volver
+            </button>
+          }
+        />
+
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
+          <select
+            value={supplierSel}
+            onChange={e => { setSupplierSel(e.target.value); loadSupplierStock(e.target.value) }}
+            className="bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white no-drag min-w-[260px]">
+            <option value="">Seleccioná un proveedor...</option>
+            {supplierList.map(s => (
+              <option key={s.id} value={s.id}>{s.name}{s.product_count ? ` (${s.product_count})` : ''}</option>
+            ))}
+          </select>
+          {supplierSel && supplierBlock && (
+            <div className="ml-auto flex gap-2">
+              <button onClick={exportSupplierPDF} disabled={supplierExporting}
+                className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border text-zinc-400 hover:text-white hover:border-zinc-500 rounded-lg transition-colors disabled:opacity-50">
+                <FileDown size={14} />{supplierExporting ? 'Exportando...' : 'Exportar PDF'}
+              </button>
+              <button onClick={emailSupplierStock} disabled={supplierEmailing}
+                className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border text-zinc-400 hover:text-white hover:border-zinc-500 rounded-lg transition-colors disabled:opacity-50">
+                <Mail size={14} />{supplierEmailing ? 'Enviando...' : 'Enviar al proveedor'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!supplierSel ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-zinc-600">
+            <Truck size={32} className="mb-3 opacity-40" />
+            <p className="text-sm">Elegí un proveedor para ver su stock</p>
+          </div>
+        ) : supplierLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* Totales */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-card border border-border rounded-xl px-4 py-3">
+                <p className="text-xl font-bold text-white tabular-nums">{t?.product_count ?? 0}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 uppercase tracking-wider">Productos</p>
+              </div>
+              <div className="bg-card border border-border rounded-xl px-4 py-3">
+                <p className="text-xl font-bold text-white tabular-nums">{t?.units ?? 0}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 uppercase tracking-wider">Unidades</p>
+              </div>
+              <div className="bg-card border border-border rounded-xl px-4 py-3">
+                <p className="text-xl font-bold text-accent tabular-nums">{formatCurrency(t?.value_cost || 0)}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5 uppercase tracking-wider">Valor del stock (costo)</p>
+              </div>
+            </div>
+
+            {/* Tabla */}
+            <div className="flex-1 overflow-auto bg-card border border-border rounded-xl">
+              <div className="sticky top-0 grid items-center gap-2 px-4 py-2.5 border-b border-border bg-surface text-[10px] text-zinc-500 uppercase tracking-wider"
+                style={{ gridTemplateColumns: '2fr 1.5fr 1fr 80px 100px 110px' }}>
+                <span>Producto</span><span>Talle: stock</span><span>Color</span>
+                <span className="text-right">Unid.</span><span className="text-right">P. costo</span><span className="text-right">Valor</span>
+              </div>
+              <div className="divide-y divide-border/50">
+                {(supplierBlock?.products || []).map(p => (
+                  <div key={p.id} className="grid items-center gap-2 px-4 py-2 text-sm"
+                    style={{ gridTemplateColumns: '2fr 1.5fr 1fr 80px 100px 110px' }}>
+                    <span className="text-zinc-200 truncate">{p.name}</span>
+                    <span className="text-zinc-400 text-xs">{p.sizes.map(s => `${s.size}:${s.stock}`).join(' · ')}</span>
+                    <span className="text-zinc-500 text-xs truncate">{p.color || '—'}</span>
+                    <span className="text-right text-white tabular-nums">{p.units}</span>
+                    <span className="text-right text-zinc-400 tabular-nums">{formatCurrency(p.cost)}</span>
+                    <span className="text-right text-accent tabular-nums">{formatCurrency(p.value_cost)}</span>
+                  </div>
+                ))}
+                {(!supplierBlock?.products || supplierBlock.products.length === 0) && (
+                  <div className="flex items-center justify-center py-10 text-zinc-600 text-sm">Este proveedor no tiene stock actual</div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </motion.div>
     )
   }

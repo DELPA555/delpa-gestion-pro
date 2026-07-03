@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   PackageCheck, RefreshCw, Plus, Printer, CheckCircle,
-  Search, ChevronDown, FileText, Package,
+  Search, ChevronDown, FileText, Package, Mail,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -102,6 +102,11 @@ export default function Consignment() {
   // Liquidation detail modal
   const [liqDetailModal, setLiqDetailModal] = useState(null)
 
+  // Stock en consignación
+  const [stockData, setStockData] = useState([]) // bloques por proveedor
+  const [stockLoading, setStockLoading] = useState(false)
+  const [stockEmailing, setStockEmailing] = useState(null) // supplier_id en envío
+
   const loadPending = useCallback(async () => {
     setLoading(true)
     try { setPending(await api.consignment.pending()) }
@@ -128,11 +133,37 @@ export default function Consignment() {
     api.suppliers.list({ limit: 200 }).then(r => setSuppliers(r.suppliers || [])).catch(() => {})
   }, [])
 
+  const loadStock = useCallback(async () => {
+    setStockLoading(true)
+    try { setStockData(await api.supplierStock.consignment({})) }
+    catch (e) { toast.error('Error al cargar stock en consignación') }
+    finally { setStockLoading(false) }
+  }, [])
+
   useEffect(() => {
     if (tab === 'pending') loadPending()
     else if (tab === 'liquidations') loadLiquidations()
     else if (tab === 'config') loadConsProducts()
-  }, [tab, loadPending, loadLiquidations, loadConsProducts])
+    else if (tab === 'stock') loadStock()
+  }, [tab, loadPending, loadLiquidations, loadConsProducts, loadStock])
+
+  const printStock = async (supplierId) => {
+    try {
+      const res = await api.supplierStock.exportPDF({ supplier_id: supplierId, mode: 'consignment' })
+      if (res?.ok) toast.success('PDF guardado')
+      else if (res?.error) toast.error(res.error)
+    } catch (e) { toast.error(e.message || 'Error al generar PDF') }
+  }
+
+  const emailStock = async (supplierId) => {
+    setStockEmailing(supplierId)
+    try {
+      const res = await api.supplierStock.emailSupplier({ supplier_id: supplierId, mode: 'consignment' })
+      if (res?.ok) toast.success(`Enviado a ${res.email}`)
+      else toast.error(res?.error || 'Error al enviar')
+    } catch (e) { toast.error(e.message || 'Error al enviar') }
+    finally { setStockEmailing(null) }
+  }
 
   // Search products for config tab
   useEffect(() => {
@@ -241,6 +272,7 @@ export default function Consignment() {
 
   const tabs = [
     { id: 'pending', label: 'Deudas pendientes' },
+    { id: 'stock', label: 'Stock en consignación' },
     { id: 'record', label: 'Registrar venta' },
     { id: 'liquidations', label: 'Liquidaciones' },
     { id: 'config', label: 'Configurar productos' },
@@ -331,6 +363,76 @@ export default function Consignment() {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* TAB: STOCK EN CONSIGNACIÓN */}
+      {tab === 'stock' && (
+        <div className="space-y-4">
+          {stockLoading ? (
+            <div className="py-8 text-center text-zinc-600">Cargando...</div>
+          ) : stockData.length === 0 ? (
+            <div className="py-16 text-center">
+              <Package size={40} className="text-zinc-700 mx-auto mb-3" />
+              <p className="text-zinc-300 text-base font-medium">Sin productos en consignación</p>
+              <p className="text-zinc-600 text-sm mt-1">Configurá productos en consignación en la pestaña "Configurar productos"</p>
+            </div>
+          ) : (
+            stockData.map(block => (
+              <div key={block.supplier.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
+                  <div className="flex items-center gap-2">
+                    <PackageCheck size={15} className="text-accent" />
+                    <h3 className="text-sm font-semibold text-white">{block.supplier.name}</h3>
+                    <span className="text-xs text-zinc-500">
+                      · {block.totals.product_count} prod · {block.totals.in_stock} en stock · {block.totals.sold} vendidas
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-zinc-500">Valor en stock: <span className="text-accent font-semibold">{formatCurrency(block.totals.value_remaining)}</span></span>
+                    <button onClick={() => printStock(block.supplier.id)}
+                      className="no-drag flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                      <Printer size={12} /> Imprimir stock
+                    </button>
+                    <button onClick={() => emailStock(block.supplier.id)} disabled={stockEmailing != null}
+                      className="no-drag flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                      <Mail size={12} /> {stockEmailing === block.supplier.id ? 'Enviando...' : 'Enviar por email'}
+                    </button>
+                  </div>
+                </div>
+                <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border"
+                  style={{ gridTemplateColumns: '2fr 1.5fr 1fr 90px 80px 80px 110px' }}>
+                  <span>Producto</span><span>Talle: stock</span><span>Color</span>
+                  <span className="text-right">Inicial</span><span className="text-right">Vendidas</span>
+                  <span className="text-right">En stock</span><span className="text-right">Valor</span>
+                </div>
+                <div className="divide-y divide-border max-h-[380px] overflow-y-auto">
+                  {block.products.map(p => (
+                    <div key={p.product_id} className="grid items-center px-4 py-2.5 text-sm"
+                      style={{ gridTemplateColumns: '2fr 1.5fr 1fr 90px 80px 80px 110px' }}>
+                      <span className="text-white">{p.name}</span>
+                      <span className="text-zinc-400 text-xs">{p.sizes.map(s => `${s.size}:${s.stock}`).join(' · ') || '—'}</span>
+                      <span className="text-zinc-500 text-xs">{p.color || '—'}</span>
+                      <span className="text-right text-zinc-400 tabular-nums">{p.initial}</span>
+                      <span className="text-right text-zinc-300 tabular-nums">
+                        {p.sold}{p.sold_pending ? <span className="text-amber-400 text-xs"> ({p.sold_pending} s/liq)</span> : ''}
+                      </span>
+                      <span className="text-right text-white font-medium tabular-nums">{p.in_stock}</span>
+                      <span className="text-right text-accent tabular-nums">{formatCurrency(p.value_remaining)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid items-center px-4 py-3 text-sm bg-surface border-t border-border font-medium"
+                  style={{ gridTemplateColumns: '2fr 1.5fr 1fr 90px 80px 80px 110px' }}>
+                  <span className="text-zinc-400 uppercase text-xs tracking-wider">Total</span>
+                  <span></span><span></span><span></span>
+                  <span className="text-right text-zinc-300 tabular-nums">{block.totals.sold}</span>
+                  <span className="text-right text-white tabular-nums">{block.totals.in_stock}</span>
+                  <span className="text-right text-accent tabular-nums">{formatCurrency(block.totals.value_remaining)}</span>
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}

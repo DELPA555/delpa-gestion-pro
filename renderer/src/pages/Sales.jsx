@@ -205,10 +205,21 @@ ${logoHtml}<h1>${bizName}</h1>
 <div class="row"><span>Fecha:</span><span>${formatDateTime(sale.created_at)}</span></div>
 ${sale.client_name ? `<div class="row"><span>Cliente:</span><span>${sale.client_name}</span></div>` : ''}
 <div class="divider"></div>
+${(sale.returned_items && sale.returned_items.length) ? `
+<div class="row"><strong>Devuelve:</strong></div>
+${sale.returned_items.map(it => `
+<div class="row"><span>${it.product_name}</span><span>x${it.quantity}</span></div>
+<div class="row" style="padding-left:8px"><span>Talle: ${it.size}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
+`).join('')}
+<div class="divider"></div>
+<div class="row"><strong>Se lleva:</strong></div>` : ''}
 ${(sale.items || []).map(it => `
 <div class="row"><span>${it.product_name}</span><span>x${it.quantity}</span></div>
 <div class="row" style="padding-left:8px"><span>Talle: ${it.size}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
 `).join('')}
+${typeof sale.difference === 'number' && sale.difference !== 0 ? `
+<div class="divider"></div>
+<div class="row" style="font-size:13px"><strong>${sale.difference > 0 ? 'Abonó' : 'Se devolvió'}:</strong><strong>${formatCurrency(Math.abs(sale.difference))}</strong></div>` : ''}
 <div class="divider"></div>
 <p class="center" style="margin-top:6px;font-size:11px">Conservá este ticket para cambios</p>
 ${bizContactFooterHtml(biz)}
@@ -274,23 +285,19 @@ export default function Sales() {
   const [voidReason, setVoidReason] = useState('')
   const [voiding, setVoiding] = useState(false)
 
-  // Exchange modal
+  // Exchange modal (multi-producto)
   const [exchangeModal, setExchangeModal] = useState(false)
-  const [exchReturnQuery, setExchReturnQuery] = useState('')
-  const [exchReturnResults, setExchReturnResults] = useState([])
-  const [exchReturnProduct, setExchReturnProduct] = useState(null)
-  const [exchReturnSize, setExchReturnSize] = useState(null)
-  const [exchNewQuery, setExchNewQuery] = useState('')
-  const [exchNewResults, setExchNewResults] = useState([])
-  const [exchNewProduct, setExchNewProduct] = useState(null)
-  const [exchNewSize, setExchNewSize] = useState(null)
+  const [exchReturnRows, setExchReturnRows] = useState([])
+  const [exchNewRows, setExchNewRows] = useState([])
   const [exchClient, setExchClient] = useState(null)
   const [exchClientSearch, setExchClientSearch] = useState('')
   const [exchClientResults, setExchClientResults] = useState([])
   const [exchPayMethod, setExchPayMethod] = useState('Efectivo')
+  const [exchRefundMode, setExchRefundMode] = useState('cash') // diff<0: 'cash'|'credit'
   const [exchNotes, setExchNotes] = useState('')
   const [exchProcessing, setExchProcessing] = useState(false)
-  const [exchReturnCustomSize, setExchReturnCustomSize] = useState('')
+  const exchRowSeq = useRef(0)
+  const exchRowTimers = useRef({})
 
   // Mercado Pago QR modal
   const [mpModal, setMpModal] = useState(false)
@@ -336,16 +343,6 @@ export default function Sales() {
     setClientResults(res.clients || [])
   }, 280), [])
 
-  const searchExchReturnProducts = useCallback(debounce(async (q) => {
-    if (q.length < 2) { setExchReturnResults([]); return }
-    setExchReturnResults(await api.products.search(q))
-  }, 280), [])
-
-  const searchExchNewProducts = useCallback(debounce(async (q) => {
-    if (q.length < 2) { setExchNewResults([]); return }
-    setExchNewResults(await api.products.search(q))
-  }, 280), [])
-
   const searchExchClients = useCallback(debounce(async (q) => {
     if (q.length < 2) { setExchClientResults([]); return }
     const res = await api.clients.list({ search: q, limit: 6 })
@@ -354,8 +351,6 @@ export default function Sales() {
 
   useEffect(() => { searchProducts(query) }, [query, searchProducts])
   useEffect(() => { searchClients(clientSearch) }, [clientSearch, searchClients])
-  useEffect(() => { searchExchReturnProducts(exchReturnQuery) }, [exchReturnQuery, searchExchReturnProducts])
-  useEffect(() => { searchExchNewProducts(exchNewQuery) }, [exchNewQuery, searchExchNewProducts])
   useEffect(() => { searchExchClients(exchClientSearch) }, [exchClientSearch, searchExchClients])
 
   const loadHistory = useCallback(async () => {
@@ -1095,49 +1090,190 @@ export default function Sales() {
     return () => window.removeEventListener('keydown', handler)
   }, [tab, cart, paymentMethod, installments, discount, discountType, amountReceived, selectedClient, voucherType, seller])
 
+  // ── Filas del módulo de cambios (multi-producto) ──────────────────────────────
+  const newExchRow = () => ({ id: ++exchRowSeq.current, query: '', results: [], product: null, size: null, customSize: '', qty: 1, price: 0 })
+
+  const patchExchRow = (side, id, patch) => {
+    const setter = side === 'return' ? setExchReturnRows : setExchNewRows
+    setter(rows => rows.map(r => (r.id === id ? { ...r, ...patch } : r)))
+  }
+  const addExchRow = (side) => {
+    const setter = side === 'return' ? setExchReturnRows : setExchNewRows
+    setter(rows => [...rows, newExchRow()])
+  }
+  const removeExchRow = (side, id) => {
+    const setter = side === 'return' ? setExchReturnRows : setExchNewRows
+    setter(rows => (rows.length <= 1 ? rows : rows.filter(r => r.id !== id)))
+  }
+  const searchExchRow = (side, id, q) => {
+    patchExchRow(side, id, { query: q, product: null, size: null, customSize: '' })
+    const key = side + ':' + id
+    clearTimeout(exchRowTimers.current[key])
+    if (q.trim().length < 2) { patchExchRow(side, id, { results: [] }); return }
+    exchRowTimers.current[key] = setTimeout(async () => {
+      try { patchExchRow(side, id, { results: (await api.products.search(q)) || [] }) } catch {}
+    }, 280)
+  }
+  const selectExchRowProduct = async (side, id, product, presetSize = null) => {
+    let full = product
+    try { const f = await api.products.get(product.id); if (f) full = f } catch {}
+    patchExchRow(side, id, { product: full, query: full.name, results: [], size: presetSize, customSize: '', price: Number(full.price) || 0 })
+  }
+  const scanExchRow = async (side, id, code) => {
+    const c = (code || '').trim()
+    if (c.length < 3) return
+    try {
+      const result = await api.products.searchByBarcode(c)
+      if (!result) { playBeep('error'); toast.error('Código no encontrado'); return }
+      if (side === 'new' && result.matchedSize && result.matchedStock === 0) {
+        playBeep('error'); toast.error(`Sin stock: ${result.name} T.${result.matchedSize}`); return
+      }
+      await selectExchRowProduct(side, id, result, result.matchedSize || null)
+      playBeep('success')
+    } catch { playBeep('error') }
+  }
+
+  const rowSubtotal = r => (Number(r.qty) || 0) * (Number(r.price) || 0)
+  const exchReturnTotal = exchReturnRows.reduce((s, r) => s + rowSubtotal(r), 0)
+  const exchNewTotal = exchNewRows.reduce((s, r) => s + rowSubtotal(r), 0)
+  const exchDiff = exchNewTotal - exchReturnTotal
+
   const openExchangeModal = () => {
-    setExchReturnQuery(''); setExchReturnResults([]); setExchReturnProduct(null); setExchReturnSize(null)
-    setExchReturnCustomSize('')
-    setExchNewQuery(''); setExchNewResults([]); setExchNewProduct(null); setExchNewSize(null)
+    exchRowSeq.current = 0
+    setExchReturnRows([newExchRow()])
+    setExchNewRows([newExchRow()])
     setExchClient(null); setExchClientSearch(''); setExchClientResults([])
-    setExchPayMethod('Efectivo'); setExchNotes(''); setExchProcessing(false)
+    setExchPayMethod('Efectivo'); setExchRefundMode('cash'); setExchNotes(''); setExchProcessing(false)
     setExchangeModal(true)
   }
 
   const confirmExchange = async () => {
-    const actualReturnSize = exchReturnCustomSize.trim() || exchReturnSize
-    if (!exchReturnProduct || !actualReturnSize) return toast.error('Seleccioná el producto devuelto y talle')
-    if (!exchNewProduct || !exchNewSize) return toast.error('Seleccioná el nuevo producto y talle')
+    const returnedItems = exchReturnRows
+      .filter(r => r.product && (r.customSize.trim() || r.size) && Number(r.qty) > 0)
+      .map(r => ({ productId: r.product.id, productName: r.product.name, size: r.customSize.trim() || r.size, color: r.product.color || '', qty: Number(r.qty), price: Number(r.price) || 0 }))
+    const newItems = exchNewRows
+      .filter(r => r.product && r.size && Number(r.qty) > 0)
+      .map(r => ({ productId: r.product.id, productName: r.product.name, size: r.size, color: r.product.color || '', qty: Number(r.qty), price: Number(r.price) || 0 }))
+    if (returnedItems.length === 0) return toast.error('Agregá al menos un producto devuelto con talle')
+    if (newItems.length === 0) return toast.error('Agregá al menos un producto nuevo con talle')
     setExchProcessing(true)
     try {
-      const diff = exchNewProduct.price - exchReturnProduct.price
-      await api.exchanges.create({
-        returnedProductId:   exchReturnProduct.id,
-        returnedProductName: exchReturnProduct.name,
-        returnedSize:        actualReturnSize,
-        returnedQty:         1,
-        returnedPrice:       Number(exchReturnProduct.price) || 0,
-        newProductId:        exchNewProduct.id,
-        newProductName:      exchNewProduct.name,
-        newSize:             exchNewSize,
-        newQty:              1,
-        newPrice:            Number(exchNewProduct.price) || 0,
-        clientId:            exchClient?.id || null,
-        clientName:          exchClient?.name || '',
-        resolution:          diff < 0 ? 'credit' : 'paid',
-        paymentMethod:       diff > 0 ? exchPayMethod : 'N/A',
-        notes:               exchNotes,
-        sellerName:          seller || '',
+      const diff = newItems.reduce((s, i) => s + i.qty * i.price, 0) - returnedItems.reduce((s, i) => s + i.qty * i.price, 0)
+      const res = await api.exchanges.create({
+        clientId: exchClient?.id || null,
+        clientName: exchClient?.name || '',
+        returnedItems, newItems,
+        resolution: diff < 0 ? exchRefundMode : 'paid',
+        paymentMethod: exchPayMethod,
+        notes: exchNotes,
+        sellerName: seller || '',
       })
+      if (res?.ok === false) { toast.error(res.error || 'Error al registrar cambio'); return }
       toast.success('Cambio registrado correctamente')
       printChangeTicket({
         created_at: new Date().toISOString(),
         client_name: exchClient?.name || '',
-        items: [{ product_name: exchNewProduct.name, size: exchNewSize, quantity: 1, color: exchNewProduct.color || '' }],
+        items: newItems.map(i => ({ product_name: i.productName, size: i.size, quantity: i.qty, color: i.color })),
+        returned_items: returnedItems.map(i => ({ product_name: i.productName, size: i.size, quantity: i.qty, color: i.color })),
+        difference: diff,
       }, biz)
       setExchangeModal(false)
     } catch (e) { toast.error(e.message || 'Error al registrar cambio') }
     finally { setExchProcessing(false) }
+  }
+
+  const renderExchSide = (side) => {
+    const isReturn = side === 'return'
+    const rows = isReturn ? exchReturnRows : exchNewRows
+    const total = isReturn ? exchReturnTotal : exchNewTotal
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className={cn(labelCls, 'mb-0', isReturn ? 'text-blue-300' : 'text-green-300')}>
+            {isReturn ? 'Productos que devuelve' : 'Productos que se lleva'}
+          </label>
+          <button onClick={() => addExchRow(side)}
+            className="no-drag flex items-center gap-1 text-xs text-accent hover:text-white px-2 py-1 rounded-lg border border-border hover:border-zinc-500 transition-colors">
+            <Plus size={12} /> Agregar
+          </button>
+        </div>
+
+        {rows.map(row => {
+          const sizes = row.product?.sizes || []
+          const shownSizes = isReturn ? sizes : sizes.filter(s => s.stock > 0)
+          return (
+            <div key={row.id} className="bg-[#0a0a0a] border border-border rounded-lg p-2 space-y-2">
+              <div className="flex items-start gap-2">
+                <div className="relative flex-1">
+                  <input
+                    value={row.query}
+                    onChange={e => searchExchRow(side, row.id, e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); scanExchRow(side, row.id, row.query) } }}
+                    onBlur={() => setTimeout(() => patchExchRow(side, row.id, { results: [] }), 150)}
+                    placeholder="Buscar o escanear código..."
+                    className={inputCls + ' text-sm'} />
+                  <AnimatePresence>
+                    {row.results.length > 0 && !row.product && (
+                      <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                        className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden z-30 shadow-xl max-h-56 overflow-y-auto">
+                        {row.results.slice(0, 6).map(p => (
+                          <button key={p.id} onMouseDown={() => selectExchRowProduct(side, row.id, p)}
+                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 text-left">
+                            <span className="text-xs text-white">{p.name}{p.color ? ` · ${p.color}` : ''}</span>
+                            <span className="text-xs text-zinc-500">{formatCurrency(p.price)}</span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <button onClick={() => removeExchRow(side, row.id)} title="Quitar fila"
+                  className="no-drag p-2 text-zinc-600 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
+              </div>
+
+              {row.product && (
+                <>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {row.product.color && <span className="text-[11px] text-zinc-500 mr-1">{row.product.color}</span>}
+                    {shownSizes.length === 0 && !isReturn
+                      ? <span className="text-xs text-red-400 italic">Sin stock en ningún talle</span>
+                      : shownSizes.map(s => (
+                        <button key={s.size} onClick={() => patchExchRow(side, row.id, { size: s.size, customSize: '' })}
+                          className={cn('px-2 py-0.5 rounded text-xs border transition-colors',
+                            row.size === s.size && !row.customSize ? 'border-accent bg-accent/10 text-accent' : 'border-border text-zinc-400 hover:border-zinc-500')}>
+                          {s.size} <span className="text-zinc-600">({s.stock})</span>
+                        </button>
+                      ))}
+                    {isReturn && (
+                      <input value={row.customSize}
+                        onChange={e => patchExchRow(side, row.id, { customSize: e.target.value, size: null })}
+                        placeholder="Otro talle"
+                        className="w-24 px-2 py-0.5 text-xs rounded bg-zinc-900 border border-border text-white placeholder-zinc-600 focus:outline-none focus:border-accent" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="text-zinc-500">Cant.</span>
+                    <input type="number" min="1" value={row.qty}
+                      onChange={e => patchExchRow(side, row.id, { qty: e.target.value })}
+                      className="w-16 px-2 py-1 rounded bg-zinc-900 border border-border text-white focus:outline-none focus:border-accent" />
+                    <span className="text-zinc-500">Precio</span>
+                    <input type="number" min="0" step="0.01" value={row.price}
+                      onChange={e => patchExchRow(side, row.id, { price: e.target.value })}
+                      className="w-24 px-2 py-1 rounded bg-zinc-900 border border-border text-white focus:outline-none focus:border-accent" />
+                    <span className="ml-auto text-zinc-300">{formatCurrency(rowSubtotal(row))}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })}
+
+        <div className="flex justify-between text-xs pt-1 border-t border-border/60">
+          <span className="text-zinc-500 uppercase tracking-wider">Subtotal {isReturn ? 'devuelto' : 'nuevo'}</span>
+          <span className={cn('font-semibold tabular-nums', isReturn ? 'text-blue-300' : 'text-green-300')}>{formatCurrency(total)}</span>
+        </div>
+      </div>
+    )
   }
 
   const openReturnModal = () => {
@@ -2242,7 +2378,7 @@ export default function Sales() {
       </Modal>
 
       {/* Modal: Cambio de producto */}
-      <Modal open={exchangeModal} onClose={() => setExchangeModal(false)} title="Registrar cambio" width="max-w-lg">
+      <Modal open={exchangeModal} onClose={() => setExchangeModal(false)} title="Registrar cambio" width="max-w-3xl">
         <div className="space-y-4">
           {/* Client (optional) */}
           <div className="relative">
@@ -2275,162 +2411,25 @@ export default function Sales() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Returned product */}
-            <div className="space-y-2">
-              <label className={labelCls}>Producto devuelto</label>
-              <div className="relative">
-                <input value={exchReturnQuery} onChange={e => { setExchReturnQuery(e.target.value); setExchReturnProduct(null); setExchReturnSize(null) }}
-                  placeholder="Buscar o escanear..." className={inputCls}
-                  onBlur={() => setTimeout(() => setExchReturnResults([]), 150)}
-                  onKeyDown={async (e) => {
-                    if (e.key !== 'Enter') return
-                    e.preventDefault()
-                    const code = exchReturnQuery.trim()
-                    if (code.length < 4) return
-                    try {
-                      const result = await api.products.searchByBarcode(code)
-                      if (result) {
-                        setExchReturnProduct(result)
-                        setExchReturnQuery(result.name)
-                        setExchReturnResults([])
-                        setExchReturnSize(result.matchedSize || null)
-                        setExchReturnCustomSize('')
-                        playBeep('success')
-                      } else {
-                        playBeep('error')
-                        toast.error('Código no encontrado')
-                      }
-                    } catch { playBeep('error') }
-                  }} />
-                <AnimatePresence>
-                  {exchReturnResults.length > 0 && !exchReturnProduct && (
-                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden z-30 shadow-xl">
-                      {exchReturnResults.map(p => (
-                        <button key={p.id} onMouseDown={async () => {
-                          setExchReturnProduct(p); setExchReturnQuery(p.name); setExchReturnResults([]); setExchReturnSize(null); setExchReturnCustomSize('')
-                          try { const full = await api.products.get(p.id); if (full) setExchReturnProduct(full) } catch {}
-                        }}
-                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 text-left">
-                          <span className="text-xs text-white">{p.name}</span>
-                          <span className="text-xs text-zinc-500">{formatCurrency(p.price)}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-              {exchReturnProduct && (
-                <div className="space-y-1.5">
-                  <p className="text-xs text-accent font-medium">{formatCurrency(exchReturnProduct.price)}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {exchReturnProduct.sizes?.map(s => (
-                      <button key={s.size} onClick={() => { setExchReturnSize(s.size); setExchReturnCustomSize('') }}
-                        className={cn('px-2 py-0.5 rounded text-xs border transition-colors',
-                          exchReturnSize === s.size && !exchReturnCustomSize ? 'border-accent bg-accent/10 text-accent' : 'border-border text-zinc-400 hover:border-zinc-500')}>
-                        {s.size} <span className="text-zinc-600">({s.stock})</span>
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    value={exchReturnCustomSize}
-                    onChange={e => { setExchReturnCustomSize(e.target.value); setExchReturnSize(null) }}
-                    placeholder="Otro talle (ej: 39)..."
-                    className="w-full px-2 py-1 text-xs rounded-lg bg-zinc-900 border border-border text-white placeholder-zinc-600 focus:outline-none focus:border-accent"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* New product */}
-            <div className="space-y-2">
-              <label className={labelCls}>Producto nuevo</label>
-              <div className="relative">
-                <input value={exchNewQuery} onChange={e => { setExchNewQuery(e.target.value); setExchNewProduct(null); setExchNewSize(null) }}
-                  placeholder="Buscar o escanear..." className={inputCls}
-                  onBlur={() => setTimeout(() => setExchNewResults([]), 150)}
-                  onKeyDown={async (e) => {
-                    if (e.key !== 'Enter') return
-                    e.preventDefault()
-                    const code = exchNewQuery.trim()
-                    if (code.length < 4) return
-                    try {
-                      const result = await api.products.searchByBarcode(code)
-                      if (result) {
-                        if (result.matchedSize && result.matchedStock === 0) {
-                          playBeep('error')
-                          toast.error(`Sin stock: ${result.name} T.${result.matchedSize}`)
-                          return
-                        }
-                        setExchNewProduct(result)
-                        setExchNewQuery(result.name)
-                        setExchNewResults([])
-                        setExchNewSize(result.matchedSize || null)
-                        playBeep('success')
-                      } else {
-                        playBeep('error')
-                        toast.error('Código no encontrado')
-                      }
-                    } catch { playBeep('error') }
-                  }} />
-                <AnimatePresence>
-                  {exchNewResults.length > 0 && !exchNewProduct && (
-                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden z-30 shadow-xl">
-                      {exchNewResults.map(p => (
-                        <button key={p.id} onMouseDown={() => { setExchNewProduct(p); setExchNewQuery(p.name); setExchNewResults([]); setExchNewSize(null) }}
-                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 text-left">
-                          <span className="text-xs text-white">{p.name}</span>
-                          <span className="text-xs text-zinc-500">{formatCurrency(p.price)}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-              {exchNewProduct && (
-                <div className="space-y-1.5">
-                  <p className="text-xs text-accent font-medium">{formatCurrency(exchNewProduct.price)}</p>
-                  {(() => {
-                    const available = (exchNewProduct.sizes || []).filter(s => s.stock > 0)
-                    return available.length === 0
-                      ? <p className="text-xs text-red-400 italic">Sin stock disponible en ningún talle</p>
-                      : (
-                        <div className="flex flex-wrap gap-1">
-                          {available.map(s => (
-                            <button key={s.size} onClick={() => setExchNewSize(s.size)}
-                              className={cn('px-2 py-0.5 rounded text-xs border transition-colors',
-                                exchNewSize === s.size ? 'border-accent bg-accent/10 text-accent' : 'border-border text-zinc-400 hover:border-zinc-500')}>
-                              {s.size} <span className="text-zinc-500">({s.stock})</span>
-                            </button>
-                          ))}
-                        </div>
-                      )
-                  })()}
-                </div>
-              )}
-            </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            {renderExchSide('return')}
+            {renderExchSide('new')}
           </div>
 
-          {/* Price difference */}
-          {exchReturnProduct && exchNewProduct && (
-            <div className={cn('p-3 rounded-xl text-sm border',
-              exchNewProduct.price > exchReturnProduct.price
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                : exchNewProduct.price < exchReturnProduct.price
-                  ? 'bg-blue-500/10 border-blue-500/30 text-blue-300'
-                  : 'bg-zinc-800/50 border-border text-zinc-400')}>
-              {exchNewProduct.price > exchReturnProduct.price
-                ? `El cliente abona la diferencia: ${formatCurrency(exchNewProduct.price - exchReturnProduct.price)}`
-                : exchNewProduct.price < exchReturnProduct.price
-                  ? `Se devuelve al cliente: ${formatCurrency(exchReturnProduct.price - exchNewProduct.price)}`
-                  : 'Cambio sin diferencia de precio'}
-            </div>
-          )}
+          {/* Diferencia */}
+          <div className={cn('p-3 rounded-xl text-sm border',
+            exchDiff > 0 ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+              : exchDiff < 0 ? 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                : 'bg-zinc-800/50 border-border text-zinc-400')}>
+            {exchDiff > 0
+              ? `La clienta debe abonar ${formatCurrency(exchDiff)}`
+              : exchDiff < 0
+                ? `Se devuelve a la clienta ${formatCurrency(Math.abs(exchDiff))}`
+                : 'Cambio sin diferencia'}
+          </div>
 
-          {/* Payment method if customer pays */}
-          {exchReturnProduct && exchNewProduct && exchNewProduct.price > exchReturnProduct.price && (
+          {/* Medio de pago cuando la clienta abona */}
+          {exchDiff > 0 && (
             <div>
               <label className={labelCls}>Medio de pago (diferencia)</label>
               <div className="flex flex-wrap gap-1.5">
@@ -2445,6 +2444,26 @@ export default function Sales() {
             </div>
           )}
 
+          {/* Cómo devolver la diferencia */}
+          {exchDiff < 0 && (
+            <div>
+              <label className={labelCls}>Devolución a la clienta</label>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setExchRefundMode('cash')}
+                  className={cn('px-3 py-1.5 rounded-lg text-xs border transition-colors',
+                    exchRefundMode === 'cash' ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-300')}>
+                  Efectivo (egreso de caja)
+                </button>
+                <button onClick={() => setExchRefundMode('credit')} disabled={!exchClient}
+                  title={!exchClient ? 'Seleccioná una clienta para acreditar a su cuenta' : ''}
+                  className={cn('px-3 py-1.5 rounded-lg text-xs border transition-colors disabled:opacity-40',
+                    exchRefundMode === 'credit' ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-300')}>
+                  Acreditar a cuenta
+                </button>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className={labelCls}>Notas (opcional)</label>
             <input value={exchNotes} onChange={e => setExchNotes(e.target.value)}
@@ -2453,7 +2472,7 @@ export default function Sales() {
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <button onClick={() => setExchangeModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
-            <button onClick={confirmExchange} disabled={exchProcessing || !exchReturnProduct || !exchReturnSize || !exchNewProduct || !exchNewSize}
+            <button onClick={confirmExchange} disabled={exchProcessing}
               className="no-drag btn-primary px-5 py-2 text-sm rounded-lg font-medium disabled:opacity-40 flex items-center gap-2">
               <ArrowLeftRight size={14} className={exchProcessing ? 'animate-spin' : ''} />
               {exchProcessing ? 'Registrando...' : 'Registrar cambio'}

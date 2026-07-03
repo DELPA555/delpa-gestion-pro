@@ -344,6 +344,13 @@ export default function Reports() {
   const [suppData,    setSuppData]    = useState([])
   const [suppLoading, setSuppLoading] = useState(false)
 
+  // Stock por proveedor tab
+  const [stockProvSuppliers, setStockProvSuppliers] = useState([])
+  const [stockProvSel,       setStockProvSel]       = useState('') // '' = todos
+  const [stockProvData,      setStockProvData]      = useState([]) // array de bloques por proveedor
+  const [stockProvLoading,   setStockProvLoading]   = useState(false)
+  const [stockProvEmailing,  setStockProvEmailing]  = useState(null) // supplier_id en envío
+
   // Fiscal tab
   const [fiscalSubTab,   setFiscalSubTab]   = useState('ventas')
   const [fiscalFrom,     setFiscalFrom]     = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
@@ -560,6 +567,70 @@ export default function Reports() {
   }, [suppFrom, suppTo])
   useEffect(() => { if (tab === 'proveedores') loadSupp() }, [tab, loadSupp])
 
+  const loadStockProv = useCallback(async () => {
+    setStockProvLoading(true)
+    try {
+      const data = await api.supplierStock.report({ supplier_id: stockProvSel ? Number(stockProvSel) : null })
+      setStockProvData(data || [])
+    } catch { setStockProvData([]) }
+    finally { setStockProvLoading(false) }
+  }, [stockProvSel])
+  useEffect(() => {
+    if (tab !== 'stockprov') return
+    api.supplierStock.suppliers().then(s => setStockProvSuppliers(s || [])).catch(() => {})
+    loadStockProv()
+  }, [tab, loadStockProv])
+
+  const exportStockProvPDF = async () => {
+    try {
+      const res = await api.supplierStock.exportPDF({ supplier_id: stockProvSel ? Number(stockProvSel) : null, mode: 'report' })
+      if (res?.ok) toast.success('PDF guardado')
+      else if (res?.error) toast.error(res.error)
+    } catch (e) { toast.error(e.message || 'Error al exportar') }
+  }
+
+  const exportStockProvCSV = () => {
+    if (!stockProvData.length) return
+    const rows = [['Proveedor', 'Producto', 'Color', 'Talle', 'Stock', 'Precio costo', 'Precio venta', 'Valor costo', 'Valor venta'].join(',')]
+    for (const block of stockProvData) {
+      for (const p of block.products) {
+        for (const sz of p.sizes) {
+          rows.push([
+            `"${block.supplier.name}"`, `"${p.name}"`, `"${p.color || ''}"`, `"${sz.size}"`,
+            sz.stock, (p.cost || 0).toFixed(2), (p.price || 0).toFixed(2),
+            (sz.stock * (p.cost || 0)).toFixed(2), (sz.stock * (p.price || 0)).toFixed(2),
+          ].join(','))
+        }
+      }
+    }
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob(['﻿' + rows.join('\n')], { type: 'text/csv' }))
+    a.download = `stock_proveedor_${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+  }
+
+  const emailStockProv = async (supplierId) => {
+    setStockProvEmailing(supplierId)
+    try {
+      const res = await api.supplierStock.emailSupplier({ supplier_id: supplierId, mode: 'report' })
+      if (res?.ok) toast.success(`Enviado a ${res.email}`)
+      else toast.error(res?.error || 'Error al enviar')
+    } catch (e) { toast.error(e.message || 'Error al enviar') }
+    finally { setStockProvEmailing(null) }
+  }
+
+  const emailAllSuppliers = async () => {
+    if (!stockProvData.length) return
+    setStockProvEmailing('all')
+    let sent = 0, skipped = 0
+    try {
+      for (const block of stockProvData) {
+        const res = await api.supplierStock.emailSupplier({ supplier_id: block.supplier.id, mode: 'report' }).catch(() => null)
+        if (res?.ok) sent++; else skipped++
+      }
+      toast[skipped ? 'warning' : 'success'](`Enviados: ${sent}${skipped ? ` · ${skipped} sin email/erróneos` : ''}`)
+    } finally { setStockProvEmailing(null) }
+  }
+
   const inputCls = 'input-field bg-card border border-border rounded-lg px-3 py-2 text-sm text-white no-drag'
 
   const filteredArt = artData.filter(r =>
@@ -590,6 +661,7 @@ export default function Reports() {
           { id: 'vendedoras',  label: 'Vendedoras' },
           { id: 'rentcat',     label: 'Rentabilidad' },
           { id: 'proveedores', label: 'Proveedores' },
+          { id: 'stockprov',   label: 'Stock por proveedor' },
         ].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
@@ -1540,6 +1612,117 @@ export default function Reports() {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+
+      ) : tab === 'stockprov' ? (
+        /* ─── STOCK POR PROVEEDOR ──────────────────────────────────────── */
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <select value={stockProvSel} onChange={e => setStockProvSel(e.target.value)} className={inputCls}>
+              <option value="">Todos los proveedores</option>
+              {stockProvSuppliers.map(s => (
+                <option key={s.id} value={s.id}>{s.name}{s.product_count ? ` (${s.product_count})` : ''}</option>
+              ))}
+            </select>
+            <button onClick={loadStockProv} disabled={stockProvLoading}
+              className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+              <RefreshCw size={13} className={stockProvLoading ? 'animate-spin' : ''} /> Actualizar
+            </button>
+            <div className="ml-auto flex gap-2">
+              <button onClick={exportStockProvCSV} disabled={!stockProvData.length}
+                className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                <Download size={13} /> CSV
+              </button>
+              <button onClick={exportStockProvPDF} disabled={!stockProvData.length}
+                className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                <Printer size={13} /> PDF
+              </button>
+              {stockProvSel ? (
+                <button onClick={() => emailStockProv(Number(stockProvSel))} disabled={stockProvEmailing != null}
+                  className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                  <MessageCircle size={13} /> {stockProvEmailing ? 'Enviando...' : 'Enviar al proveedor'}
+                </button>
+              ) : stockProvData.length > 0 && (
+                <button onClick={emailAllSuppliers} disabled={stockProvEmailing != null}
+                  className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                  <MessageCircle size={13} /> {stockProvEmailing === 'all' ? 'Enviando a todos...' : 'Enviar a todos'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {stockProvLoading ? (
+            <div className="py-10 flex justify-center"><div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+          ) : stockProvData.length === 0 ? (
+            <EmptyState icon={Package} title="Sin stock por proveedor" subtitle="Asociá productos a proveedores desde el ingreso de mercadería" />
+          ) : (
+            <div className="space-y-5">
+              {/* Gráfico: valor de stock al costo por proveedor */}
+              {stockProvData.length > 1 && (
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-white mb-4">Valor del stock (al costo) por proveedor</h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={stockProvData.map(b => ({ name: b.supplier.name, valor: b.totals.value_cost, unidades: b.totals.units }))} margin={{ left: -10, right: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip content={<TT />} />
+                      <Bar dataKey="valor" name="Valor al costo" fill="#00c853" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {stockProvData.map(block => (
+                <div key={block.supplier.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
+                    <div className="flex items-center gap-2">
+                      <Users size={14} className="text-accent" />
+                      <h3 className="text-sm font-semibold text-white">{block.supplier.name}</h3>
+                      <span className="text-xs text-zinc-500">· {block.totals.product_count} prod · {block.totals.units} u.</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-500">Costo: <span className="text-white font-semibold">{formatCurrency(block.totals.value_cost)}</span></span>
+                      <span className="text-xs text-zinc-500">Venta: <span className="text-green-400 font-semibold">{formatCurrency(block.totals.value_price)}</span></span>
+                      <button onClick={() => emailStockProv(block.supplier.id)} disabled={stockProvEmailing != null}
+                        title="Enviar por email al proveedor"
+                        className="no-drag flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                        <MessageCircle size={12} /> {stockProvEmailing === block.supplier.id ? 'Enviando...' : 'Email'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2 border-b border-border"
+                    style={{ gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 1fr' }}>
+                    <span>Producto</span><span>Talle: stock</span><span>Color</span>
+                    <span className="text-right">Costo</span><span className="text-right">Venta</span>
+                    <span className="text-right">Val. costo</span><span className="text-right">Val. venta</span>
+                  </div>
+                  <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+                    {block.products.map(p => (
+                      <div key={p.id} className="grid items-center px-4 py-2.5 text-sm"
+                        style={{ gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 1fr' }}>
+                        <span className="text-white">{p.name}</span>
+                        <span className="text-zinc-400 text-xs">{p.sizes.map(s => `${s.size}:${s.stock}`).join(' · ')}</span>
+                        <span className="text-zinc-500 text-xs">{p.color || '—'}</span>
+                        <span className="text-right text-zinc-400 tabular-nums">{formatCurrency(p.cost)}</span>
+                        <span className="text-right text-zinc-400 tabular-nums">{formatCurrency(p.price)}</span>
+                        <span className="text-right text-white tabular-nums">{formatCurrency(p.value_cost)}</span>
+                        <span className="text-right text-green-400 tabular-nums">{formatCurrency(p.value_price)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid items-center px-4 py-3 text-sm bg-surface border-t border-border font-medium"
+                    style={{ gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 1fr' }}>
+                    <span className="text-zinc-400 uppercase text-xs tracking-wider">Total</span>
+                    <span className="text-zinc-300 tabular-nums">{block.totals.units} u.</span>
+                    <span></span><span></span><span></span>
+                    <span className="text-right text-white tabular-nums">{formatCurrency(block.totals.value_cost)}</span>
+                    <span className="text-right text-green-400 tabular-nums">{formatCurrency(block.totals.value_price)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

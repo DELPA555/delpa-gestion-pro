@@ -316,6 +316,13 @@ export const api = {
   health: {
     score: () => inv('health:score'),
   },
+  supplierStock: {
+    suppliers:     ()  => inv('supplierStock:suppliers'),
+    report:        (p) => inv('supplierStock:report', p),
+    consignment:   (p) => inv('supplierStock:consignment', p),
+    exportPDF:     (p) => inv('supplierStock:exportPDF', p),
+    emailSupplier: (p) => inv('supplierStock:emailSupplier', p),
+  },
   vouchers: {
     list:     (p)    => inv('voucher:list', p),
     create:   (d)    => inv('voucher:create', d),

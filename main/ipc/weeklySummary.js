@@ -10,21 +10,49 @@ function getEmailConfig() {
   return Object.fromEntries(rows.map(r => [r.key, r.value]))
 }
 
-function fmtARS(v) {
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
+function getSetting(key) {
+  try { return getDB().prepare('SELECT value FROM settings WHERE key=?').get(key)?.value ?? null }
+  catch { return null }
+}
+function setSetting(key, value) {
+  try {
+    const db = getDB()
+    const r = db.prepare('UPDATE settings SET value=? WHERE key=?').run(String(value), key)
+    if (r.changes === 0) db.prepare('INSERT INTO settings (key,value) VALUES (?,?)').run(key, String(value))
+  } catch (e) { console.error('[DELPA] setSetting', key, e.message) }
 }
 
-// Milisegundos hasta H:MM en Argentina hoy (positivo = aún no llegó; negativo = ya pasó)
-function msUntilTimeArgToday(hour, minute = 0) {
-  const now = new Date()
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: TZ, hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false,
-  }).formatToParts(now)
-  const h = parseInt(parts.find(p => p.type === 'hour').value)
-  const m = parseInt(parts.find(p => p.type === 'minute').value)
-  const s = parseInt(parts.find(p => p.type === 'second').value)
-  const ms = ((hour - h) * 3600 + (minute - m) * 60 - s) * 1000
-  return ms
+// Partes de fecha/hora actuales en horario de Argentina
+function argNowParts() {
+  const p = new Intl.DateTimeFormat('en', {
+    timeZone: TZ, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', hour12: false,
+  }).formatToParts(new Date())
+  const g = t => p.find(x => x.type === t).value
+  const dowMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  return { y: +g('year'), m: +g('month'), d: +g('day'), dow: dowMap[g('weekday')], h: +g('hour') }
+}
+const pad2 = n => String(n).padStart(2, '0')
+
+// Clave (YYYY-MM-DD del lunes) del último disparo semanal que ya debió ocurrir (lunes 19hs ARG)
+function lastWeeklyFireKey() {
+  const { y, m, d, dow, h } = argNowParts()
+  const back = dow === 0 ? 6 : dow - 1            // días hasta el lunes de esta semana
+  const base = new Date(Date.UTC(y, m - 1, d, 12)) // mediodía UTC: evita saltos de huso al restar días
+  base.setUTCDate(base.getUTCDate() - back)        // lunes de esta semana
+  if (dow === 1 && h < 19) base.setUTCDate(base.getUTCDate() - 7) // lunes pero antes de las 19 → lunes pasado
+  return `${base.getUTCFullYear()}-${pad2(base.getUTCMonth() + 1)}-${pad2(base.getUTCDate())}`
+}
+
+// Clave (YYYY-MM) del último disparo mensual que ya debió ocurrir (día 1 19hs ARG)
+function lastMonthlyFireKey() {
+  const { y, m, d, h } = argNowParts()
+  if (d > 1 || (d === 1 && h >= 19)) return `${y}-${pad2(m)}`
+  const pm = m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 } // aún no llegó el del mes actual → el anterior
+  return `${pm.y}-${pad2(pm.m)}`
+}
+
+function fmtARS(v) {
+  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
 }
 
 // Fecha legible en Argentina
@@ -464,39 +492,64 @@ async function sendMonthlySummary() {
   console.log('[DELPA] Informe mensual enviado:', monthLabel)
 }
 
+// ── Catch-up: envía informes atrasados si la PC estuvo apagada en el disparo ────
+
+async function maybeSendCatchUp() {
+  const cfg = getEmailConfig()
+  if (!(cfg.email_user || cfg.email_from) || !cfg.email_pass) return // sin email configurado → no sembrar ni enviar
+
+  // Semanal
+  try {
+    const key = lastWeeklyFireKey()
+    const stored = getSetting('weekly_last_sent')
+    if (stored === null) {
+      setSetting('weekly_last_sent', key) // primer arranque con la feature: sembrar sin enviar backlog
+    } else if (stored !== key) {
+      console.log('[DELPA] Catch-up informe semanal (atrasado', stored, '→', key + ')')
+      await sendWeeklySummary()
+      setSetting('weekly_last_sent', key)
+    }
+  } catch (e) { console.error('[DELPA] Catch-up semanal:', e.message) }
+
+  // Mensual
+  try {
+    const key = lastMonthlyFireKey()
+    const stored = getSetting('monthly_last_sent')
+    if (stored === null) {
+      setSetting('monthly_last_sent', key)
+    } else if (stored !== key) {
+      console.log('[DELPA] Catch-up informe mensual (atrasado', stored, '→', key + ')')
+      await sendMonthlySummary()
+      setSetting('monthly_last_sent', key)
+    }
+  } catch (e) { console.error('[DELPA] Catch-up mensual:', e.message) }
+}
+
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 
 function scheduleWeeklySummary() {
   try {
     const cron = require('node-cron')
 
-    // ── Informe semanal ──────────────────────────────────────────────────────
-    // Cron: todos los lunes a las 19:00
+    // ── Informe semanal — todos los lunes a las 19:00 ────────────────────────
     cron.schedule('0 19 * * 1', async () => {
-      try { await sendWeeklySummary() } catch (e) { console.error('[DELPA] Error informe semanal:', e.message) }
+      try { await sendWeeklySummary(); setSetting('weekly_last_sent', lastWeeklyFireKey()) }
+      catch (e) { console.error('[DELPA] Error informe semanal:', e.message) }
     }, { timezone: TZ })
 
-    // Primera ejecución hoy a las 20:45 (para verificar que funciona)
-    const msWeekly = msUntilTimeArgToday(20, 45)
-    if (msWeekly > 0) {
-      const hoy2045 = new Date(Date.now() + msWeekly)
-      console.log('[DELPA] Próximo informe semanal (prueba hoy):', argDateStr(hoy2045), '20:45')
-      setTimeout(async () => {
-        try { await sendWeeklySummary() } catch (e) { console.error('[DELPA] Error informe semanal hoy:', e.message) }
-      }, msWeekly)
-    } else {
-      const nextMonday = nextMondayAt(19)
-      console.log('[DELPA] Próximo informe semanal:', argDateStr(nextMonday), '19:00')
-    }
-
-    // ── Informe mensual ──────────────────────────────────────────────────────
-    // Cron: primer día de cada mes a las 19:00
+    // ── Informe mensual — primer día de cada mes a las 19:00 ─────────────────
     cron.schedule('0 19 1 * *', async () => {
-      try { await sendMonthlySummary() } catch (e) { console.error('[DELPA] Error informe mensual:', e.message) }
+      try { await sendMonthlySummary(); setSetting('monthly_last_sent', lastMonthlyFireKey()) }
+      catch (e) { console.error('[DELPA] Error informe mensual:', e.message) }
     }, { timezone: TZ })
 
-    const nextFirst = nextFirstOfMonthAt(19)
-    console.log('[DELPA] Próximo informe mensual:', argDateStr(nextFirst), '19:00')
+    console.log('[DELPA] Próximo informe semanal:', argDateStr(nextMondayAt(19)), '19:00')
+    console.log('[DELPA] Próximo informe mensual:', argDateStr(nextFirstOfMonthAt(19)), '19:00')
+
+    // Catch-up: si la PC estuvo apagada en el disparo programado, enviar lo atrasado al arrancar
+    setTimeout(() => {
+      maybeSendCatchUp().catch(e => console.error('[DELPA] Catch-up:', e.message))
+    }, 45000)
 
   } catch (e) {
     console.error('[DELPA] node-cron no disponible:', e.message)

@@ -787,6 +787,36 @@ function createTables(db) {
   addColumnIfMissing(db, 'clients', 'purchase_count', 'INTEGER DEFAULT 0')
   addColumnIfMissing(db, 'clients', 'last_purchase',  "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'points',         'INTEGER DEFAULT 0')
+  addColumnIfMissing(db, 'products', 'supplier_id',   'INTEGER DEFAULT NULL')
+
+  // One-time backfill: asociar producto → proveedor según el último ingreso de mercadería.
+  // Recorre stock_entries de más antiguo a más nuevo, de modo que el proveedor del ingreso
+  // más reciente quede como el asignado. consignment_products tiene prioridad (relación directa).
+  try {
+    const migDone = db.prepare("SELECT value FROM settings WHERE key='supplier_id_backfill_done'").get()
+    if (!migDone || migDone.value !== '1') {
+      const setSupplier = db.prepare('UPDATE products SET supplier_id=? WHERE id=?')
+      const backfill = db.transaction(() => {
+        const entries = db.prepare("SELECT supplier_id, items_json FROM stock_entries WHERE supplier_id IS NOT NULL ORDER BY created_at ASC, id ASC").all()
+        for (const e of entries) {
+          let items = []
+          try { items = JSON.parse(e.items_json || '[]') } catch { items = [] }
+          for (const it of items) {
+            const pid = Number(it.product_id)
+            if (pid) setSupplier.run(e.supplier_id, pid)
+          }
+        }
+        // consignment_products: relación directa, prevalece sobre el ingreso
+        const cps = db.prepare('SELECT product_id, supplier_id FROM consignment_products WHERE supplier_id IS NOT NULL').all()
+        for (const cp of cps) setSupplier.run(cp.supplier_id, cp.product_id)
+      })
+      backfill()
+      db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('supplier_id_backfill_done','1')").run()
+      console.log('[DB Migration] Backfill de products.supplier_id completado')
+    }
+  } catch (e) {
+    console.error('[DB Migration] Error en backfill de supplier_id:', e.message)
+  }
 
   // One-time migration: generate size_barcode for all existing sizes that don't have one
   try {

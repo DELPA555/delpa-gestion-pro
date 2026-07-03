@@ -116,6 +116,11 @@ ipcMain.handle('stockentry:create', (_, data) => {
 
       if (!productId) continue
 
+      // Mantener fresca la asociación producto → proveedor para los reportes de stock por proveedor
+      if (supplier_id) {
+        try { db.prepare('UPDATE products SET supplier_id=? WHERE id=?').run(supplier_id, productId) } catch {}
+      }
+
       const sizes = Array.isArray(item.sizes) ? item.sizes : []
       for (const sz of sizes) {
         const size = sz.size || 'N/A'

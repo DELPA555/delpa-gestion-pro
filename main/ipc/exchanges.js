@@ -1,87 +1,135 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 
+// Columnas para multi-producto (idempotente — DBs viejas siguen funcionando)
+function ensureExchangeColumns(db) {
+  try {
+    const info = db.prepare("PRAGMA table_info('product_exchanges')").all()
+    if (!info.find(c => c.name === 'returned_items_json'))
+      db.exec("ALTER TABLE product_exchanges ADD COLUMN returned_items_json TEXT DEFAULT '[]'")
+    if (!info.find(c => c.name === 'new_items_json'))
+      db.exec("ALTER TABLE product_exchanges ADD COLUMN new_items_json TEXT DEFAULT '[]'")
+  } catch (e) { console.error('[Exchange] ensureColumns:', e.message) }
+}
+
+// Normaliza el payload (multi-producto nuevo o single legacy) a arrays de items
+function normalizeItems(data) {
+  const norm = it => ({
+    product_id:   it.productId ?? it.product_id,
+    product_name: it.productName ?? it.product_name ?? '',
+    size:         it.size ?? 'N/A',
+    color:        it.color ?? '',
+    qty:          Number(it.qty ?? it.quantity) || 0,
+    price:        Number(it.price ?? it.unit_price) || 0,
+  })
+  let returned = [], nuevos = []
+  if (Array.isArray(data.returnedItems) || Array.isArray(data.newItems)) {
+    returned = (data.returnedItems || []).map(norm)
+    nuevos   = (data.newItems || []).map(norm)
+  } else {
+    // Compat: payload single-producto antiguo
+    returned = [{ product_id: data.returnedProductId, product_name: data.returnedProductName, size: data.returnedSize, color: data.returnedColor || '', qty: Number(data.returnedQty) || 0, price: Number(data.returnedPrice) || 0 }]
+    nuevos   = [{ product_id: data.newProductId, product_name: data.newProductName, size: data.newSize, color: data.newColor || '', qty: Number(data.newQty) || 0, price: Number(data.newPrice) || 0 }]
+  }
+  // Descartar filas vacías
+  returned = returned.filter(i => i.product_id && i.qty > 0)
+  nuevos   = nuevos.filter(i => i.product_id && i.qty > 0)
+  return { returned, nuevos }
+}
+
 // ── Product Exchange ─────────────────────────────────────────────────────────
 
 ipcMain.handle('exchanges:create', (_, data) => {
   const db = getDB()
-  const {
-    clientId, clientName,
-    returnedProductId, returnedProductName, returnedSize, returnedQty, returnedPrice,
-    newProductId, newProductName, newSize, newQty, newPrice,
-    resolution, paymentMethod, notes, sellerName,
-  } = data
+  ensureExchangeColumns(db)
+  const { clientId, clientName, resolution, paymentMethod, notes, sellerName } = data
+  const { returned, nuevos } = normalizeItems(data)
 
-  const qtyReturned = Number(returnedQty) || 0
-  const qtyNew      = Number(newQty)      || 0
-  const difference  = (Number(newPrice) * qtyNew) - (Number(returnedPrice) * qtyReturned)
+  if (returned.length === 0) return { ok: false, error: 'No hay productos devueltos' }
+  if (nuevos.length === 0)   return { ok: false, error: 'No hay productos nuevos' }
+
+  const returnedTotal = returned.reduce((s, i) => s + i.qty * i.price, 0)
+  const newTotal      = nuevos.reduce((s, i) => s + i.qty * i.price, 0)
+  const difference    = newTotal - returnedTotal
 
   const run = db.transaction(() => {
-    // ── Producto devuelto: SUMAR stock (UPSERT — el talle puede no existir) ──
-    if (returnedSize && returnedSize !== 'N/A' && qtyReturned > 0) {
-      const before = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(returnedProductId, returnedSize)
+    // ── Productos devueltos: SUMAR stock (UPSERT — el talle puede no existir) ──
+    for (const it of returned) {
+      if (!it.size || it.size === 'N/A') continue
+      const before = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
       if (before) {
-        db.prepare('UPDATE product_sizes SET stock=stock+? WHERE product_id=? AND size=?')
-          .run(qtyReturned, returnedProductId, returnedSize)
+        db.prepare('UPDATE product_sizes SET stock=stock+? WHERE product_id=? AND size=?').run(it.qty, it.product_id, it.size)
       } else {
-        // El talle no existía en DB → crearlo con la cantidad devuelta
-        db.prepare('INSERT INTO product_sizes (product_id, size, stock, min_stock) VALUES (?,?,?,0)')
-          .run(returnedProductId, returnedSize, qtyReturned)
+        db.prepare('INSERT INTO product_sizes (product_id, size, stock, min_stock) VALUES (?,?,?,0)').run(it.product_id, it.size, it.qty)
       }
-      const after = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(returnedProductId, returnedSize)
-      console.log(`[Exchange] DEVUELTO: "${returnedProductName}" T.${returnedSize} | ${before?.stock ?? 'nuevo'} → ${after?.stock}`)
+      const after = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
+      console.log(`[Exchange] DEVUELTO: "${it.product_name}" T.${it.size} x${it.qty} | ${before?.stock ?? 'nuevo'} → ${after?.stock}`)
     }
 
-    // ── Producto nuevo: RESTAR stock (MAX 0, no negativo) ─────────────────────
-    if (newSize && newSize !== 'N/A' && qtyNew > 0) {
-      const row = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(newProductId, newSize)
+    // ── Productos nuevos: RESTAR stock (MAX 0, no negativo) ───────────────────
+    for (const it of nuevos) {
+      if (!it.size || it.size === 'N/A') continue
+      const row = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
       if (!row) {
-        console.warn(`[Exchange] ADVERTENCIA: talle ${newSize} de "${newProductName}" no existe en stock, no se descuenta`)
-      } else {
-        if (row.stock < qtyNew) {
-          console.warn(`[Exchange] ADVERTENCIA: stock insuficiente "${newProductName}" T.${newSize} (stock=${row.stock}, solicitado=${qtyNew})`)
-        }
-        db.prepare('UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?')
-          .run(qtyNew, newProductId, newSize)
-        const after = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(newProductId, newSize)
-        console.log(`[Exchange] NUEVO: "${newProductName}" T.${newSize} | ${row.stock} → ${after?.stock}`)
+        console.warn(`[Exchange] ADVERTENCIA: talle ${it.size} de "${it.product_name}" no existe en stock, no se descuenta`)
+        continue
       }
+      if (row.stock < it.qty) {
+        console.warn(`[Exchange] ADVERTENCIA: stock insuficiente "${it.product_name}" T.${it.size} (stock=${row.stock}, solicitado=${it.qty})`)
+      }
+      db.prepare('UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?').run(it.qty, it.product_id, it.size)
+      const after = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
+      console.log(`[Exchange] NUEVO: "${it.product_name}" T.${it.size} x${it.qty} | ${row.stock} → ${after?.stock}`)
     }
-    // Credit to client account if resolution === 'credit' and we owe them money
-    if (resolution === 'credit' && clientId && difference < 0) {
-      const credit = Math.abs(difference)
-      db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(credit, clientId)
-      db.prepare(`INSERT INTO account_movements (client_id,type,amount,notes) VALUES (?,'payment',?,'Crédito por cambio de mercadería')`)
-        .run(clientId, credit)
-    }
-    // Register cashbox movement when client pays the difference in cash
-    if (resolution === 'paid' && difference > 0) {
-      const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+
+    // ── Diferencia ────────────────────────────────────────────────────────────
+    const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+    if (difference > 0) {
+      // La clienta abona la diferencia → ingreso en caja
       if (cashbox) {
         db.prepare(`INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,'ingreso',?,?,?)`)
           .run(cashbox.id, `Diferencia cambio — ${clientName || 'cliente'}`, difference, paymentMethod || 'Efectivo')
       }
+    } else if (difference < 0) {
+      const owed = Math.abs(difference)
+      if (resolution === 'credit' && clientId) {
+        // Acreditar a cuenta corriente de la clienta
+        db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(owed, clientId)
+        db.prepare(`INSERT INTO account_movements (client_id,type,amount,notes) VALUES (?,'payment',?,'Crédito por cambio de mercadería')`)
+          .run(clientId, owed)
+      } else if (cashbox) {
+        // Se devuelve en efectivo → egreso en caja
+        db.prepare(`INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,'egreso',?,?,?)`)
+          .run(cashbox.id, `Devolución dif. cambio — ${clientName || 'cliente'}`, owed, paymentMethod || 'Efectivo')
+      }
     }
 
+    // Resolución final calculada
+    const finalResolution = difference > 0 ? 'paid' : difference < 0 ? (resolution === 'credit' ? 'credit' : 'cash') : 'even'
+
+    // Primer item de cada lado en columnas legacy (compat con listados existentes)
+    const r0 = returned[0], n0 = nuevos[0]
     const { lastInsertRowid } = db.prepare(`
       INSERT INTO product_exchanges
         (client_id,client_name,returned_product_id,returned_product_name,returned_size,returned_qty,returned_price,
-         new_product_id,new_product_name,new_size,new_qty,new_price,difference,resolution,notes,seller_name)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         new_product_id,new_product_name,new_size,new_qty,new_price,difference,resolution,notes,seller_name,
+         returned_items_json,new_items_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       clientId || null, clientName || '',
-      returnedProductId, returnedProductName, returnedSize, qtyReturned, Number(returnedPrice) || 0,
-      newProductId, newProductName, newSize, qtyNew, Number(newPrice) || 0,
-      difference, resolution || 'paid', notes || '', sellerName || ''
+      r0.product_id, r0.product_name, r0.size, returned.reduce((s, i) => s + i.qty, 0), r0.price,
+      n0.product_id, n0.product_name, n0.size, nuevos.reduce((s, i) => s + i.qty, 0), n0.price,
+      difference, finalResolution, notes || '', sellerName || '',
+      JSON.stringify(returned), JSON.stringify(nuevos)
     )
 
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description,new_data) VALUES ('CREATE','exchanges',?,'Cambio de mercadería',?)`)
-      .run(lastInsertRowid, JSON.stringify({ returnedProductName, newProductName, difference, resolution }))
+      .run(lastInsertRowid, JSON.stringify({ returned: returned.length, nuevos: nuevos.length, difference, resolution: finalResolution }))
 
     return lastInsertRowid
   })
 
-  return { ok: true, id: run() }
+  return { ok: true, id: run(), difference, returnedTotal, newTotal }
 })
 
 ipcMain.handle('exchanges:list', (_, { page = 1, limit = 25 } = {}) => {
@@ -89,7 +137,13 @@ ipcMain.handle('exchanges:list', (_, { page = 1, limit = 25 } = {}) => {
   const offset = (page - 1) * limit
   const { count } = db.prepare('SELECT COUNT(*) as count FROM product_exchanges').get()
   const rows = db.prepare('SELECT * FROM product_exchanges ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset)
-  return { exchanges: rows, total: count, pages: Math.ceil(count / limit) }
+  const exchanges = rows.map(r => {
+    let returnedItems = [], newItems = []
+    try { returnedItems = JSON.parse(r.returned_items_json || '[]') } catch {}
+    try { newItems = JSON.parse(r.new_items_json || '[]') } catch {}
+    return { ...r, returnedItems, newItems }
+  })
+  return { exchanges, total: count, pages: Math.ceil(count / limit) }
 })
 
 // ── Product Return ───────────────────────────────────────────────────────────

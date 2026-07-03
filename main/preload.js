@@ -86,6 +86,8 @@ const CHANNELS = [
   'supplieranalytics:margins',
   'onboarding:status', 'onboarding:dismiss', 'onboarding:reset',
   'health:score',
+  'supplierStock:suppliers', 'supplierStock:report', 'supplierStock:consignment',
+  'supplierStock:exportPDF', 'supplierStock:emailSupplier',
 ]
 
 contextBridge.exposeInMainWorld('electron', {
