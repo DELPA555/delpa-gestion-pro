@@ -2,6 +2,8 @@
   "name": "panel-financiero",
   "version": "1.10.0",
   "private": true,
+  "description": "DELPA Gestion PRO - sistema de gestion comercial para tienda de ropa",
+  "author": "Ivan del Palacio <delpa555@gmail.com>",
   "main": "main/index.js",
   "scripts": {
     "dev": "concurrently \"vite --config renderer/vite.config.js\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
