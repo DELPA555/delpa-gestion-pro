@@ -2,7 +2,7 @@ const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 
 ipcMain.handle('sales:create', (_, {
-  clientId, items, total, subtotal, discount, paymentMethod, notes,
+  clientId, items, total, subtotal, subtotalSinRecargo, discount, paymentMethod, notes,
   installments, surchargeRate, voucherType, sellerName, sucursalId,
   // AFIP fields
   cae, caeFchVto, tipoCbte, cbteNro, ptoVenta, docTipo, docNro,
@@ -23,6 +23,12 @@ ipcMain.handle('sales:create', (_, {
   const isMulti = Array.isArray(payments) && payments.length > 1
   const effectiveMethod = isMulti ? 'Múltiple' : paymentMethod
 
+  // Base para calcular puntos: productos menos descuentos, ANTES del recargo por
+  // medio de pago (débito/crédito). Fallback para payloads viejos que no la mandan.
+  const pointsBase = (subtotalSinRecargo != null && subtotalSinRecargo >= 0)
+    ? subtotalSinRecargo
+    : Math.max(0, (subtotal != null ? subtotal : total) - (discount || 0))
+
   const run = db.transaction(() => {
     const seqRow = db.prepare("SELECT value FROM settings WHERE key='sale_seq'").get()
     const seq = (parseInt(seqRow?.value || '0', 10)) + 1
@@ -32,13 +38,13 @@ ipcMain.handle('sales:create', (_, {
 
     const { lastInsertRowid: saleId } = db.prepare(`
       INSERT INTO sales
-        (client_id,total,subtotal,discount,payment_method,notes,cashbox_id,installments,
+        (client_id,total,subtotal,subtotal_sin_recargo,discount,payment_method,notes,cashbox_id,installments,
          surcharge_rate,voucher_type,seller_name,sale_number,sucursal_id,
          cae,cae_fch_vto,tipo_cbte,cbte_nro,pto_venta,doc_tipo,doc_nro,mp_payment_id,
          amount_received,change_given,discount_type,discount_value)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
-      clientId || null, total, subtotal || total, discount || 0,
+      clientId || null, total, subtotal || total, pointsBase, discount || 0,
       effectiveMethod, notes || '', cashbox?.id || null,
       installments || 1, surchargeRate || 0, voucherType || 'ticket',
       sellerName || '', saleNumber, sucursalId || null,
@@ -142,7 +148,8 @@ ipcMain.handle('sales:create', (_, {
       const enabled = db.prepare("SELECT value FROM settings WHERE key='points_enabled'").get()?.value
       if (enabled === '1') {
         const perPesos = parseInt(db.prepare("SELECT value FROM settings WHERE key='points_per_pesos'").get()?.value || '1000', 10)
-        earnedPoints = Math.floor(total / perPesos)
+        // Puntos sobre el precio SIN recargo (productos - descuentos), no sobre el total con recargo.
+        earnedPoints = Math.floor(pointsBase / perPesos)
         if (earnedPoints > 0) {
           db.prepare('UPDATE clients SET points=points+? WHERE id=?').run(earnedPoints, clientId)
           db.prepare('INSERT INTO client_points_log (client_id,type,amount,sale_id,notes) VALUES (?,?,?,?,?)')

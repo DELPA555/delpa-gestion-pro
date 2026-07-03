@@ -779,6 +779,7 @@ function createTables(db) {
   addColumnIfMissing(db, 'sales',   'change_given',      'REAL DEFAULT 0')
   addColumnIfMissing(db, 'sales',   'discount_type',     "TEXT DEFAULT 'amount'")
   addColumnIfMissing(db, 'sales',   'discount_value',    'REAL DEFAULT 0')
+  addColumnIfMissing(db, 'sales',   'subtotal_sin_recargo', 'REAL DEFAULT 0')
   addColumnIfMissing(db, 'stock_entries', 'is_consignment', 'INTEGER DEFAULT 0')
   addColumnIfMissing(db, 'clients', 'birth_date',     "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'city',           "TEXT DEFAULT ''")

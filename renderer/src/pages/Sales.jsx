@@ -150,6 +150,7 @@ ${pointsInfo && pointsInfo.enabled && sale.client_name ? `
 <div class="divider"></div>
 <p class="center bold" style="font-size:13px;letter-spacing:0.5px">PROGRAMA DE FIDELIZACIÓN</p>
 <p class="center" style="margin:4px 0">Puntos ganados hoy: <strong style="font-size:15px">+${pointsInfo.earned} pts</strong></p>
+${pointsInfo.base != null ? `<p class="center" style="font-size:10px;color:#555;margin:2px 0">Puntos calculados sobre $${Number(pointsInfo.base).toLocaleString('es-AR')} (precio sin recargo)</p>` : ''}
 <p class="center" style="margin:4px 0">Puntos acumulados: <strong style="font-size:15px">${pointsInfo.total} pts</strong></p>
 ${pointsInfo.total >= (pointsInfo.minRedeem || 5) ? `<p class="center" style="font-size:11px;margin:2px 0">Podés canjear ${pointsInfo.total} pts = $${(pointsInfo.total * (pointsInfo.value || 0)).toLocaleString('es-AR')} de descuento</p>` : ''}` : ''}
 <div class="divider"></div>
@@ -172,9 +173,14 @@ async function printTicketFetched(sale, biz) {
         api.settings.getAll(),
       ])
       if (settings.points_enabled === '1') {
+        // Base sin recargo (ventas nuevas la guardan; fallback para las viejas).
+        const base = (sale.subtotal_sin_recargo && sale.subtotal_sin_recargo > 0)
+          ? sale.subtotal_sin_recargo
+          : Math.max(0, (sale.subtotal || sale.total || 0) - (sale.discount || 0))
         pointsInfo = {
           enabled: true,
-          earned: Math.floor((sale.total || 0) / (Number(settings.points_per_pesos) || 1000)),
+          earned: Math.floor(base / (Number(settings.points_per_pesos) || 1000)),
+          base,
           total: client?.points ?? 0,
           value: Number(settings.point_value) || 100,
           minRedeem: Number(settings.points_min_redeem) || 5,
@@ -734,6 +740,7 @@ export default function Sales() {
         })),
         total,
         subtotal,
+        subtotalSinRecargo: net, // base de puntos: productos - descuentos, ANTES del recargo por medio de pago
         discount: discountAmt,
         discountType,
         discountValue: Number(discount) || 0,
@@ -765,13 +772,17 @@ export default function Sales() {
         catch { toast.warning('Venta registrada. El vale no pudo marcarse como usado — verificarlo en Vales.') }
       }
       setLastSale(saleData)
-      // Track points for ticket
+      // Track points for ticket. Usa el valor autoritativo del backend (calculado
+      // sobre el precio sin recargo) y muestra la base en el ticket.
       if (pointsCfg.enabled && selectedClient) {
-        const earned = Math.floor((saleData?.total || total) / pointsCfg.perPesos)
+        const earned = (result && typeof result === 'object' && result.earnedPoints != null)
+          ? result.earnedPoints
+          : Math.floor(net / pointsCfg.perPesos)
         const updatedClient = await api.clients.get(selectedClient.id).catch(() => null)
         setLastSalePoints({
           enabled: true,
           earned,
+          base: net,
           total: updatedClient?.points ?? (selectedClient.points + earned),
           value: pointsCfg.value,
           minRedeem: pointsCfg.minRedeem,
