@@ -253,13 +253,23 @@ function printGiftTickets(tickets, biz = {}) {
   const logo = biz.business_logo ? `<img src="${biz.business_logo}" alt="logo">` : ''
   const fmt = (d) => { try { return new Date(String(d).replace(' ', 'T')).toLocaleDateString('es-AR') } catch { return d } }
   const insta = biz.business_instagram ? `@${String(biz.business_instagram).replace(/^@/, '')}` : ''
-  const tel = biz.business_phone || biz.business_whatsapp || ''
+  const addr = biz.business_address || ''
+  const tel = biz.business_phone || ''
+  const web = biz.business_website || ''
   const SEP = '================================'
   const SUB = '--------------------------------'
+  // Contacto del negocio en el encabezado (solo campos completos)
+  const header = [
+    addr ? `<div class="c">${addr}</div>` : '',
+    tel ? `<div class="c">Tel: ${tel}</div>` : '',
+    web ? `<div class="c">${web}</div>` : '',
+    insta ? `<div class="c">Instagram: ${insta}</div>` : '',
+  ].join('')
   const block = (t) => `
     <div class="ticket-individual">
       ${logo}
       <div class="biz">${bizName}</div>
+      ${header}
       <div class="sep">${SEP}</div>
       <div class="title">*** TICKET DE CAMBIO ***</div>
       <div class="sep">${SEP}</div>
@@ -277,9 +287,6 @@ function printGiftTickets(tickets, biz = {}) {
       <div class="sep">${SEP}</div>
       <div class="c">Sujeto a stock disponible</div>
       <div class="c">Sin devolucion de dinero</div>
-      <div class="sep">${SEP}</div>
-      ${insta ? `<div class="c">IG: ${insta}</div>` : ''}
-      ${tel ? `<div class="c">Tel: ${tel}</div>` : ''}
       <div class="sep">${SEP}</div>
       <div class="end"></div>
     </div>`
