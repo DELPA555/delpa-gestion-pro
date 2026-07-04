@@ -247,44 +247,57 @@ ${bizContactFooterHtml(biz)}
 }
 
 // Tickets de cambio individuales para regalo (SIN precio), 2 por hoja A4.
+// Tickets de cambio individuales (SIN precio) para impresora térmica de 80mm.
 function printGiftTickets(tickets, biz = {}) {
-  const bizName = biz.business_name || 'DELPA'
-  const logo = biz.business_logo ? `<img src="${biz.business_logo}" style="height:42px;object-fit:contain;margin:0 auto 6px;display:block" alt="logo">` : ''
+  const bizName = (biz.business_name || 'DELPA').toUpperCase()
+  const logo = biz.business_logo ? `<img src="${biz.business_logo}" alt="logo">` : ''
   const fmt = (d) => { try { return new Date(String(d).replace(' ', 'T')).toLocaleDateString('es-AR') } catch { return d } }
-  const socials = bizContactFooterHtml(biz)
+  const insta = biz.business_instagram ? `@${String(biz.business_instagram).replace(/^@/, '')}` : ''
+  const tel = biz.business_phone || biz.business_whatsapp || ''
+  const SEP = '================================'
+  const SUB = '--------------------------------'
   const block = (t) => `
-    <div class="tk">
+    <div class="ticket-individual">
       ${logo}
       <div class="biz">${bizName}</div>
-      <div class="title">TICKET DE CAMBIO</div>
-      <div class="num">${t.number}</div>
-      <div class="dates"><span>Emitido: ${fmt(t.issued_at)}</span><span>Válido hasta: ${fmt(t.expires_at)}</span></div>
-      <div class="prod">${t.product_name || ''}</div>
-      <div class="attr">${t.size ? `Talle: ${t.size}` : ''}${t.size && t.color ? ' · ' : ''}${t.color ? `Color: ${t.color}` : ''}</div>
-      <div class="leg">Presentá este ticket para realizar el cambio por talle o color.</div>
-      <div class="leg2">Sujeto a stock disponible · Sin devolución de dinero</div>
-      ${socials}
+      <div class="sep">${SEP}</div>
+      <div class="title">*** TICKET DE CAMBIO ***</div>
+      <div class="sep">${SEP}</div>
+      <div class="line">Nro: ${t.number}</div>
+      <div class="line">Emision: ${fmt(t.issued_at)}</div>
+      <div class="line">Valido hasta: ${fmt(t.expires_at)}</div>
+      <div class="sep">${SUB}</div>
+      <div class="prod">${(t.product_name || '').toUpperCase()}</div>
+      ${t.size ? `<div class="line">TALLE: ${t.size}</div>` : ''}
+      ${t.color ? `<div class="line">COLOR: ${t.color}</div>` : ''}
+      <div class="sep">${SUB}</div>
+      <div class="c">Presenta este ticket para</div>
+      <div class="c">realizar el cambio por talle</div>
+      <div class="c">o color disponible</div>
+      <div class="sep">${SEP}</div>
+      <div class="c">Sujeto a stock disponible</div>
+      <div class="c">Sin devolucion de dinero</div>
+      <div class="sep">${SEP}</div>
+      ${insta ? `<div class="c">IG: ${insta}</div>` : ''}
+      ${tel ? `<div class="c">Tel: ${tel}</div>` : ''}
+      <div class="sep">${SEP}</div>
+      <div class="end"></div>
     </div>`
-  let pages = ''
-  for (let i = 0; i < tickets.length; i += 2) {
-    pages += `<div class="page">${block(tickets[i])}${tickets[i + 1] ? block(tickets[i + 1]) : '<div class="tk empty"></div>'}</div>`
-  }
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-    * { margin:0; padding:0; box-sizing:border-box; font-family:Arial,Helvetica,sans-serif }
-    @page { size:A4; margin:0 }
-    .page { width:210mm; height:297mm; display:flex; flex-direction:column; page-break-after:always }
-    .tk { height:148.5mm; border-bottom:1px dashed #999; padding:14mm 18mm; display:flex; flex-direction:column; align-items:center; text-align:center }
-    .tk.empty { border-bottom:none }
-    .biz { font-size:14px; font-weight:bold; letter-spacing:1px }
-    .title { font-size:22px; font-weight:800; letter-spacing:2px; margin:8px 0 4px }
-    .num { font-size:16px; font-weight:bold; color:#333; margin-bottom:8px; font-family:monospace }
-    .dates { display:flex; gap:24px; font-size:11px; color:#555; margin-bottom:14px }
-    .prod { font-size:17px; font-weight:600; margin-top:6px }
-    .attr { font-size:13px; color:#444; margin-top:2px; margin-bottom:14px }
-    .leg { font-size:12px; margin-top:auto; max-width:120mm }
-    .leg2 { font-size:11px; color:#666; margin-top:4px; margin-bottom:8px }
-  </style></head><body>${pages}</body></html>`
-  const w = window.open('', '_blank', 'width=800,height=1000')
+    @page { size:80mm auto; margin:0 }
+    * { margin:0; padding:0; box-sizing:border-box }
+    body { width:80mm; margin:0; padding:0; font-family:'Courier New',monospace; color:#000 }
+    .ticket-individual { width:76mm; margin:2mm; padding:4mm; font-size:11pt; page-break-after:always; border-bottom:2px dashed #000; padding-bottom:8mm; margin-bottom:10mm }
+    .ticket-individual img { max-width:40mm; max-height:20mm; object-fit:contain; display:block; margin:0 auto 3mm }
+    .biz { text-align:center; font-size:12pt; font-weight:bold }
+    .title { text-align:center; font-size:13pt; font-weight:bold }
+    .prod { font-size:12pt; font-weight:bold; margin:1mm 0 }
+    .sep { font-size:9pt; white-space:nowrap; overflow:hidden; margin:1mm 0 }
+    .line { font-size:11pt }
+    .c { font-size:11pt; text-align:center }
+    .end { height:10mm }
+  </style></head><body>${tickets.map(block).join('')}</body></html>`
+  const w = window.open('', '_blank', 'width=302,height=600')
   w.document.write(html); w.document.close()
   w.onload = () => { w.print(); setTimeout(() => w.close(), 600) }
 }
@@ -2478,7 +2491,7 @@ export default function Sales() {
             {/* Opción B */}
             <div className="border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 mb-1"><Gift size={15} className="text-accent" /><span className="font-semibold text-white text-sm">Tickets individuales (para regalo)</span></div>
-              <p className="text-xs text-zinc-400 mb-3">Un ticket por producto, sin precio, con número y vencimiento. Se imprimen 2 por hoja A4.</p>
+              <p className="text-xs text-zinc-400 mb-3">Un ticket por producto, sin precio, con número y vencimiento. Se imprimen en impresora térmica (80mm).</p>
               <div className="space-y-1.5 max-h-52 overflow-y-auto mb-3">
                 {(changeTicketModal.items || []).map((it, i) => (
                   <label key={i} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
