@@ -39,7 +39,7 @@ const CHANNELS = [
   'tn:getOrders', 'tn:importOrder',
   'tn:syncProduct', 'tn:syncCustomers', 'tn:importCustomer',
   'tn:salesToday', 'tn:salesPeriod',
-  'auth:login', 'auth:logout', 'auth:session', 'auth:lastUser',
+  'auth:login', 'auth:logout', 'auth:session', 'auth:lastUser', 'auth:touch',
   'auth:users:list', 'auth:users:create', 'auth:users:update',
   'auth:users:delete', 'auth:users:changePassword',
   'reports:commissions',

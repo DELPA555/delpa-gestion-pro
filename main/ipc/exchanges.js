@@ -52,6 +52,12 @@ ipcMain.handle('exchanges:create', (_, data) => {
   const newTotal      = nuevos.reduce((s, i) => s + i.qty * i.price, 0)
   const difference    = newTotal - returnedTotal
 
+  // Recargo por medio de pago: SOLO cuando la clienta abona la diferencia (>0).
+  // Si la diferencia es a favor de la clienta, se devuelve el monto exacto sin recargo.
+  const surchargeRate   = difference > 0 ? (Number(data.surchargeRate) || 0) : 0
+  const surchargeAmount = Math.round(difference * surchargeRate / 100)
+  const totalPaid       = difference + surchargeAmount
+
   const run = db.transaction(() => {
     // ── Productos devueltos: SUMAR stock (UPSERT — el talle puede no existir) ──
     for (const it of returned) {
@@ -85,10 +91,10 @@ ipcMain.handle('exchanges:create', (_, data) => {
     // ── Diferencia ────────────────────────────────────────────────────────────
     const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
     if (difference > 0) {
-      // La clienta abona la diferencia → ingreso en caja
+      // La clienta abona la diferencia + recargo del medio de pago → ingreso en caja
       if (cashbox) {
         db.prepare(`INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,'ingreso',?,?,?)`)
-          .run(cashbox.id, `Diferencia cambio — ${clientName || 'cliente'}`, difference, paymentMethod || 'Efectivo')
+          .run(cashbox.id, `Diferencia cambio — ${clientName || 'cliente'}${surchargeAmount > 0 ? ` (recargo ${surchargeRate}%)` : ''}`, totalPaid, paymentMethod || 'Efectivo')
       }
     } else if (difference < 0) {
       const owed = Math.abs(difference)
@@ -129,7 +135,7 @@ ipcMain.handle('exchanges:create', (_, data) => {
     return lastInsertRowid
   })
 
-  return { ok: true, id: run(), difference, returnedTotal, newTotal }
+  return { ok: true, id: run(), difference, returnedTotal, newTotal, surchargeRate, surchargeAmount, totalPaid }
 })
 
 ipcMain.handle('exchanges:list', (_, { page = 1, limit = 25 } = {}) => {

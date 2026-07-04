@@ -213,6 +213,7 @@ export const api = {
     login:              (d)      => inv('auth:login', d),
     logout:             ()       => inv('auth:logout'),
     session:            ()       => inv('auth:session'),
+    touch:              ()       => inv('auth:touch'),
     lastUser:           (u)      => inv('auth:lastUser', u),
     users: {
       list:             ()       => inv('auth:users:list'),

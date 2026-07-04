@@ -3,7 +3,10 @@ const { getDB } = require('../../database/db')
 const crypto = require('crypto')
 
 let currentSession = null
-const SESSION_TTL = 8 * 60 * 60 * 1000 // 8 hours
+
+function getSetting(db, key, def) {
+  return db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value ?? def
+}
 
 function hashPassword(pass) {
   const salt = crypto.randomBytes(16).toString('hex')
@@ -30,7 +33,9 @@ ipcMain.handle('auth:login', (_, { username, password }) => {
   if (!user.password_hash.startsWith('pbkdf2:')) {
     try { db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(password), user.id) } catch {}
   }
-  currentSession = { id: user.id, username: user.username, role: user.role, seller_name: user.seller_name || '', loginAt: Date.now() }
+  currentSession = { id: user.id, username: user.username, role: user.role, seller_name: user.seller_name || '', loginAt: Date.now(), lastActivity: Date.now() }
+  // Persistir la sesión para restaurarla al reabrir la app sin pedir contraseña.
+  try { db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('active_session_user',?)").run(String(user.id)) } catch {}
   try {
     db.prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('LOGIN','auth',?,?)")
       .run(user.id, `Inicio de sesión: ${user.username}`)
@@ -39,13 +44,21 @@ ipcMain.handle('auth:login', (_, { username, password }) => {
 })
 
 ipcMain.handle('auth:logout', () => {
+  const db = getDB()
   if (currentSession) {
     try {
-      getDB().prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('LOGOUT','auth',?,?)")
+      db.prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('LOGOUT','auth',?,?)")
         .run(currentSession.id, `Cierre de sesión: ${currentSession.username}`)
     } catch {}
   }
+  try { db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('active_session_user','')").run() } catch {}
   currentSession = null
+  return { ok: true }
+})
+
+// Reinicia el reloj de inactividad (lo llama el front ante actividad del usuario).
+ipcMain.handle('auth:touch', () => {
+  if (currentSession) currentSession.lastActivity = Date.now()
   return { ok: true }
 })
 
@@ -61,10 +74,33 @@ ipcMain.handle('auth:lastUser', (_, username) => {
 })
 
 ipcMain.handle('auth:session', () => {
-  if (!currentSession) return null
-  if (Date.now() - currentSession.loginAt > SESSION_TTL) {
-    currentSession = null
-    return null
+  const db = getDB()
+
+  // Restaurar la sesión persistida al reabrir la app (sin pedir contraseña).
+  if (!currentSession) {
+    const savedId = getSetting(db, 'active_session_user', '')
+    if (savedId) {
+      const user = db.prepare('SELECT * FROM users WHERE id=? AND active=1').get(Number(savedId))
+      if (user) {
+        currentSession = { id: user.id, username: user.username, role: user.role, seller_name: user.seller_name || '', loginAt: Date.now(), lastActivity: Date.now() }
+      } else {
+        try { db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('active_session_user','')").run() } catch {}
+        return null
+      }
+    } else {
+      return null
+    }
+  }
+
+  // Si "Mantener sesión activa" está apagado, aplicar timeout por inactividad.
+  const keep = getSetting(db, 'keep_session_active', '1')
+  if (keep !== '1') {
+    const timeoutMs = (parseInt(getSetting(db, 'session_timeout_minutes', '480'), 10) || 480) * 60 * 1000
+    if (Date.now() - (currentSession.lastActivity || currentSession.loginAt) > timeoutMs) {
+      try { db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('active_session_user','')").run() } catch {}
+      currentSession = null
+      return null
+    }
   }
   return currentSession
 })

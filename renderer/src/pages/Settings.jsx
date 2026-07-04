@@ -6,6 +6,7 @@ import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, U
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
+import { useAuth } from '@/context/AuthContext'
 
 const TAB_GROUPS = [
   {
@@ -16,6 +17,7 @@ const TAB_GROUPS = [
       { id: 'categories',   label: 'Categorías',   Icon: Tag },
       { id: 'sellers',      label: 'Vendedoras',    Icon: Users },
       { id: 'usuarios',     label: 'Usuarios',      Icon: UserCog },
+      { id: 'seguridad',    label: 'Seguridad',     Icon: ShieldCheck },
     ],
   },
   {
@@ -266,6 +268,9 @@ export default function Settings() {
 
   // Fidelización
   const [pointsForm, setPointsForm] = useState({ points_enabled: '0', points_per_pesos: '1000', point_value: '100', points_min_redeem: '5', points_expiry_days: '180', change_ticket_days: '30' })
+  const { user: sessionUser, logout: sessionLogout } = useAuth()
+  const [sessionForm, setSessionForm] = useState({ keep_session_active: '1', session_timeout_minutes: '480' })
+  const [sessionSaving, setSessionSaving] = useState(false)
   const [pointsSaving, setPointsSaving] = useState(false)
 
   // Fixed costs
@@ -316,6 +321,10 @@ export default function Settings() {
         points_min_redeem: all.points_min_redeem || '5',
         points_expiry_days: all.points_expiry_days || '180',
         change_ticket_days: all.change_ticket_days || '30',
+      })
+      setSessionForm({
+        keep_session_active: all.keep_session_active ?? '1',
+        session_timeout_minutes: all.session_timeout_minutes || '480',
       })
       setEmailForm({
         email_smtp: all.email_smtp || 'smtp.gmail.com',
@@ -445,6 +454,15 @@ export default function Settings() {
       toast.success('Configuración de fidelización guardada')
     } catch { toast.error('Error al guardar') }
     finally { setPointsSaving(false) }
+  }
+
+  const saveSession = async () => {
+    setSessionSaving(true)
+    try {
+      await Promise.all(Object.entries(sessionForm).map(([k, v]) => api.settings.set(k, v)))
+      toast.success('Configuración de sesión guardada')
+    } catch { toast.error('Error al guardar') }
+    finally { setSessionSaving(false) }
   }
 
   const handleLicenseActivate = async () => {
@@ -1855,6 +1873,51 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
           {/* ── Backup cifrado ── */}
           <BackupSection />
 
+        </div>
+      )}
+
+      {/* ── Tab: Seguridad ── */}
+      {tab === 'seguridad' && (
+        <div className="max-w-lg space-y-5">
+          {/* Sesión actual */}
+          <div className="p-4 rounded-xl bg-card border border-border flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-0.5">Sesión actual</p>
+              <p className="text-sm text-white font-medium">{sessionUser?.username || '—'}
+                <span className="text-zinc-500 font-normal"> · {sessionUser?.role === 'admin' ? 'Administrador' : 'Vendedor'}</span></p>
+            </div>
+            <button onClick={() => sessionLogout()} className="flex items-center gap-2 border border-border hover:border-red-500/50 text-zinc-400 hover:text-red-400 px-3 py-2 rounded-lg text-sm no-drag">
+              <Lock size={14} /> Cerrar sesión
+            </button>
+          </div>
+
+          {/* Mantener sesión activa */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white font-medium">Mantener sesión activa</p>
+                <p className="text-xs text-zinc-500 mt-0.5">La sesión no expira mientras la app esté abierta.</p>
+              </div>
+              <button onClick={() => setSessionForm(s => ({ ...s, keep_session_active: s.keep_session_active === '1' ? '0' : '1' }))}
+                className={cn('relative w-11 h-6 rounded-full transition-colors no-drag', sessionForm.keep_session_active === '1' ? 'bg-accent' : 'bg-zinc-700')}>
+                <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform', sessionForm.keep_session_active === '1' ? 'translate-x-5' : 'translate-x-0.5')} />
+              </button>
+            </div>
+
+            {sessionForm.keep_session_active !== '1' && (
+              <div className="max-w-xs">
+                <label className={labelCls}>Cerrar sesión tras inactividad (minutos)</label>
+                <input type="number" min="1" className={inputCls}
+                  value={sessionForm.session_timeout_minutes}
+                  onChange={e => setSessionForm(s => ({ ...s, session_timeout_minutes: e.target.value }))} />
+                <p className="text-[10px] text-zinc-600 mt-0.5">Default 480 (8 horas). Cualquier actividad reinicia el reloj.</p>
+              </div>
+            )}
+          </div>
+
+          <button onClick={saveSession} disabled={sessionSaving} className="btn-primary no-drag px-5 py-2 rounded-lg text-sm">
+            {sessionSaving ? 'Guardando...' : 'Guardar configuración'}
+          </button>
         </div>
       )}
 

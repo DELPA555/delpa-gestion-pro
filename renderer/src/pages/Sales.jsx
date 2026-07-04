@@ -226,9 +226,15 @@ ${(sale.items || []).map(it => `
 <div class="row" style="padding-left:8px"><span>Talle: ${it.size}${withPrices ? ` · x${it.quantity}` : ''}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
 `).join('')}
 ${withPrices && typeof sale.total === 'number' ? `<div class="divider"></div><div class="row" style="font-size:13px"><strong>Total:</strong><strong>${formatCurrency(sale.total)}</strong></div>` : ''}
-${typeof sale.difference === 'number' && sale.difference !== 0 ? `
-<div class="divider"></div>
-<div class="row" style="font-size:13px"><strong>${sale.difference > 0 ? 'Abonó' : 'Se devolvió'}:</strong><strong>${formatCurrency(Math.abs(sale.difference))}</strong></div>` : ''}
+${typeof sale.difference === 'number' && sale.difference !== 0 ? (
+  sale.difference > 0
+    ? `<div class="divider"></div>
+${sale.surcharge_amount > 0 ? `<div class="row"><span>Diferencia:</span><span>${formatCurrency(sale.difference)}</span></div>
+<div class="row"><span>Recargo (${sale.surcharge_rate}%):</span><span>+${formatCurrency(sale.surcharge_amount)}</span></div>` : ''}
+<div class="row" style="font-size:13px"><strong>Total abonado:</strong><strong>${formatCurrency(sale.difference + (sale.surcharge_amount || 0))}</strong></div>`
+    : `<div class="divider"></div>
+<div class="row" style="font-size:13px"><strong>Se devolvió:</strong><strong>${formatCurrency(Math.abs(sale.difference))}</strong></div>`
+) : ''}
 <div class="divider"></div>
 <p class="center" style="margin-top:6px;font-size:11px">Conservá este ticket para cambios</p>
 ${bizContactFooterHtml(biz)}
@@ -347,6 +353,7 @@ export default function Sales() {
   const [exchTicketMsg, setExchTicketMsg] = useState(null) // { ok, error }
   const [exchClientResults, setExchClientResults] = useState([])
   const [exchPayMethod, setExchPayMethod] = useState('Efectivo')
+  const [exchInstallments, setExchInstallments] = useState(1)
   const [exchRefundMode, setExchRefundMode] = useState('cash') // diff<0: 'cash'|'credit'
   const [exchNotes, setExchNotes] = useState('')
   const [exchProcessing, setExchProcessing] = useState(false)
@@ -1205,13 +1212,18 @@ export default function Sales() {
   const exchReturnTotal = exchReturnRows.reduce((s, r) => s + rowSubtotal(r), 0)
   const exchNewTotal = exchNewRows.reduce((s, r) => s + rowSubtotal(r), 0)
   const exchDiff = exchNewTotal - exchReturnTotal
+  // Recargo por medio de pago sobre la diferencia (solo cuando la clienta abona)
+  const exchSurchargeRate = exchDiff > 0 ? (surcharges[getSurchargeKey(exchPayMethod, exchInstallments)] ?? 0) : 0
+  const exchSurchargeAmt = exchDiff > 0 ? Math.round(exchDiff * exchSurchargeRate / 100) : 0
+  const exchTotalToPay = exchDiff + exchSurchargeAmt
 
   const openExchangeModal = () => {
     exchRowSeq.current = 0
     setExchReturnRows([newExchRow()])
     setExchNewRows([newExchRow()])
     setExchClient(null); setExchClientSearch(''); setExchClientResults([])
-    setExchPayMethod('Efectivo'); setExchRefundMode('cash'); setExchNotes(''); setExchProcessing(false)
+    setExchPayMethod('Efectivo'); setExchInstallments(1); setExchRefundMode('cash'); setExchNotes(''); setExchProcessing(false)
+    setExchTicketNum(''); setExchTicketMsg(null)
     setExchangeModal(true)
   }
 
@@ -1233,6 +1245,7 @@ export default function Sales() {
         returnedItems, newItems,
         resolution: diff < 0 ? exchRefundMode : 'paid',
         paymentMethod: exchPayMethod,
+        surchargeRate: diff > 0 ? exchSurchargeRate : 0,
         notes: exchNotes,
         sellerName: seller || '',
       })
@@ -1248,6 +1261,8 @@ export default function Sales() {
         items: newItems.map(i => ({ product_name: i.productName, size: i.size, quantity: i.qty, color: i.color })),
         returned_items: returnedItems.map(i => ({ product_name: i.productName, size: i.size, quantity: i.qty, color: i.color })),
         difference: diff,
+        surcharge_rate: diff > 0 ? exchSurchargeRate : 0,
+        surcharge_amount: diff > 0 ? exchSurchargeAmt : 0,
       }, biz)
       setExchangeModal(false)
     } catch (e) { toast.error(e.message || 'Error al registrar cambio') }
@@ -2579,16 +2594,35 @@ export default function Sales() {
 
           {/* Medio de pago cuando la clienta abona */}
           {exchDiff > 0 && (
-            <div>
+            <div className="space-y-2">
               <label className={labelCls}>Medio de pago (diferencia)</label>
               <div className="flex flex-wrap gap-1.5">
-                {paymentMethods.slice(0, 4).map(({ id }) => (
-                  <button key={id} onClick={() => setExchPayMethod(id)}
+                {paymentMethods.filter(m => !['Cuenta Corriente', 'Mercado Pago QR'].includes(m.id)).map(({ id }) => (
+                  <button key={id} onClick={() => { setExchPayMethod(id); if (id !== 'Tarjeta Crédito') setExchInstallments(1) }}
                     className={cn('px-3 py-1.5 rounded-lg text-xs border transition-colors',
                       exchPayMethod === id ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-300')}>
                     {id}
                   </button>
                 ))}
+              </div>
+              {exchPayMethod === 'Tarjeta Crédito' && (
+                <div className="flex flex-wrap gap-1.5">
+                  {[1, 3, 6, 12].map(n => (
+                    <button key={n} onClick={() => setExchInstallments(n)}
+                      className={cn('px-2.5 py-1 rounded-lg text-xs border transition-colors',
+                        exchInstallments === n ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-300')}>
+                      {n} cuota{n > 1 ? 's' : ''}{(surcharges[getSurchargeKey('Tarjeta Crédito', n)] ?? 0) > 0 ? ` +${surcharges[getSurchargeKey('Tarjeta Crédito', n)]}%` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Desglose */}
+              <div className="p-3 rounded-xl bg-zinc-800/50 border border-border text-sm space-y-1">
+                <div className="flex justify-between text-zinc-400"><span>Diferencia base</span><span className="tabular-nums">{formatCurrency(exchDiff)}</span></div>
+                {exchSurchargeAmt > 0 && (
+                  <div className="flex justify-between text-amber-400"><span>Recargo {exchPayMethod === 'Tarjeta Crédito' ? `(${exchInstallments}c) ` : ''}({exchSurchargeRate}%)</span><span className="tabular-nums">+{formatCurrency(exchSurchargeAmt)}</span></div>
+                )}
+                <div className="flex justify-between text-white font-semibold border-t border-border pt-1"><span>Total a abonar</span><span className="tabular-nums">{formatCurrency(exchTotalToPay)}</span></div>
               </div>
             </div>
           )}

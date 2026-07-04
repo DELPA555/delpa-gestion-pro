@@ -24,6 +24,32 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  // Timer de inactividad: solo si "Mantener sesión activa" está apagado.
+  // Cualquier actividad del usuario reinicia el reloj; al vencer, cierra sesión.
+  useEffect(() => {
+    if (!user) return
+    let timer = null
+    let removeListeners = () => {}
+    let active = true
+    api.settings.getAll().then(cfg => {
+      if (!active) return
+      if ((cfg.keep_session_active ?? '1') === '1') return // nunca expira
+      const timeoutMs = (parseInt(cfg.session_timeout_minutes || '480', 10) || 480) * 60000
+      let lastTouch = 0
+      const reset = () => {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => { logout() }, timeoutMs)
+        const now = Date.now()
+        if (now - lastTouch > 30000) { lastTouch = now; api.auth.touch().catch(() => {}) }
+      }
+      const evts = ['mousedown', 'keydown', 'wheel', 'touchstart']
+      evts.forEach(e => window.addEventListener(e, reset, { passive: true }))
+      removeListeners = () => evts.forEach(e => window.removeEventListener(e, reset))
+      reset()
+    }).catch(() => {})
+    return () => { active = false; removeListeners(); if (timer) clearTimeout(timer) }
+  }, [user])
+
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
