@@ -152,6 +152,7 @@ function ChangelogModal() {
             <div className="w-9 h-9 rounded-xl bg-accent/20 flex items-center justify-center text-accent text-lg">🎉</div>
             <div>
               <h2 className="font-bold text-white text-base">¿Qué hay de nuevo en v{ver}?</h2>
+              {entry.titulo && <p className="text-xs text-accent font-medium">{entry.titulo}</p>}
               {entry.fecha && <p className="text-xs text-zinc-500">{entry.fecha}</p>}
             </div>
           </div>

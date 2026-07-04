@@ -62,6 +62,7 @@ export default function Clients() {
   const [histModal, setHistModal] = useState(null)
   const [history, setHistory] = useState([])
   const [pointsHistory, setPointsHistory] = useState([])
+  const [pointsStatus, setPointsStatus] = useState(null)
   const [payModal, setPayModal] = useState(null)
   const [payAmt, setPayAmt] = useState('')
 
@@ -108,12 +109,14 @@ export default function Clients() {
   }
 
   const openHistory = async (c) => {
-    const [hist, pts] = await Promise.all([
+    const [hist, pts, st] = await Promise.all([
       api.clients.history(c.id),
       api.clients.points.history(c.id).catch(() => []),
+      api.points.status({ clientId: c.id }).catch(() => null),
     ])
     setHistory(hist)
     setPointsHistory(pts)
+    setPointsStatus(st)
     setHistModal(c)
   }
   const openPayment = (c) => { setPayModal(c); setPayAmt('') }
@@ -412,15 +415,32 @@ export default function Clients() {
         )}
 
         {/* Points balance */}
-        {(histModal?.points ?? 0) >= 0 && (
-          <div className="flex items-center justify-between mb-4 px-4 py-3 rounded-xl bg-accent/5 border border-accent/15">
+        <div className="mb-4 px-4 py-3 rounded-xl bg-accent/5 border border-accent/15 space-y-1.5">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <Gift size={14} className="text-accent" />
-              Puntos acumulados
+              <Gift size={14} className="text-accent" /> Puntos activos
             </div>
-            <span className="text-accent font-bold text-lg tabular-nums">{histModal?.points ?? 0}</span>
+            <span className="text-accent font-bold text-lg tabular-nums">{pointsStatus?.active ?? histModal?.points ?? 0}</span>
           </div>
-        )}
+          {pointsStatus?.expiringSoon && pointsStatus?.active > 0 && (
+            <div className="flex items-center justify-between text-xs text-amber-400">
+              <span>⚠️ Vencen en {pointsStatus.daysLeft} día(s)</span>
+              <span className="tabular-nums">{pointsStatus.active} pts · {pointsStatus.expiresAt ? new Date(pointsStatus.expiresAt.replace(' ','T')).toLocaleDateString('es-AR') : ''}</span>
+            </div>
+          )}
+          {!pointsStatus?.expiringSoon && pointsStatus?.active > 0 && pointsStatus?.expiresAt && (
+            <div className="flex items-center justify-between text-xs text-zinc-500">
+              <span>Vencen el</span>
+              <span className="tabular-nums">{new Date(pointsStatus.expiresAt.replace(' ','T')).toLocaleDateString('es-AR')}</span>
+            </div>
+          )}
+          {pointsStatus?.expiredTotal > 0 && (
+            <div className="flex items-center justify-between text-xs text-zinc-600">
+              <span>Puntos vencidos (histórico)</span>
+              <span className="tabular-nums line-through">{pointsStatus.expiredTotal} pts</span>
+            </div>
+          )}
+        </div>
 
         <div className="space-y-1 mb-4">
           {history.length === 0 ? <p className="text-zinc-600 text-sm text-center py-8">Sin compras registradas</p>

@@ -294,6 +294,15 @@ export const api = {
     changelog:         () => inv('app:changelog'),
     markChangelogSeen: () => inv('app:markChangelogSeen'),
   },
+  changeTickets: {
+    createBatch: (p) => inv('changeticket:createBatch', p),
+    lookup:      (p) => inv('changeticket:lookup', p),
+    markUsed:    (p) => inv('changeticket:markUsed', p),
+  },
+  points: {
+    runExpiry: ()  => inv('points:runExpiry'),
+    status:    (p) => inv('points:status', p),
+  },
   intelligence: {
     recommendations: () => inv('intelligence:recommendations'),
     stockBreaks:     () => inv('intelligence:stockBreaks'),

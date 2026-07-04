@@ -265,7 +265,7 @@ export default function Settings() {
   const [sellerNewRate, setSellerNewRate] = useState(0)
 
   // Fidelización
-  const [pointsForm, setPointsForm] = useState({ points_enabled: '0', points_per_pesos: '1000', point_value: '100', points_min_redeem: '5' })
+  const [pointsForm, setPointsForm] = useState({ points_enabled: '0', points_per_pesos: '1000', point_value: '100', points_min_redeem: '5', points_expiry_days: '180', change_ticket_days: '30' })
   const [pointsSaving, setPointsSaving] = useState(false)
 
   // Fixed costs
@@ -314,6 +314,8 @@ export default function Settings() {
         points_per_pesos: all.points_per_pesos || '1000',
         point_value:      all.point_value      || '100',
         points_min_redeem: all.points_min_redeem || '5',
+        points_expiry_days: all.points_expiry_days || '180',
+        change_ticket_days: all.change_ticket_days || '30',
       })
       setEmailForm({
         email_smtp: all.email_smtp || 'smtp.gmail.com',
@@ -1906,6 +1908,15 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
                 />
                 <p className="text-[10px] text-zinc-600 mt-0.5">Puntos mínimos para canjear</p>
               </div>
+              <div>
+                <label className={labelCls}>Vencimiento de puntos (días)</label>
+                <input
+                  type="number" min="1" className={inputCls}
+                  value={pointsForm.points_expiry_days}
+                  onChange={e => setPointsForm(p => ({ ...p, points_expiry_days: e.target.value }))}
+                />
+                <p className="text-[10px] text-zinc-600 mt-0.5">Default 180 (6 meses). Se reinicia al acumular.</p>
+              </div>
             </div>
 
             {/* Preview */}
@@ -1918,6 +1929,19 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
                 <p>• Con {pointsForm.points_min_redeem} puntos la clienta obtiene ${(Number(pointsForm.points_min_redeem) * Number(pointsForm.point_value)).toLocaleString()} de descuento</p>
               </div>
             )}
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Tickets de cambio</p>
+            <div className="max-w-xs">
+              <label className={labelCls}>Validez de tickets de cambio (días)</label>
+              <input
+                type="number" min="1" className={inputCls}
+                value={pointsForm.change_ticket_days}
+                onChange={e => setPointsForm(p => ({ ...p, change_ticket_days: e.target.value }))}
+              />
+              <p className="text-[10px] text-zinc-600 mt-0.5">Default 30. Los tickets vencen a los N días de emitidos.</p>
+            </div>
           </div>
 
           <button onClick={savePoints} disabled={pointsSaving} className="btn-primary no-drag px-5 py-2 rounded-lg text-sm">

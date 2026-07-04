@@ -152,6 +152,7 @@ ${pointsInfo && pointsInfo.enabled && sale.client_name ? `
 <p class="center" style="margin:4px 0">Puntos ganados hoy: <strong style="font-size:15px">+${pointsInfo.earned} pts</strong></p>
 ${pointsInfo.base != null ? `<p class="center" style="font-size:10px;color:#555;margin:2px 0">Puntos calculados sobre $${Number(pointsInfo.base).toLocaleString('es-AR')} (precio sin recargo)</p>` : ''}
 <p class="center" style="margin:4px 0">Puntos acumulados: <strong style="font-size:15px">${pointsInfo.total} pts</strong></p>
+${pointsInfo.expiringSoon && pointsInfo.expiringPts > 0 ? `<p class="center" style="margin:4px 0;font-size:11px">⚠️ Tenés ${pointsInfo.expiringPts} puntos que vencen el ${pointsInfo.expiresAt ? new Date(pointsInfo.expiresAt.replace(' ','T')).toLocaleDateString('es-AR') : ''}. ¡Usálos antes!</p>` : ''}
 ${pointsInfo.total >= (pointsInfo.minRedeem || 5) ? `<p class="center" style="font-size:11px;margin:2px 0">Podés canjear ${pointsInfo.total} pts = $${(pointsInfo.total * (pointsInfo.value || 0)).toLocaleString('es-AR')} de descuento</p>` : ''}` : ''}
 <div class="divider"></div>
 <p class="center" style="margin-top:4px">¡Gracias por su compra!</p>
@@ -191,7 +192,8 @@ async function printTicketFetched(sale, biz) {
   printTicket(sale, biz, pointsInfo)
 }
 
-function printChangeTicket(sale, biz = {}) {
+function printChangeTicket(sale, biz = {}, opts = {}) {
+  const withPrices = !!opts.withPrices
   const bizName = biz.business_name || 'DELPA'
   const logoHtml = biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin:0 auto 4px" alt="logo">` : ''
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -220,9 +222,10 @@ ${sale.returned_items.map(it => `
 <div class="divider"></div>
 <div class="row"><strong>Se lleva:</strong></div>` : ''}
 ${(sale.items || []).map(it => `
-<div class="row"><span>${it.product_name}</span><span>x${it.quantity}</span></div>
-<div class="row" style="padding-left:8px"><span>Talle: ${it.size}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
+<div class="row"><span>${it.product_name}</span><span>${withPrices && it.unit_price != null ? formatCurrency((it.unit_price || 0) * (it.quantity || 1)) : `x${it.quantity}`}</span></div>
+<div class="row" style="padding-left:8px"><span>Talle: ${it.size}${withPrices ? ` · x${it.quantity}` : ''}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
 `).join('')}
+${withPrices && typeof sale.total === 'number' ? `<div class="divider"></div><div class="row" style="font-size:13px"><strong>Total:</strong><strong>${formatCurrency(sale.total)}</strong></div>` : ''}
 ${typeof sale.difference === 'number' && sale.difference !== 0 ? `
 <div class="divider"></div>
 <div class="row" style="font-size:13px"><strong>${sale.difference > 0 ? 'Abonó' : 'Se devolvió'}:</strong><strong>${formatCurrency(Math.abs(sale.difference))}</strong></div>` : ''}
@@ -235,6 +238,49 @@ ${bizContactFooterHtml(biz)}
   w.document.write(html)
   w.document.close()
   w.onload = () => { w.print(); setTimeout(() => w.close(), 500) }
+}
+
+// Tickets de cambio individuales para regalo (SIN precio), 2 por hoja A4.
+function printGiftTickets(tickets, biz = {}) {
+  const bizName = biz.business_name || 'DELPA'
+  const logo = biz.business_logo ? `<img src="${biz.business_logo}" style="height:42px;object-fit:contain;margin:0 auto 6px;display:block" alt="logo">` : ''
+  const fmt = (d) => { try { return new Date(String(d).replace(' ', 'T')).toLocaleDateString('es-AR') } catch { return d } }
+  const socials = bizContactFooterHtml(biz)
+  const block = (t) => `
+    <div class="tk">
+      ${logo}
+      <div class="biz">${bizName}</div>
+      <div class="title">TICKET DE CAMBIO</div>
+      <div class="num">${t.number}</div>
+      <div class="dates"><span>Emitido: ${fmt(t.issued_at)}</span><span>Válido hasta: ${fmt(t.expires_at)}</span></div>
+      <div class="prod">${t.product_name || ''}</div>
+      <div class="attr">${t.size ? `Talle: ${t.size}` : ''}${t.size && t.color ? ' · ' : ''}${t.color ? `Color: ${t.color}` : ''}</div>
+      <div class="leg">Presentá este ticket para realizar el cambio por talle o color.</div>
+      <div class="leg2">Sujeto a stock disponible · Sin devolución de dinero</div>
+      ${socials}
+    </div>`
+  let pages = ''
+  for (let i = 0; i < tickets.length; i += 2) {
+    pages += `<div class="page">${block(tickets[i])}${tickets[i + 1] ? block(tickets[i + 1]) : '<div class="tk empty"></div>'}</div>`
+  }
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:Arial,Helvetica,sans-serif }
+    @page { size:A4; margin:0 }
+    .page { width:210mm; height:297mm; display:flex; flex-direction:column; page-break-after:always }
+    .tk { height:148.5mm; border-bottom:1px dashed #999; padding:14mm 18mm; display:flex; flex-direction:column; align-items:center; text-align:center }
+    .tk.empty { border-bottom:none }
+    .biz { font-size:14px; font-weight:bold; letter-spacing:1px }
+    .title { font-size:22px; font-weight:800; letter-spacing:2px; margin:8px 0 4px }
+    .num { font-size:16px; font-weight:bold; color:#333; margin-bottom:8px; font-family:monospace }
+    .dates { display:flex; gap:24px; font-size:11px; color:#555; margin-bottom:14px }
+    .prod { font-size:17px; font-weight:600; margin-top:6px }
+    .attr { font-size:13px; color:#444; margin-top:2px; margin-bottom:14px }
+    .leg { font-size:12px; margin-top:auto; max-width:120mm }
+    .leg2 { font-size:11px; color:#666; margin-top:4px; margin-bottom:8px }
+  </style></head><body>${pages}</body></html>`
+  const w = window.open('', '_blank', 'width=800,height=1000')
+  w.document.write(html); w.document.close()
+  w.onload = () => { w.print(); setTimeout(() => w.close(), 600) }
 }
 
 export default function Sales() {
@@ -297,6 +343,8 @@ export default function Sales() {
   const [exchNewRows, setExchNewRows] = useState([])
   const [exchClient, setExchClient] = useState(null)
   const [exchClientSearch, setExchClientSearch] = useState('')
+  const [exchTicketNum, setExchTicketNum] = useState('')
+  const [exchTicketMsg, setExchTicketMsg] = useState(null) // { ok, error }
   const [exchClientResults, setExchClientResults] = useState([])
   const [exchPayMethod, setExchPayMethod] = useState('Efectivo')
   const [exchRefundMode, setExchRefundMode] = useState('cash') // diff<0: 'cash'|'credit'
@@ -326,6 +374,9 @@ export default function Sales() {
 
   // Return modal
   const [returnModal, setReturnModal] = useState(false)
+  const [changeTicketModal, setChangeTicketModal] = useState(null) // venta para opciones de ticket de cambio
+  const [giftSel, setGiftSel] = useState({})                        // índices de productos seleccionados para regalo
+  const [giftBusy, setGiftBusy] = useState(false)
   const [retSaleSearch, setRetSaleSearch] = useState('')
   const [retSaleData, setRetSaleData] = useState(null)
   const [retSaleLoading, setRetSaleLoading] = useState(false)
@@ -778,7 +829,10 @@ export default function Sales() {
         const earned = (result && typeof result === 'object' && result.earnedPoints != null)
           ? result.earnedPoints
           : Math.floor(net / pointsCfg.perPesos)
-        const updatedClient = await api.clients.get(selectedClient.id).catch(() => null)
+        const [updatedClient, pStatus] = await Promise.all([
+          api.clients.get(selectedClient.id).catch(() => null),
+          api.points.status({ clientId: selectedClient.id }).catch(() => null),
+        ])
         setLastSalePoints({
           enabled: true,
           earned,
@@ -786,6 +840,9 @@ export default function Sales() {
           total: updatedClient?.points ?? (selectedClient.points + earned),
           value: pointsCfg.value,
           minRedeem: pointsCfg.minRedeem,
+          expiringSoon: pStatus?.expiringSoon || false,
+          expiresAt: pStatus?.expiresAt || null,
+          expiringPts: pStatus?.expiringSoon ? pStatus.active : 0,
         })
       } else {
         setLastSalePoints(null)
@@ -1180,6 +1237,10 @@ export default function Sales() {
         sellerName: seller || '',
       })
       if (res?.ok === false) { toast.error(res.error || 'Error al registrar cambio'); return }
+      // Si se usó un ticket de cambio válido, marcarlo como usado.
+      if (exchTicketNum.trim() && exchTicketMsg?.ok) {
+        api.changeTickets.markUsed({ number: exchTicketNum.trim() }).catch(() => {})
+      }
       toast.success('Cambio registrado correctamente')
       printChangeTicket({
         created_at: new Date().toISOString(),
@@ -1934,7 +1995,7 @@ export default function Sales() {
                   className="flex-1 border border-border hover:border-zinc-600 text-zinc-400 hover:text-white py-2 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
                   <Printer size={14} /> Ticket
                 </button>
-                <button onClick={() => printChangeTicket(lastSale, biz)}
+                <button onClick={() => { setChangeTicketModal(lastSale); setGiftSel({}) }}
                   className="flex-1 border border-border hover:border-zinc-600 text-zinc-400 hover:text-white py-2 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
                   <Gift size={14} /> Ticket cambio
                 </button>
@@ -2148,9 +2209,9 @@ export default function Sales() {
                 className="flex-1 border border-border rounded-lg py-2 text-sm text-zinc-400 hover:text-white flex items-center justify-center gap-2">
                 <Printer size={13} /> Ticket
               </button>
-              <button onClick={() => { printChangeTicket(detailModal, biz); setDetailModal(null) }}
+              <button onClick={() => { setChangeTicketModal(detailModal); setGiftSel({}); setDetailModal(null) }}
                 className="flex-1 border border-border rounded-lg py-2 text-sm text-zinc-400 hover:text-white flex items-center justify-center gap-2">
-                <Gift size={13} /> Sin precio
+                <Gift size={13} /> Cambio
               </button>
             </div>
           </div>
@@ -2388,6 +2449,59 @@ export default function Sales() {
         )}
       </Modal>
 
+      {/* Modal: Opciones de ticket de cambio */}
+      <Modal open={!!changeTicketModal} onClose={() => setChangeTicketModal(null)} title="Ticket de cambio" width="max-w-lg">
+        {changeTicketModal && (
+          <div className="space-y-4">
+            {/* Opción A */}
+            <div className="border border-border rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-1"><FileText size={15} className="text-accent" /><span className="font-semibold text-white text-sm">Ticket común</span></div>
+              <p className="text-xs text-zinc-400 mb-3">Un solo ticket con todos los productos, con precios visibles.</p>
+              <button onClick={() => { printChangeTicket(changeTicketModal, biz, { withPrices: true }); setChangeTicketModal(null) }}
+                className="btn-primary w-full py-2 rounded-lg text-sm font-semibold">Imprimir ticket común</button>
+            </div>
+            {/* Opción B */}
+            <div className="border border-border rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-1"><Gift size={15} className="text-accent" /><span className="font-semibold text-white text-sm">Tickets individuales (para regalo)</span></div>
+              <p className="text-xs text-zinc-400 mb-3">Un ticket por producto, sin precio, con número y vencimiento. Se imprimen 2 por hoja A4.</p>
+              <div className="space-y-1.5 max-h-52 overflow-y-auto mb-3">
+                {(changeTicketModal.items || []).map((it, i) => (
+                  <label key={i} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
+                    <input type="checkbox" checked={!!giftSel[i]} onChange={e => setGiftSel(s => ({ ...s, [i]: e.target.checked }))} />
+                    <span className="flex-1">{it.product_name}{it.size ? ` · Talle ${it.size}` : ''}{it.color ? ` · ${it.color}` : ''}</span>
+                    <span className="text-zinc-500 text-xs">x{it.quantity}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <button onClick={() => setGiftSel(Object.fromEntries((changeTicketModal.items || []).map((_, i) => [i, true])))}
+                  className="text-xs text-accent hover:underline">Seleccionar todos</button>
+                <span className="text-xs text-zinc-500">{Object.values(giftSel).filter(Boolean).length} seleccionado(s)</span>
+              </div>
+              <button disabled={giftBusy || Object.values(giftSel).filter(Boolean).length === 0}
+                onClick={async () => {
+                  const items = (changeTicketModal.items || []).filter((_, i) => giftSel[i])
+                  if (!items.length) { toast.error('Seleccioná al menos un producto'); return }
+                  setGiftBusy(true)
+                  try {
+                    const res = await api.changeTickets.createBatch({
+                      saleId: changeTicketModal.id || null,
+                      items: items.map(it => ({ product_id: it.product_id, product_name: it.product_name, size: it.size, color: it.color || '' })),
+                    })
+                    if (!res?.ok) { toast.error(res?.error || 'Error al generar tickets'); return }
+                    printGiftTickets(res.tickets, biz)
+                    toast.success(`${res.tickets.length} ticket(s) de cambio generados`)
+                    setChangeTicketModal(null)
+                  } catch (e) { toast.error(e.message || 'Error') }
+                  finally { setGiftBusy(false) }
+                }}
+                className="btn-primary w-full py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                {giftBusy ? 'Generando...' : 'Generar tickets individuales'}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Modal: Cambio de producto */}
       <Modal open={exchangeModal} onClose={() => setExchangeModal(false)} title="Registrar cambio" width="max-w-3xl">
         <div className="space-y-4">
@@ -2419,6 +2533,30 @@ export default function Sales() {
                   )}
                 </AnimatePresence>
               </>
+            )}
+          </div>
+
+          {/* N° de ticket de cambio (opcional) — valida vigencia */}
+          <div>
+            <label className={labelCls}>N° de ticket de cambio (opcional)</label>
+            <div className="flex gap-2">
+              <input value={exchTicketNum}
+                onChange={e => { setExchTicketNum(e.target.value); setExchTicketMsg(null) }}
+                placeholder="CAM-2026-0001" className={inputCls} />
+              <button type="button"
+                onClick={async () => {
+                  const num = exchTicketNum.trim()
+                  if (!num) return
+                  const r = await api.changeTickets.lookup({ number: num }).catch(() => null)
+                  if (!r) { setExchTicketMsg({ ok: false, error: 'Error al verificar' }); return }
+                  setExchTicketMsg(r.ok ? { ok: true } : { ok: false, error: r.error })
+                }}
+                className="border border-border rounded-lg px-3 text-sm text-zinc-300 hover:text-white">Verificar</button>
+            </div>
+            {exchTicketMsg && (
+              <p className={cn('text-xs mt-1', exchTicketMsg.ok ? 'text-green-400' : 'text-red-400')}>
+                {exchTicketMsg.ok ? '✓ Ticket válido y vigente' : exchTicketMsg.error}
+              </p>
             )}
           </div>
 

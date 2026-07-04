@@ -151,7 +151,10 @@ ipcMain.handle('sales:create', (_, {
         // Puntos sobre el precio SIN recargo (productos - descuentos), no sobre el total con recargo.
         earnedPoints = Math.floor(pointsBase / perPesos)
         if (earnedPoints > 0) {
-          db.prepare('UPDATE clients SET points=points+? WHERE id=?').run(earnedPoints, clientId)
+          // Al acumular, se reinicia el reloj de vencimiento para TODOS los puntos activos.
+          const expDays = parseInt(db.prepare("SELECT value FROM settings WHERE key='points_expiry_days'").get()?.value || '180', 10)
+          db.prepare("UPDATE clients SET points=points+?, points_expires_at=datetime('now','localtime',?) WHERE id=?")
+            .run(earnedPoints, `+${expDays} days`, clientId)
           db.prepare('INSERT INTO client_points_log (client_id,type,amount,sale_id,notes) VALUES (?,?,?,?,?)')
             .run(clientId, 'earn', earnedPoints, saleId, `Puntos ganados en venta ${saleNumber}`)
         }

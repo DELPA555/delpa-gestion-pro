@@ -371,6 +371,23 @@ function createTables(db) {
 
   // New tables added as CREATE IF NOT EXISTS (idempotent)
   db.exec(`
+    CREATE TABLE IF NOT EXISTS change_tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      number TEXT NOT NULL UNIQUE,
+      sale_id INTEGER,
+      product_id INTEGER,
+      product_name TEXT DEFAULT '',
+      size TEXT DEFAULT '',
+      color TEXT DEFAULT '',
+      issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME,
+      status TEXT NOT NULL DEFAULT 'active',
+      used_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_change_tickets_number ON change_tickets(number);
+    CREATE INDEX IF NOT EXISTS idx_change_tickets_sale ON change_tickets(sale_id);
+
     CREATE TABLE IF NOT EXISTS product_exchanges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       client_id INTEGER,
@@ -723,6 +740,9 @@ function createTables(db) {
     ['points_per_pesos',       '1000'],
     ['point_value',            '100'],
     ['points_min_redeem',      '5'],
+    ['points_expiry_days',     '180'],
+    ['change_ticket_days',     '30'],
+    ['change_ticket_seq',      '0'],
     ['license_installed_at',   ''],
     ['license_code',           ''],
     ['license_expiry',         ''],
@@ -780,6 +800,7 @@ function createTables(db) {
   addColumnIfMissing(db, 'sales',   'discount_type',     "TEXT DEFAULT 'amount'")
   addColumnIfMissing(db, 'sales',   'discount_value',    'REAL DEFAULT 0')
   addColumnIfMissing(db, 'sales',   'subtotal_sin_recargo', 'REAL DEFAULT 0')
+  addColumnIfMissing(db, 'clients', 'points_expires_at', 'TEXT DEFAULT NULL')
   addColumnIfMissing(db, 'stock_entries', 'is_consignment', 'INTEGER DEFAULT 0')
   addColumnIfMissing(db, 'clients', 'birth_date',     "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'city',           "TEXT DEFAULT ''")

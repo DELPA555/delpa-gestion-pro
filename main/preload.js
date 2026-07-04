@@ -73,6 +73,8 @@ const CHANNELS = [
   'fiscal:stats', 'fiscal:ivaVentas', 'fiscal:ivaCompras', 'fiscal:posicion', 'fiscal:monotributo12m',
   'afip:syncComprobantes',
   'app:changelog', 'app:markChangelogSeen',
+  'changeticket:createBatch', 'changeticket:lookup', 'changeticket:markUsed',
+  'points:runExpiry', 'points:status',
   'intelligence:recommendations', 'intelligence:stockBreaks',
   'voucher:list', 'voucher:create', 'voucher:validate', 'voucher:use', 'voucher:delete',
   'consignment:products:list', 'consignment:products:set', 'consignment:sales:list',

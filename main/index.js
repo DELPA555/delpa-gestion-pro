@@ -85,6 +85,9 @@ app.whenReady().then(() => {
   require('./ipc/supplieranalytics')
   require('./ipc/supplierStock')
   require('./ipc/onboarding')
+  require('./ipc/changeTickets')
+  const { runPointsExpiry } = require('./ipc/pointsMaintenance')
+  try { runPointsExpiry() } catch (e) { console.error('[POINTS] expiry on startup:', e.message) }
   const { performBackup } = require('./ipc/googledrive')
   const { scheduleWeeklySummary } = require('./ipc/weeklySummary')
   const { pingDistributor } = require('./lib/distributorPing')
