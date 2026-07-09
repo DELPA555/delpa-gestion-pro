@@ -658,6 +658,59 @@ function createTables(db) {
     );
   `)
 
+  // Caja Grande (Caja Mayor) — caja central acumulativa que nunca se resetea.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS main_cashbox (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      balance REAL NOT NULL DEFAULT 0,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT OR IGNORE INTO main_cashbox (id, balance) VALUES (1, 0);
+
+    CREATE TABLE IF NOT EXISTS main_cashbox_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,                 -- 'ingreso' | 'egreso'
+      category TEXT DEFAULT '',
+      amount REAL NOT NULL,
+      description TEXT DEFAULT '',
+      source TEXT DEFAULT 'manual',       -- 'manual' | 'caja_chica'
+      cashbox_id INTEGER,                 -- referencia a la caja chica (si aplica)
+      created_by TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (cashbox_id) REFERENCES cashbox(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_main_cb_mov_created ON main_cashbox_movements(created_at);
+    CREATE INDEX IF NOT EXISTS idx_main_cb_mov_type ON main_cashbox_movements(type);
+
+    CREATE TABLE IF NOT EXISTS main_cashbox_audits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expected_balance REAL NOT NULL DEFAULT 0,
+      counted_amount REAL NOT NULL DEFAULT 0,
+      difference REAL NOT NULL DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_by TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_main_cb_audit_created ON main_cashbox_audits(created_at);
+
+    CREATE TABLE IF NOT EXISTS main_cashbox_openings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      closed_at DATETIME,
+      opening_balance_expected REAL NOT NULL DEFAULT 0,
+      opening_balance_real REAL NOT NULL DEFAULT 0,
+      closing_balance_expected REAL,
+      closing_balance_real REAL,
+      opening_difference REAL NOT NULL DEFAULT 0,
+      closing_difference REAL,
+      notes TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',   -- 'open' | 'closed'
+      opened_by TEXT DEFAULT '',
+      closed_by TEXT DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_main_cb_open_status ON main_cashbox_openings(status);
+  `)
+
   const migrations = [
     "ALTER TABLE clients ADD COLUMN points INTEGER DEFAULT 0",
     "ALTER TABLE sales ADD COLUMN installments INTEGER DEFAULT 1",

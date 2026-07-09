@@ -49,6 +49,7 @@ app.whenReady().then(() => {
   require('./ipc/suppliers')
   require('./ipc/purchases')
   require('./ipc/cashbox')
+  require('./ipc/maincashbox')
   require('./ipc/expenses')
   require('./ipc/reports')
   require('./ipc/invoices')

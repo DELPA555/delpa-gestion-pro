@@ -6,7 +6,7 @@ import {
   AreaChart, Area, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp } from 'lucide-react'
+import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp, Vault } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { SkeletonCard } from '@/components/shared/SkeletonLoader'
@@ -198,6 +198,7 @@ export default function Dashboard() {
   const [healthDrilldown, setHealthDrilldown] = useState(false)
   const [lowStock, setLowStock] = useState([])
   const [todayCash, setTodayCash] = useState(null)
+  const [mainCash, setMainCash] = useState(null)
   const [todayBirthdays, setTodayBirthdays] = useState([])
   const [birthdayMsg, setBirthdayMsg] = useState('Feliz cumple [nombre]! 🎁')
   const [loading, setLoading] = useState(true)
@@ -288,11 +289,13 @@ export default function Dashboard() {
       api.cashflow.projection(),
       api.breakeven.data(),
       api.health.score(),
-    ]).then(([spec, cf, be, hs]) => {
+      api.mainCashbox.balance(),
+    ]).then(([spec, cf, be, hs, mc]) => {
       if (spec.status === 'fulfilled') setStockSpecular(spec.value || [])
       if (cf.status === 'fulfilled') setCashflow(cf.value)
       if (be.status === 'fulfilled') setBreakeven(be.value)
       if (hs.status === 'fulfilled') setHealthScore(hs.value)
+      if (mc.status === 'fulfilled') setMainCash(mc.value)
     })
   }, [])
 
@@ -458,6 +461,29 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </motion.div>
+      )}
+
+      {/* Caja Grande — acceso rápido */}
+      {mainCash && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.39 }}
+          onClick={() => navigate('/caja-grande')}
+          className="bg-gradient-to-br from-accent/15 to-card border border-accent/25 rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:border-accent/50 transition-colors no-drag"
+        >
+          <div className="w-11 h-11 rounded-xl bg-accent/15 flex items-center justify-center shrink-0">
+            <Vault size={20} className="text-accent" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider">Caja Grande — saldo acumulado</p>
+            <p className="text-2xl font-bold text-white tabular-nums mt-0.5">{formatCurrency(mainCash.balance)}</p>
+          </div>
+          <div className="text-right hidden sm:block">
+            <p className="text-[11px] text-zinc-600">Ingresos cajas chicas: <span className="text-green-400">{formatCurrency(mainCash.ingresosCajaChica)}</span></p>
+            <p className="text-[11px] text-zinc-600 mt-0.5">Manuales: <span className="text-blue-400">+{formatCurrency(mainCash.ingresosManual)}</span> / <span className="text-red-400">-{formatCurrency(mainCash.egresosManual)}</span></p>
+          </div>
+          <span className="text-accent text-sm shrink-0">→</span>
         </motion.div>
       )}
 

@@ -907,4 +907,126 @@ async function sendWaitlistArrivalEmail(entry) {
   })
 }
 
-module.exports = { sendCashboxReport, sendInventoryReport, sendPointsSummaryAsync, sendExpiryNotification, sendWaitlistArrivalEmail }
+// ── Caja Grande ──────────────────────────────────────────────────────────────
+
+function getBizBasic(db) {
+  return {
+    business_name:    db.prepare("SELECT value FROM settings WHERE key='business_name'").get()?.value || 'DELPA',
+    business_address: db.prepare("SELECT value FROM settings WHERE key='business_address'").get()?.value || '',
+    business_phone:   db.prepare("SELECT value FROM settings WHERE key='business_phone'").get()?.value || '',
+    business_logo:    db.prepare("SELECT value FROM settings WHERE key='business_logo'").get()?.value || '',
+  }
+}
+
+// Email automático por cada movimiento de la Caja Grande (fire-and-forget)
+async function sendMainCashboxMovementAsync({ type, description, amount, balanceBefore, balanceAfter }) {
+  try {
+    const s = getEmailConfig()
+    if (!s.email_user && !s.email_from) return
+    if (!s.email_pass || !s.email_to) return
+
+    const db = getDB()
+    const biz = getBizBasic(db)
+    const bizName = biz.business_name || 'DELPA'
+    const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
+    const isIn = type === 'ingreso'
+    const tipoLabel = isIn ? 'INGRESO' : 'EGRESO'
+    const color = isIn ? '#16a34a' : '#dc2626'
+    const signed = `${isIn ? '+' : '-'}${fmt(amount)}`
+
+    const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#333">
+      ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin-bottom:8px" alt="logo">` : ''}
+      <div style="text-align:center;border-top:3px solid ${color};border-bottom:3px solid ${color};padding:14px 0;margin-bottom:16px">
+        <p style="margin:0;font-size:12px;letter-spacing:2px;color:#888;text-transform:uppercase">Movimiento en Caja Grande</p>
+        <h2 style="margin:6px 0 2px;color:#333">${bizName}</h2>
+        <p style="margin:0;color:#999;font-size:12px">${new Date().toLocaleString('es-AR')}</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <tr><td style="padding:8px 4px;color:#666">Tipo</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:bold;color:${color}">${tipoLabel}</td></tr>
+        <tr><td style="padding:8px 4px;color:#666">Concepto</td>
+            <td style="padding:8px 4px;text-align:right">${description || '—'}</td></tr>
+        <tr style="border-bottom:1px solid #eee"><td style="padding:8px 4px;color:#666">Monto</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:bold;font-size:18px;color:${color}">${signed}</td></tr>
+        <tr><td style="padding:8px 4px;color:#666">Saldo anterior</td>
+            <td style="padding:8px 4px;text-align:right">${fmt(balanceBefore)}</td></tr>
+        <tr><td style="padding:8px 4px;color:#666">Saldo actual</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:bold">${fmt(balanceAfter)}</td></tr>
+      </table>
+      <p style="color:#aaa;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:8px">Aviso automático de DELPA Gestión PRO.</p>
+    </div>`
+
+    const transporter = buildTransporter(s)
+    await transporter.sendMail({
+      from: `"${bizName}" <${s.email_user || s.email_from}>`,
+      to: s.email_to,
+      subject: `Caja Grande — ${tipoLabel} ${signed} — ${bizName}`,
+      html,
+    })
+  } catch (e) {
+    console.error('[email:maincashbox:movement]', e.message)
+  }
+}
+
+// Email de cierre de Caja Grande con resumen del día (fire-and-forget)
+async function sendMainCashboxClosingAsync(opening, movements) {
+  try {
+    const s = getEmailConfig()
+    if (!s.email_user && !s.email_from) return
+    if (!s.email_pass || !s.email_to) return
+
+    const db = getDB()
+    const biz = getBizBasic(db)
+    const bizName = biz.business_name || 'DELPA'
+    const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
+    const fmtTime = d => d ? new Date(d).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—'
+    const totalIngresos = movements.filter(m => m.type === 'ingreso').reduce((a, m) => a + m.amount, 0)
+    const totalEgresos  = movements.filter(m => m.type === 'egreso').reduce((a, m) => a + m.amount, 0)
+    const diff = opening.closing_difference || 0
+    const diffColor = diff === 0 ? '#16a34a' : diff > 0 ? '#16a34a' : '#dc2626'
+    const diffIcon = diff === 0 ? '✓' : '⚠️'
+
+    const movRows = movements.map(m => `<tr>
+      <td style="padding:5px 10px;border:1px solid #ddd;font-size:12px">${fmtTime(m.created_at)}</td>
+      <td style="padding:5px 10px;border:1px solid #ddd;font-size:12px;color:${m.type === 'ingreso' ? '#16a34a' : '#dc2626'}">${m.type}</td>
+      <td style="padding:5px 10px;border:1px solid #ddd;font-size:12px">${m.description || '—'}</td>
+      <td style="padding:5px 10px;border:1px solid #ddd;font-size:12px;text-align:right;color:${m.type === 'ingreso' ? '#16a34a' : '#dc2626'}">${m.type === 'egreso' ? '-' : '+'}${fmt(m.amount)}</td>
+    </tr>`).join('')
+
+    const html = `<div style="font-family:sans-serif;max-width:620px;margin:0 auto;color:#333">
+      ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:44px;object-fit:contain;display:block;margin-bottom:8px" alt="logo">` : ''}
+      <h2 style="color:#333;margin-bottom:2px">Cierre de Caja Grande</h2>
+      <p style="color:#666;margin:0 0 16px">${bizName} — ${new Date(opening.closed_at || Date.now()).toLocaleString('es-AR')}</p>
+      <div style="background:#f9f9f9;border:1px solid #eee;border-radius:8px;padding:16px;font-size:14px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Saldo apertura (contado):</span><span>${fmt(opening.opening_balance_real)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Total ingresos:</span><span style="color:#16a34a">+${fmt(totalIngresos)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Total egresos:</span><span style="color:#dc2626">-${fmt(totalEgresos)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #ddd;margin-top:4px"><span style="color:#666">Saldo esperado:</span><span style="font-weight:bold">${fmt(opening.closing_balance_expected)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Saldo contado:</span><span style="font-weight:bold">${fmt(opening.closing_balance_real)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid ${diffColor};margin-top:4px;font-weight:bold;font-size:16px;color:${diffColor}"><span>Diferencia: ${diffIcon}</span><span>${diff >= 0 ? '+' : ''}${fmt(diff)}</span></div>
+      </div>
+      ${opening.notes ? `<p style="font-size:13px;color:#555;margin-bottom:16px"><strong>Observaciones:</strong> ${opening.notes}</p>` : ''}
+      <h3 style="color:#555;font-size:13px;margin:0 0 8px">Detalle de movimientos del día (${movements.length})</h3>
+      ${movements.length > 0 ? `<table style="border-collapse:collapse;width:100%">
+        <thead><tr style="background:#f5f5f5">
+          <th style="padding:5px 10px;border:1px solid #ddd;text-align:left;font-size:11px">Hora</th>
+          <th style="padding:5px 10px;border:1px solid #ddd;text-align:left;font-size:11px">Tipo</th>
+          <th style="padding:5px 10px;border:1px solid #ddd;text-align:left;font-size:11px">Concepto</th>
+          <th style="padding:5px 10px;border:1px solid #ddd;text-align:right;font-size:11px">Monto</th>
+        </tr></thead><tbody>${movRows}</tbody></table>` : '<p style="color:#999;font-size:13px">Sin movimientos en el período.</p>'}
+      <p style="color:#aaa;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:8px">Generado por DELPA Gestión PRO.</p>
+    </div>`
+
+    const transporter = buildTransporter(s)
+    await transporter.sendMail({
+      from: `"${bizName}" <${s.email_user || s.email_from}>`,
+      to: s.email_to,
+      subject: `Cierre Caja Grande — ${new Date(opening.closed_at || Date.now()).toLocaleDateString('es-AR')} — ${bizName}`,
+      html,
+    })
+  } catch (e) {
+    console.error('[email:maincashbox:closing]', e.message)
+  }
+}
+
+module.exports = { sendCashboxReport, sendInventoryReport, sendPointsSummaryAsync, sendExpiryNotification, sendWaitlistArrivalEmail, sendMainCashboxMovementAsync, sendMainCashboxClosingAsync }

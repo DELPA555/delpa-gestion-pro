@@ -14,6 +14,7 @@ import Accounts from './pages/Accounts'
 import Suppliers from './pages/Suppliers'
 import Purchases from './pages/Purchases'
 import CashBox from './pages/CashBox'
+import MainCashBox from './pages/MainCashBox'
 import Expenses from './pages/Expenses'
 import Reports from './pages/Reports'
 import Invoices from './pages/Invoices'
@@ -77,6 +78,7 @@ function AnimatedRoutes() {
           <Route path="/cuentas"      element={<PageErrorBoundary><Accounts /></PageErrorBoundary>} />
           <Route path="/proveedores"  element={<PageErrorBoundary><Suppliers /></PageErrorBoundary>} />
           <Route path="/compras"      element={<PageErrorBoundary><Purchases /></PageErrorBoundary>} />
+          <Route path="/caja-grande"  element={<PageErrorBoundary><MainCashBox /></PageErrorBoundary>} />
           <Route path="/reportes"     element={<PageErrorBoundary><Reports /></PageErrorBoundary>} />
           <Route path="/facturacion"  element={<PageErrorBoundary><Invoices /></PageErrorBoundary>} />
           <Route path="/auditoria"    element={<PageErrorBoundary><Audit /></PageErrorBoundary>} />
