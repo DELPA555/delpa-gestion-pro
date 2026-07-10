@@ -4,6 +4,7 @@ const path = require('path')
 const os   = require('os')
 const { getDB } = require('../../database/db')
 const { getBizContact, bizFooterHtml } = require('../lib/bizFooter')
+const { fmtDateTimeAR, fmtDateAR, fmtTimeAR } = require('../lib/argTime')
 
 function getEmailConfig() {
   const db = getDB()
@@ -42,8 +43,8 @@ async function generatePDF(html) {
 function buildFullReportHTML(data, biz) {
   const { cashbox: cb, byMethod, allSales, voidedSales, expenses, totalSales, totalExpenses, expectedCash, paymentCounts } = data
   const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
-  const fmtDate = s => s ? new Date(s).toLocaleString('es-AR') : '—'
-  const fmtTime = s => s ? new Date(s).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—'
+  const fmtDate = s => s ? fmtDateTimeAR(s) : '—'
+  const fmtTime = s => s ? fmtTimeAR(s) : '—'
   const gananciaNet = totalSales - totalExpenses
   const cbDiff = cb.difference || 0
 
@@ -167,7 +168,7 @@ ${expenses && expenses.length > 0 ? `
   </div>
 </div>
 
-<div class="footer">Generado por DELPA Gestión PRO · ${new Date().toLocaleString('es-AR')}</div>
+<div class="footer">Generado por DELPA Gestión PRO · ${fmtDateTimeAR(new Date())}</div>
 </body>
 </html>`
 }
@@ -189,7 +190,7 @@ function buildSummaryEmailHtml(data, biz) {
   return `<div style="font-family:sans-serif;max-width:600px">
     ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin-bottom:8px" alt="logo">` : ''}
     <h2 style="color:#333">${bizName} — Cierre de Caja</h2>
-    <p style="color:#666;margin:0 0 16px">Fecha de cierre: ${new Date().toLocaleString('es-AR')}</p>
+    <p style="color:#666;margin:0 0 16px">Fecha de cierre: ${fmtDateTimeAR(new Date())}</p>
 
     <div style="display:flex;gap:12px;margin-bottom:16px">
       <div style="flex:1;border:1px solid #d1fae5;background:#f0fdf4;border-radius:6px;padding:12px;text-align:center">
@@ -284,7 +285,7 @@ async function sendCashboxReport(cashboxId) {
   const mailOpts = {
     from: `"${biz.business_name}" <${s.email_user || s.email_from}>`,
     to: s.email_to,
-    subject: `[${biz.business_name}] Cierre de caja — ${new Date().toLocaleDateString('es-AR')}`,
+    subject: `[${biz.business_name}] Cierre de caja — ${fmtDateAR(new Date())}`,
     html: summaryHtml,
   }
   if (pdfBuffer) {
@@ -362,7 +363,7 @@ ipcMain.handle('email:sendSaleInvoice', async (_, { saleId, toEmail }) => {
           ${cbteNum ? `<p style="color:#666;font-size:12px;margin:6px 0 0">N° ${cbteNum}</p>` : ''}
         </div>
         <hr style="border:1px solid #eee">
-        <p style="margin:8px 0"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString('es-AR')}</p>
+        <p style="margin:8px 0"><strong>Fecha:</strong> ${fmtDateTimeAR(sale.created_at)}</p>
         ${sale.client_name ? `<p style="margin:4px 0"><strong>Cliente:</strong> ${sale.client_name}</p>` : ''}
         <table style="border-collapse:collapse;width:100%;font-size:13px;margin:12px 0">
           <thead>
@@ -430,7 +431,7 @@ function buildTicketEmailHtml(sale, items, biz) {
       ${cbteNum ? `<p style="color:#666;font-size:11px;margin:4px 0">N° ${cbteNum}</p>` : ''}
     </div>
     <hr style="border:1px solid #eee">
-    <p style="margin:6px 0;font-size:13px"><strong>Fecha:</strong> ${new Date(sale.created_at).toLocaleString('es-AR')}</p>
+    <p style="margin:6px 0;font-size:13px"><strong>Fecha:</strong> ${fmtDateTimeAR(sale.created_at)}</p>
     <p style="margin:4px 0;font-size:13px"><strong>N° Venta:</strong> ${sale.sale_number || '#' + sale.id}</p>
     ${sale.client_name ? `<p style="margin:4px 0;font-size:13px"><strong>Cliente:</strong> ${sale.client_name}</p>` : ''}
     <table style="border-collapse:collapse;width:100%;font-size:12px;margin:12px 0">
@@ -484,7 +485,7 @@ ipcMain.handle('email:sendTicket', async (_, { saleId, toEmail }) => {
     await transporter.sendMail({
       from: `"${bizName}" <${s.email_user || s.email_from}>`,
       to: toEmail,
-      subject: `[${bizName}] ${tipoLabel} — ${new Date(sale.created_at).toLocaleDateString('es-AR')}`,
+      subject: `[${bizName}] ${tipoLabel} — ${fmtDateAR(sale.created_at)}`,
       html,
     })
     return { ok: true }
@@ -523,7 +524,7 @@ ipcMain.handle('email:saveTicketPDF', async (_, saleId) => {
 
 function buildInventoryReportHTML(session, items, operatorName, biz) {
   const fmt = n => new Intl.NumberFormat('es-AR').format(n ?? 0)
-  const fmtDate = s => s ? new Date(s).toLocaleString('es-AR') : '—'
+  const fmtDate = s => s ? fmtDateTimeAR(s) : '—'
   const withDiff = items.filter(i => i.difference !== 0)
   const bizName = biz.business_name || 'DELPA'
 
@@ -568,7 +569,7 @@ ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object
   <tbody>${rows}</tbody>
 </table>
 ${operatorName ? `<div style="margin-top:40px;border-top:1px solid #333;width:200px;padding-top:4px;font-size:11px">Firma: ${operatorName}</div>` : ''}
-<div class="footer">Generado por DELPA Gestión PRO · ${new Date().toLocaleString('es-AR')}</div>
+<div class="footer">Generado por DELPA Gestión PRO · ${fmtDateTimeAR(new Date())}</div>
 </body></html>`
 }
 
@@ -591,7 +592,7 @@ async function sendInventoryReport(session, items, operatorName) {
   const mailOpts = {
     from: `"${biz.business_name}" <${s.email_user || s.email_from}>`,
     to: s.email_to,
-    subject: `[${biz.business_name}] Inventario cerrado — ${new Date().toLocaleDateString('es-AR')}`,
+    subject: `[${biz.business_name}] Inventario cerrado — ${fmtDateAR(new Date())}`,
     html: `<div style="font-family:sans-serif"><h2>Inventario cerrado</h2>
       <p>${items.length} productos relevados, ${items.filter(i=>i.difference!==0).length} con diferencia.</p>
       <p style="color:#888;font-size:12px">Se adjunta el reporte completo en PDF.</p></div>`,
@@ -810,7 +811,7 @@ th{background:#f0f0f0;padding:5px 6px;text-align:left;font-size:10px;text-transf
 </head><body>
 ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:36px;object-fit:contain;margin-bottom:6px" alt="logo">` : ''}
 <h1>${bizName} — Reporte de Stock</h1>
-<p class="meta">Generado: ${new Date().toLocaleString('es-AR')} · ${products.length} productos · ${totalUnits} unidades totales</p>
+<p class="meta">Generado: ${fmtDateTimeAR(new Date())} · ${products.length} productos · ${totalUnits} unidades totales</p>
 <table>
 <thead><tr><th>Producto</th><th>Categoría</th><th>Código</th><th style="text-align:right">Precio</th><th>Stock por talle</th><th style="text-align:right">Total</th></tr></thead>
 <tbody>${rows}</tbody>
@@ -821,7 +822,7 @@ ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:36px;object
   <p><strong>Valor total del inventario:</strong> ${fmt(totalValue)}</p>
   ${low.length > 0 ? `<p class="low">⚠ ${low.length} productos con stock bajo o sin stock</p>` : ''}
 </div>
-<div style="margin-top:16px;padding-top:8px;border-top:1px solid #ddd;color:#999;font-size:10px;text-align:center">Generado por DELPA Gestión PRO · ${new Date().toLocaleString('es-AR')}</div>
+<div style="margin-top:16px;padding-top:8px;border-top:1px solid #ddd;color:#999;font-size:10px;text-align:center">Generado por DELPA Gestión PRO · ${fmtDateTimeAR(new Date())}</div>
 </body></html>`
 }
 
@@ -852,7 +853,7 @@ ipcMain.handle('email:sendStockReport', async () => {
     }
 
     const bizName = biz.business_name || 'DELPA'
-    const dateStr = new Date().toLocaleDateString('es-AR')
+    const dateStr = fmtDateAR(new Date())
     const transporter = buildTransporter(s)
     const mailOpts = {
       from: `"${bizName}" <${s.email_user || s.email_from}>`,
@@ -941,7 +942,7 @@ async function sendMainCashboxMovementAsync({ type, description, amount, balance
       <div style="text-align:center;border-top:3px solid ${color};border-bottom:3px solid ${color};padding:14px 0;margin-bottom:16px">
         <p style="margin:0;font-size:12px;letter-spacing:2px;color:#888;text-transform:uppercase">Movimiento en Caja Grande</p>
         <h2 style="margin:6px 0 2px;color:#333">${bizName}</h2>
-        <p style="margin:0;color:#999;font-size:12px">${new Date().toLocaleString('es-AR')}</p>
+        <p style="margin:0;color:#999;font-size:12px">${fmtDateTimeAR(new Date())}</p>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:14px">
         <tr><td style="padding:8px 4px;color:#666">Tipo</td>
@@ -970,6 +971,52 @@ async function sendMainCashboxMovementAsync({ type, description, amount, balance
   }
 }
 
+// Email de transferencia automática al cerrar la caja chica (fire-and-forget)
+async function sendMainCashboxTransferAsync({ shift, amount, balanceBefore, balanceAfter }) {
+  try {
+    const s = getEmailConfig()
+    if (!s.email_user && !s.email_from) return
+    if (!s.email_pass || !s.email_to) return
+
+    const db = getDB()
+    const biz = getBizBasic(db)
+    const bizName = biz.business_name || 'DELPA'
+    const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
+    const shiftLabel = shift ? `caja ${shift}` : 'caja'
+    const color = '#16a34a'
+
+    const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#333">
+      ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin-bottom:8px" alt="logo">` : ''}
+      <div style="text-align:center;border-top:3px solid ${color};border-bottom:3px solid ${color};padding:14px 0;margin-bottom:16px">
+        <p style="margin:0;font-size:12px;letter-spacing:2px;color:#888;text-transform:uppercase">Transferencia automática</p>
+        <h2 style="margin:6px 0 2px;color:#333">Cierre ${shiftLabel}</h2>
+        <p style="margin:0;color:#999;font-size:12px">${fmtDateTimeAR(new Date())}</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <tr style="border-bottom:1px solid #eee"><td style="padding:8px 4px;color:#666">Monto transferido</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:bold;font-size:18px;color:${color}">+${fmt(amount)}</td></tr>
+        <tr><td style="padding:8px 4px;color:#666">Concepto</td>
+            <td style="padding:8px 4px;text-align:right">Cierre ${shiftLabel}</td></tr>
+        <tr><td style="padding:8px 4px;color:#666">Saldo anterior caja grande</td>
+            <td style="padding:8px 4px;text-align:right">${fmt(balanceBefore)}</td></tr>
+        <tr><td style="padding:8px 4px;color:#666">Saldo actual caja grande</td>
+            <td style="padding:8px 4px;text-align:right;font-weight:bold">${fmt(balanceAfter)}</td></tr>
+      </table>
+      <p style="color:#aaa;font-size:11px;margin-top:20px;border-top:1px solid #eee;padding-top:8px">Aviso automático de DELPA Gestión PRO.</p>
+    </div>`
+
+    const transporter = buildTransporter(s)
+    await transporter.sendMail({
+      from: `"${bizName}" <${s.email_user || s.email_from}>`,
+      to: s.email_to,
+      subject: `Caja Grande — INGRESO ${fmt(amount)} — Cierre ${shiftLabel}`,
+      html,
+    })
+  } catch (e) {
+    console.error('[email:maincashbox:transfer]', e.message)
+  }
+}
+
 // Email de cierre de Caja Grande con resumen del día (fire-and-forget)
 async function sendMainCashboxClosingAsync(opening, movements) {
   try {
@@ -981,7 +1028,7 @@ async function sendMainCashboxClosingAsync(opening, movements) {
     const biz = getBizBasic(db)
     const bizName = biz.business_name || 'DELPA'
     const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
-    const fmtTime = d => d ? new Date(d).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—'
+    const fmtTime = d => d ? fmtTimeAR(d) : '—'
     const totalIngresos = movements.filter(m => m.type === 'ingreso').reduce((a, m) => a + m.amount, 0)
     const totalEgresos  = movements.filter(m => m.type === 'egreso').reduce((a, m) => a + m.amount, 0)
     const diff = opening.closing_difference || 0
@@ -998,7 +1045,7 @@ async function sendMainCashboxClosingAsync(opening, movements) {
     const html = `<div style="font-family:sans-serif;max-width:620px;margin:0 auto;color:#333">
       ${biz.business_logo ? `<img src="${biz.business_logo}" style="height:44px;object-fit:contain;display:block;margin-bottom:8px" alt="logo">` : ''}
       <h2 style="color:#333;margin-bottom:2px">Cierre de Caja Grande</h2>
-      <p style="color:#666;margin:0 0 16px">${bizName} — ${new Date(opening.closed_at || Date.now()).toLocaleString('es-AR')}</p>
+      <p style="color:#666;margin:0 0 16px">${bizName} — ${fmtDateTimeAR(opening.closed_at || Date.now())}</p>
       <div style="background:#f9f9f9;border:1px solid #eee;border-radius:8px;padding:16px;font-size:14px;margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Saldo apertura (contado):</span><span>${fmt(opening.opening_balance_real)}</span></div>
         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#666">Total ingresos:</span><span style="color:#16a34a">+${fmt(totalIngresos)}</span></div>
@@ -1023,7 +1070,7 @@ async function sendMainCashboxClosingAsync(opening, movements) {
     await transporter.sendMail({
       from: `"${bizName}" <${s.email_user || s.email_from}>`,
       to: s.email_to,
-      subject: `Cierre Caja Grande — ${new Date(opening.closed_at || Date.now()).toLocaleDateString('es-AR')} — ${bizName}`,
+      subject: `Cierre Caja Grande — ${fmtDateAR(opening.closed_at || Date.now())} — ${bizName}`,
       html,
     })
   } catch (e) {
@@ -1031,4 +1078,4 @@ async function sendMainCashboxClosingAsync(opening, movements) {
   }
 }
 
-module.exports = { sendCashboxReport, sendInventoryReport, sendPointsSummaryAsync, sendExpiryNotification, sendWaitlistArrivalEmail, sendMainCashboxMovementAsync, sendMainCashboxClosingAsync }
+module.exports = { sendCashboxReport, sendInventoryReport, sendPointsSummaryAsync, sendExpiryNotification, sendWaitlistArrivalEmail, sendMainCashboxMovementAsync, sendMainCashboxClosingAsync, sendMainCashboxTransferAsync }

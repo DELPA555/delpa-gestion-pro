@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { fmtDateTimeAR } = require('../lib/argTime')
 
 // ── Caja Grande (Caja Mayor) ────────────────────────────────────────────────
 // Caja central acumulativa donde se deposita el efectivo de las cajas chicas.
@@ -49,6 +50,33 @@ function recordMovement(db, { type, category, amount, description, source, cashb
          `Caja Grande — ${type} ${category ? `(${category}) ` : ''}$${amount}: ${description}`)
   if (email) fireMovementEmail({ type, description, amount, balanceBefore, balanceAfter })
   return { id: lastInsertRowid, balanceBefore, balanceAfter }
+}
+
+// Transferencia AUTOMÁTICA del efectivo al cerrar una caja chica.
+// Registra el ingreso en la Caja Grande (creándola si no existía) y manda el
+// email específico de transferencia. Se llama desde cashbox:close.
+function transferCashboxClose(db, { cashboxId, amount, shift, createdBy }) {
+  ensureRow(db)
+  const shiftLabel = shift || `#${cashboxId}`
+  const desc = `Cierre automático caja ${shiftLabel} — ${fmtDateTimeAR(new Date())}`
+  const res = recordMovement(db, {
+    type: 'ingreso',
+    category: 'caja_chica',
+    amount,
+    description: desc,
+    source: 'caja_chica',
+    cashboxId,
+    createdBy,
+  }, { email: false })   // el email genérico se reemplaza por el de transferencia
+  setImmediate(() => {
+    try {
+      const { sendMainCashboxTransferAsync } = require('./email')
+      Promise.resolve(sendMainCashboxTransferAsync({
+        shift, amount, balanceBefore: res.balanceBefore, balanceAfter: res.balanceAfter,
+      })).catch(() => {})
+    } catch {}
+  })
+  return res
 }
 
 // Saldo actual + desglose
@@ -264,3 +292,5 @@ ipcMain.handle('maincashbox:report', (_, { from, to } = {}) => {
   const balance = syncBalance(db)
   return { movements, totalIngresos, totalEgresos, periodBalance: totalIngresos - totalEgresos, balance }
 })
+
+module.exports = { transferCashboxClose }

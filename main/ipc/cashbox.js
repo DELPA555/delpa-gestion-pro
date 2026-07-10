@@ -169,8 +169,20 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
   db.prepare("UPDATE cashbox SET real_cash=?,closing_cash=?,difference=?,status='closed',closed_at=CURRENT_TIMESTAMP,notes=?,payment_counts_json=? WHERE id=?")
     .run(effectiveRealCash, expected, diff, notes || '', countsJson, cashboxId)
   db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('CLOSE','cashbox',?,?)`).run(cashboxId, `Caja cerrada. Efectivo real: $${effectiveRealCash}, Diferencia: $${diff.toFixed(2)}`)
+
+  // Transferencia AUTOMÁTICA del efectivo contado a la Caja Grande
+  let transfer = null
+  try {
+    if (effectiveRealCash > 0) {
+      let createdBy = ''
+      try { createdBy = require('./auth').getCurrentSession()?.username || '' } catch {}
+      const { transferCashboxClose } = require('./maincashbox')
+      const r = transferCashboxClose(db, { cashboxId, amount: effectiveRealCash, shift: cashbox.shift, createdBy })
+      transfer = { amount: effectiveRealCash, mainBalance: r.balanceAfter }
+    }
+  } catch (e) { console.error('[cashbox:close] transferencia automática a caja grande:', e.message) }
   try { const { sendCashboxReport } = require('./email'); await sendCashboxReport(cashboxId) } catch {}
-  return { expectedCash: expected, difference: diff }
+  return { expectedCash: expected, difference: diff, transfer }
 })
 
 ipcMain.handle('cashbox:report', (_, cashboxId) => {

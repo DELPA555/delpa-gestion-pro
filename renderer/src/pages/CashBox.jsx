@@ -193,10 +193,6 @@ export default function CashBox() {
   const [movForm, setMovForm] = useState({ type: 'ingreso', concept: '', amount: '', paymentMethod: 'Efectivo' })
   const [saleDetail, setSaleDetail] = useState(null)
   const [biz, setBiz] = useState({})
-  // Transferencia a Caja Grande tras el cierre
-  const [transferModal, setTransferModal] = useState(false)
-  const [transferAmount, setTransferAmount] = useState('')
-  const [closedInfo, setClosedInfo] = useState(null) // { cashboxId, shift }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -283,36 +279,17 @@ export default function CashBox() {
       const efectivoRaw = paymentRealAmounts['Efectivo']
       const realCash = efectivoRaw !== '' && efectivoRaw !== undefined ? Number(efectivoRaw) : null
       const closedId = cashbox.id
-      const closedShift = cashbox.shift
       const res = await api.cashbox.close({ cashboxId: cashbox.id, realCash, notes: closeNotes, paymentCounts })
       toast.success(`${cashbox.shift ? `Turno ${cashbox.shift} cerrado` : 'Caja cerrada'}. Diferencia: ${formatCurrency(res.difference)}`)
+      // El efectivo contado se transfirió automáticamente a la Caja Grande
+      if (res.transfer?.amount > 0) {
+        toast.success(`Transferido a Caja Grande: ${formatCurrency(res.transfer.amount)}. Saldo caja grande: ${formatCurrency(res.transfer.mainBalance)}`, { duration: 6000 })
+      }
       setCloseModal(false)
       setLastClosedId(closedId)
-      // Sugerir transferir el efectivo contado a la Caja Grande
-      const suggested = realCash != null ? realCash : (res.expectedCash || 0)
-      setClosedInfo({ cashboxId: closedId, shift: closedShift })
-      setTransferAmount(suggested > 0 ? String(suggested) : '')
-      setTransferModal(true)
       // Re-select another open cashbox if one remains
       activeCbIdRef.current = null
       load()
-    } catch (e) { toast.error(e.message) }
-    finally { setProcessing(false) }
-  }
-
-  const handleTransfer = async () => {
-    const amt = Number(transferAmount)
-    if (!amt || amt <= 0) return toast.error('Ingresá un monto válido')
-    setProcessing(true)
-    try {
-      const res = await api.mainCashbox.transfer({
-        cashboxId: closedInfo?.cashboxId,
-        amount: amt,
-        createdBy: user?.username || '',
-      })
-      toast.success(`Transferido a Caja Grande. Nuevo saldo: ${formatCurrency(res.balance)}`)
-      setTransferModal(false)
-      setClosedInfo(null)
     } catch (e) { toast.error(e.message) }
     finally { setProcessing(false) }
   }
@@ -666,6 +643,21 @@ export default function CashBox() {
             </div>
           )}
 
+          {/* Aviso: transferencia automática a Caja Grande */}
+          {summary && (() => {
+            const raw = paymentRealAmounts['Efectivo']
+            const contado = raw !== '' && raw !== undefined ? Number(raw) : summary.expectedCash
+            if (!(contado > 0)) return null
+            return (
+              <div className="flex items-center gap-3 bg-accent/10 border border-accent/30 rounded-xl px-4 py-3">
+                <Vault size={18} className="text-accent shrink-0" />
+                <p className="text-xs text-zinc-300">
+                  El efectivo contado (<span className="font-semibold text-white">{formatCurrency(contado)}</span>) se transferirá automáticamente a la <span className="font-semibold text-accent">Caja Grande</span> al cerrar.
+                </p>
+              </div>
+            )
+          })()}
+
           {commLoading ? (
             <div className="py-2 text-xs text-zinc-500 animate-pulse">Calculando comisiones...</div>
           ) : commissions.length > 0 && (
@@ -740,32 +732,6 @@ export default function CashBox() {
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
           <button onClick={() => setMovementModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
           <button onClick={handleAddMovement} disabled={processing} className="btn-primary no-drag px-5 py-2 text-sm rounded-lg">{processing ? 'Guardando...' : 'Registrar'}</button>
-        </div>
-      </Modal>
-
-      {/* Transferir a Caja Grande (post-cierre) */}
-      <Modal open={transferModal} onClose={() => setTransferModal(false)} title="Transferir a Caja Grande" width="max-w-sm">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 bg-accent/10 border border-accent/30 rounded-xl px-4 py-3">
-            <div className="w-9 h-9 rounded-lg bg-accent/15 flex items-center justify-center shrink-0">
-              <Vault size={18} className="text-accent" />
-            </div>
-            <p className="text-sm text-zinc-300">
-              {closedInfo?.shift ? `Turno ${closedInfo.shift} cerrado.` : 'Caja cerrada.'} ¿Querés transferir el efectivo a la Caja Grande?
-            </p>
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Monto a transferir $</label>
-            <input type="number" min="0" step="0.01" className={inputCls} value={transferAmount}
-              onChange={e => setTransferAmount(e.target.value)} placeholder="0,00" autoFocus />
-            <p className="text-[11px] text-zinc-600 mt-1.5">Sugerido: efectivo contado en el cierre. Editalo si transferís un monto distinto.</p>
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
-          <button onClick={() => setTransferModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">No transferir</button>
-          <button onClick={handleTransfer} disabled={processing} className="btn-primary no-drag px-5 py-2 text-sm rounded-lg flex items-center gap-2">
-            <Vault size={14} /> {processing ? 'Transfiriendo...' : 'Transferir'}
-          </button>
         </div>
       </Modal>
 

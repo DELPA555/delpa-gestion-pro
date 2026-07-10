@@ -129,8 +129,8 @@ function buildWeeklyHTML(data, bizName) {
   ).join('')
 
   const now = new Date()
-  const endDate   = now.toLocaleDateString('es-AR')
-  const startDate = new Date(now - 7 * 86400000).toLocaleDateString('es-AR')
+  const endDate   = now.toLocaleDateString('es-AR', { timeZone: TZ })
+  const startDate = new Date(now - 7 * 86400000).toLocaleDateString('es-AR', { timeZone: TZ })
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -456,7 +456,7 @@ async function sendWeeklySummary() {
   const data = gatherWeekData()
   const bizName = cfg.business_name || 'DELPA'
   const html = buildWeeklyHTML(data, bizName)
-  const dateStr = new Date().toLocaleDateString('es-AR')
+  const dateStr = new Date().toLocaleDateString('es-AR', { timeZone: TZ })
 
   await transporter.sendMail({
     from: `"${bizName}" <${user}>`,
