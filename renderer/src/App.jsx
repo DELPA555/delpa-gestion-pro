@@ -54,7 +54,6 @@ class PageErrorBoundary extends Component {
   }
 }
 
-const VENDEDOR_ROUTES = ['/ventas', '/clientes', '/caja', '/pedidos', '/senas', '/gastos']
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutos
 
 function AnimatedRoutes() {
@@ -68,13 +67,15 @@ function AnimatedRoutes() {
         <Route path="/" element={<Navigate to="/ventas" replace />} />
         <Route path="/ventas"       element={<PageErrorBoundary><Sales /></PageErrorBoundary>} />
         <Route path="/clientes"     element={<PageErrorBoundary><Clients /></PageErrorBoundary>} />
+        <Route path="/productos"    element={<PageErrorBoundary><Products /></PageErrorBoundary>} />
+        <Route path="/ingreso"      element={<PageErrorBoundary><StockEntry /></PageErrorBoundary>} />
+        <Route path="/egresos"      element={<PageErrorBoundary><StockEgreso /></PageErrorBoundary>} />
         <Route path="/caja"         element={<PageErrorBoundary><CashBox /></PageErrorBoundary>} />
         <Route path="/pedidos"      element={<PageErrorBoundary><Orders /></PageErrorBoundary>} />
         <Route path="/senas"        element={<PageErrorBoundary><Senas /></PageErrorBoundary>} />
         <Route path="/gastos"       element={<PageErrorBoundary><Expenses /></PageErrorBoundary>} />
         {isAdmin && <>
           <Route path="/dashboard"    element={<PageErrorBoundary><Dashboard /></PageErrorBoundary>} />
-          <Route path="/productos"    element={<PageErrorBoundary><Products /></PageErrorBoundary>} />
           <Route path="/cuentas"      element={<PageErrorBoundary><Accounts /></PageErrorBoundary>} />
           <Route path="/proveedores"  element={<PageErrorBoundary><Suppliers /></PageErrorBoundary>} />
           <Route path="/compras"      element={<PageErrorBoundary><Purchases /></PageErrorBoundary>} />
@@ -84,8 +85,6 @@ function AnimatedRoutes() {
           <Route path="/auditoria"    element={<PageErrorBoundary><Audit /></PageErrorBoundary>} />
           <Route path="/sucursales"   element={<PageErrorBoundary><Sucursales /></PageErrorBoundary>} />
           <Route path="/inventario"   element={<PageErrorBoundary><Inventory /></PageErrorBoundary>} />
-          <Route path="/ingreso"      element={<PageErrorBoundary><StockEntry /></PageErrorBoundary>} />
-          <Route path="/egresos"      element={<PageErrorBoundary><StockEgreso /></PageErrorBoundary>} />
           <Route path="/configuracion" element={<PageErrorBoundary><Settings /></PageErrorBoundary>} />
           <Route path="/remitos"      element={<PageErrorBoundary><Remitos /></PageErrorBoundary>} />
           <Route path="/reposicion"   element={<PageErrorBoundary><SupplierOrders /></PageErrorBoundary>} />

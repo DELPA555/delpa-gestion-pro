@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import { PhoneLink, EmailLink } from '@/components/shared/ContactLinks'
 import Modal from '@/components/shared/Modal'
 import Pagination from '@/components/shared/Pagination'
@@ -37,6 +38,8 @@ const inputCls = 'input-field w-full bg-[#0a0a0a] border border-border rounded-l
 const labelCls = 'text-xs text-zinc-500 uppercase tracking-wider mb-1 block'
 
 export default function Clients() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'   // vendedora: solo ver y buscar
   const [tab, setTab] = useState('list')
 
   // List
@@ -175,7 +178,7 @@ export default function Clients() {
       <PageHeader
         title="Clientes"
         subtitle={`${data.total} clientes registrados`}
-        actions={
+        actions={isAdmin && (
           <div className="flex gap-2">
             <button onClick={handleImport} disabled={importing}
               className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
@@ -185,7 +188,7 @@ export default function Clients() {
               <Plus size={15} /> Nuevo cliente
             </button>
           </div>
-        }
+        )}
       />
 
       {/* Tabs */}
@@ -232,14 +235,18 @@ export default function Clients() {
                       {(c.points||0) > 0 ? <span className="flex items-center justify-end gap-1"><Gift size={11} />{c.points}</span> : '—'}
                     </span>
                     <div className="flex gap-1">
-                      {c.balance > 0 && (
+                      {isAdmin && c.balance > 0 && (
                         <button onClick={() => openPayment(c)} className="no-drag p-1.5 text-zinc-600 hover:text-green-400 rounded" title="Registrar pago">
                           <DollarSign size={13} />
                         </button>
                       )}
                       <button onClick={() => openHistory(c)} className="no-drag p-1.5 text-zinc-600 hover:text-accent rounded" title="Historial"><Eye size={13} /></button>
-                      <button onClick={() => openEdit(c)} className="no-drag p-1.5 text-zinc-600 hover:text-accent rounded"><Edit2 size={13} /></button>
-                      <button onClick={() => remove(c.id, c.name)} className="no-drag p-1.5 text-zinc-600 hover:text-red-400 rounded"><Trash2 size={13} /></button>
+                      {isAdmin && (
+                        <button onClick={() => openEdit(c)} className="no-drag p-1.5 text-zinc-600 hover:text-accent rounded"><Edit2 size={13} /></button>
+                      )}
+                      {isAdmin && (
+                        <button onClick={() => remove(c.id, c.name)} className="no-drag p-1.5 text-zinc-600 hover:text-red-400 rounded"><Trash2 size={13} /></button>
+                      )}
                     </div>
                   </div>
                 ))}

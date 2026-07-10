@@ -12,7 +12,7 @@ import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 
 function generateReportHTML(data, biz) {
-  const { cashbox: cb, byMethod, allSales, voidedSales, expenses, manualMovements = [], totalSales, totalExpenses, totalManualIngresos = 0, totalManualEgresos = 0, expectedCash, paymentCounts } = data
+  const { cashbox: cb, byMethod, allSales, voidedSales, expenses, manualMovements = [], totalSales, totalExpenses, cashExpenses = 0, totalManualIngresos = 0, totalManualEgresos = 0, expectedCash, paymentCounts } = data
   const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
   const fmtDate = s => s ? new Date(s).toLocaleString('es-AR') : '—'
   const fmtTime = s => s ? new Date(s).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—'
@@ -151,7 +151,8 @@ ${manualMovements.length > 0 ? `
   ${totalManualEgresos > 0 ? `<div class="sr red"><span>Egresos manuales:</span><span>-${fmt(totalManualEgresos)}</span></div>` : ''}
   <div class="sr red"><span>Total gastos:</span><span>-${fmt(totalExpenses)}</span></div>
   <div class="sr bold ${gananciaNet >= 0 ? 'grn' : 'red'}"><span>Ganancia neta:</span><span>${gananciaNet >= 0 ? '' : '-'}${fmt(Math.abs(gananciaNet))}</span></div>
-  <div class="sr" style="margin-top:8px"><span>Efectivo esperado en caja:</span><span>${fmt(expectedCash)}</span></div>
+  <div class="sr" style="margin-top:8px"><span>(−) Gastos en efectivo:</span><span class="red">-${fmt(cashExpenses)}</span></div>
+  <div class="sr"><span>Efectivo esperado en caja:</span><span>${fmt(expectedCash)}</span></div>
   <div class="sr"><span>Efectivo real contado:</span><span>${fmt(cb.real_cash)}</span></div>
   <div class="sr bold ${cbDiff === 0 ? 'grn' : cbDiff > 0 ? 'grn' : 'red'}">
     <span>Diferencia:</span><span>${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span>
@@ -417,7 +418,8 @@ export default function CashBox() {
         {[
           { id: 'actual', label: 'Caja actual' },
           { id: 'movimientos', label: 'Movimientos' },
-          { id: 'historial', label: 'Historial' },
+          // La vendedora no ve cajas/movimientos anteriores, solo su turno actual
+          ...(user?.role === 'admin' ? [{ id: 'historial', label: 'Historial' }] : []),
         ].map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
@@ -634,10 +636,16 @@ export default function CashBox() {
                   <span className="text-red-400">-{formatCurrency(summary.manualEgresos)}</span>
                 </div>
               )}
-              {(summary.expenses?.total > 0) && (
+              {(summary.cashExpenses > 0) && (
                 <div className="flex justify-between text-zinc-500 text-xs">
-                  <span>Gastos:</span>
-                  <span className="text-red-400">-{formatCurrency(summary.expenses.total)}</span>
+                  <span>Gastos (efectivo):</span>
+                  <span className="text-red-400">-{formatCurrency(summary.cashExpenses)}</span>
+                </div>
+              )}
+              {(summary.expenses?.total > summary.cashExpenses) && (
+                <div className="flex justify-between text-zinc-600 text-[10px]">
+                  <span>Gastos con otros medios (no afectan efectivo):</span>
+                  <span>-{formatCurrency((summary.expenses?.total || 0) - (summary.cashExpenses || 0))}</span>
                 </div>
               )}
               <div className="flex justify-between border-t border-border/50 pt-1.5">

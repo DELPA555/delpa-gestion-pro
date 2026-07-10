@@ -19,6 +19,7 @@ function useDebounce(value, delay) {
 }
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import Modal from '@/components/shared/Modal'
 import Pagination from '@/components/shared/Pagination'
 import PageHeader from '@/components/shared/PageHeader'
@@ -728,6 +729,8 @@ function PriceHistoryInModal({ productId, isEdit }) {
 }
 
 export default function Products() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'   // vendedora: solo ver (sin crear/editar/eliminar)
   const [data, setData] = useState({ products: [], total: 0, pages: 1 })
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -1127,22 +1130,28 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
               <Printer size={13} /> Imprimir Stock
             </button>
-            <button onClick={handleTemplate}
-              className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
-              <FileText size={13} /> Plantilla
-            </button>
-            <button onClick={handleImportCSV}
-              className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
-              <Upload size={13} /> Importar CSV
-            </button>
+            {isAdmin && (
+              <button onClick={handleTemplate}
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
+                <FileText size={13} /> Plantilla
+              </button>
+            )}
+            {isAdmin && (
+              <button onClick={handleImportCSV}
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
+                <Upload size={13} /> Importar CSV
+              </button>
+            )}
             <button onClick={handleExportCSV}
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
               <Download size={13} /> Exportar CSV
             </button>
-            <button onClick={openCreate}
-              className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
-              <Plus size={15} /> Nuevo producto
-            </button>
+            {isAdmin && (
+              <button onClick={openCreate}
+                className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
+                <Plus size={15} /> Nuevo producto
+              </button>
+            )}
           </div>
         }
       />
@@ -1175,7 +1184,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
 
       {/* Bulk action bar */}
       <AnimatePresence>
-        {someSelected && (
+        {someSelected && isAdmin && (
           <motion.div
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-2.5 mb-4"
@@ -1217,12 +1226,14 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="grid text-[11px] text-zinc-500 uppercase tracking-wider px-4 py-2.5 border-b border-border bg-surface items-center"
           style={{ gridTemplateColumns: COLS }}>
-          <button onClick={selectAll} className="flex items-center no-drag">
-            {allSelected
-              ? <CheckSquare size={14} className="text-accent" />
-              : <Square size={14} className="text-zinc-600" />
-            }
-          </button>
+          {isAdmin ? (
+            <button onClick={selectAll} className="flex items-center no-drag">
+              {allSelected
+                ? <CheckSquare size={14} className="text-accent" />
+                : <Square size={14} className="text-zinc-600" />
+              }
+            </button>
+          ) : <span />}
           <span>Producto</span>
           <span>Categoría</span>
           <span className="text-right">Precio</span>
@@ -1253,15 +1264,17 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                     style={{ gridTemplateColumns: COLS }}
                     onClick={() => handleExpand(p.id)}
                   >
-                    <button
-                      onClick={e => toggleSelect(e, p.id)}
-                      className="flex items-center no-drag"
-                    >
-                      {isSel
-                        ? <CheckSquare size={14} className="text-accent" />
-                        : <Square size={14} className="text-zinc-600" />
-                      }
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        onClick={e => toggleSelect(e, p.id)}
+                        className="flex items-center no-drag"
+                      >
+                        {isSel
+                          ? <CheckSquare size={14} className="text-accent" />
+                          : <Square size={14} className="text-zinc-600" />
+                        }
+                      </button>
+                    ) : <span />}
 
                     <div className="flex items-center gap-3 min-w-0">
                       {p.image_data ? (
@@ -1294,19 +1307,25 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                       {totalStock}
                     </span>
 
-                    <button
-                      onClick={e => toggleTnSync(e, p)}
-                      className="flex items-center justify-center no-drag"
-                      title={p.tn_sync ? 'Sincronizando con Tienda Nube (click para desactivar)' : 'Excluido de TN (click para activar)'}
-                    >
-                      {p.tn_sync
-                        ? <Cloud size={14} className="text-accent" />
-                        : <CloudOff size={14} className="text-zinc-600" />
-                      }
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        onClick={e => toggleTnSync(e, p)}
+                        className="flex items-center justify-center no-drag"
+                        title={p.tn_sync ? 'Sincronizando con Tienda Nube (click para desactivar)' : 'Excluido de TN (click para activar)'}
+                      >
+                        {p.tn_sync
+                          ? <Cloud size={14} className="text-accent" />
+                          : <CloudOff size={14} className="text-zinc-600" />
+                        }
+                      </button>
+                    ) : (
+                      <span className="flex items-center justify-center">
+                        {p.tn_sync ? <Cloud size={14} className="text-accent" /> : <CloudOff size={14} className="text-zinc-600" />}
+                      </span>
+                    )}
 
                     <div className="flex items-center gap-1 pl-2">
-                      {p.tn_sync ? (
+                      {isAdmin && p.tn_sync ? (
                         <button onClick={e => syncProductToTN(e, p)} disabled={syncingId === p.id}
                           title="Sincronizar con Tienda Nube"
                           className="p-1.5 text-zinc-600 hover:text-accent rounded hover:bg-accent/10 transition-colors no-drag disabled:opacity-40">
@@ -1318,14 +1337,18 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                         className="p-1.5 text-zinc-600 hover:text-accent rounded hover:bg-accent/10 transition-colors no-drag">
                         <Tag size={13} />
                       </button>
-                      <button onClick={e => { e.stopPropagation(); openEdit(p.id) }}
-                        className="p-1.5 text-zinc-600 hover:text-accent rounded hover:bg-accent/10 transition-colors no-drag">
-                        <Edit2 size={13} />
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); remove(p.id, p.name) }}
-                        className="p-1.5 text-zinc-600 hover:text-red-400 rounded hover:bg-red-500/10 transition-colors no-drag">
-                        <Trash2 size={13} />
-                      </button>
+                      {isAdmin && (
+                        <button onClick={e => { e.stopPropagation(); openEdit(p.id) }}
+                          className="p-1.5 text-zinc-600 hover:text-accent rounded hover:bg-accent/10 transition-colors no-drag">
+                          <Edit2 size={13} />
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button onClick={e => { e.stopPropagation(); remove(p.id, p.name) }}
+                          className="p-1.5 text-zinc-600 hover:text-red-400 rounded hover:bg-red-500/10 transition-colors no-drag">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                       <ChevronDown size={13} className={`text-zinc-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                   </motion.div>

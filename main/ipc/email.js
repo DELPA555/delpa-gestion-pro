@@ -240,6 +240,7 @@ async function sendCashboxReport(cashboxId) {
   const byMethod   = db.prepare(`SELECT payment_method, SUM(total) as total, COUNT(*) as count FROM sales WHERE cashbox_id=? AND voided=0 GROUP BY payment_method ORDER BY total DESC`).all(cashboxId)
   const totalSales = db.prepare('SELECT COALESCE(SUM(total),0) as total FROM sales WHERE cashbox_id=? AND voided=0').get(cashboxId).total
   const totalExpenses = db.prepare('SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=?').get(cashboxId).total
+  const cashExpenses  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=? AND payment_method='Efectivo'").get(cashboxId).total
   const voidedSales = db.prepare('SELECT id, sale_number, total, void_reason FROM sales WHERE cashbox_id=? AND voided=1').all(cashboxId)
   const allSales   = db.prepare(`
     SELECT s.id, s.sale_number, s.total, s.created_at, s.payment_method, s.installments,
@@ -257,7 +258,8 @@ async function sendCashboxReport(cashboxId) {
   const cashSales    = byMethod.find(m => m.payment_method === 'Efectivo')?.total || 0
   const cashManualIn  = manualMovements.filter(m => m.type === 'ingreso' && m.payment_method === 'Efectivo').reduce((s, m) => s + m.amount, 0)
   const cashManualOut = manualMovements.filter(m => m.type === 'egreso'  && m.payment_method === 'Efectivo').reduce((s, m) => s + m.amount, 0)
-  const expectedCash = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - totalExpenses
+  // Solo restar los gastos pagados en efectivo del efectivo esperado
+  const expectedCash = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - cashExpenses
   let paymentCounts = {}
   try { paymentCounts = JSON.parse(cashbox.payment_counts_json || '{}') } catch {}
 
@@ -269,7 +271,7 @@ async function sendCashboxReport(cashboxId) {
     business_logo:    db.prepare("SELECT value FROM settings WHERE key='business_logo'").get()?.value || '',
   }
 
-  const reportData = { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts }
+  const reportData = { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts }
   const summaryHtml = buildSummaryEmailHtml(reportData, biz)
   const fullHtml    = buildFullReportHTML(reportData, biz)
 

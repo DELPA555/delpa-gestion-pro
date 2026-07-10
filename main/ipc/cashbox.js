@@ -39,6 +39,14 @@ function getCashSales(db, cashboxId) {
   return fromPayments.total + fromSales.total
 }
 
+// Solo los gastos pagados EN EFECTIVO afectan el efectivo esperado de la caja.
+// Los gastos por transferencia/tarjeta/etc. no salen del cajón.
+function getCashExpenses(db, cashboxId) {
+  return db.prepare(
+    "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=? AND payment_method='Efectivo'"
+  ).get(cashboxId).total
+}
+
 ipcMain.handle('cashbox:movements', (_, cashboxId) => {
   const db = getDB()
   const sales = db.prepare(`
@@ -124,6 +132,7 @@ ipcMain.handle('cashbox:summary', (_, cashboxId) => {
   const cashbox = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   const byMethod = getSalesByMethod(db, cashboxId)
   const expenses = db.prepare("SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM expenses WHERE cashbox_id=?").get(cashboxId)
+  const cashExpenses = getCashExpenses(db, cashboxId)
   const totalSales = byMethod.reduce((s, m) => s + m.total, 0)
   const cashSales = getCashSales(db, cashboxId)
   const manualIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso'").get(cashboxId).total
@@ -134,10 +143,13 @@ ipcMain.handle('cashbox:summary', (_, cashboxId) => {
     cashbox,
     byMethod,
     expenses,
+    cashExpenses,
     manualIngresos: manualIn,
     manualEgresos:  manualOut,
     totalSales,
-    expectedCash: (cashbox?.opening_cash || 0) + cashSales + cashManualIn - cashManualOut - (expenses?.total || 0),
+    // Efectivo esperado = apertura + ventas efectivo + ingresos manuales efectivo
+    //                     - gastos EN EFECTIVO - egresos manuales efectivo
+    expectedCash: (cashbox?.opening_cash || 0) + cashSales + cashManualIn - cashManualOut - cashExpenses,
   }
 })
 
@@ -146,10 +158,11 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
   const cashbox = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   if (!cashbox) throw new Error('Caja no encontrada')
   const cashTotal = getCashSales(db, cashboxId)
-  const expenses = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=?").get(cashboxId)
+  const cashExpenses = getCashExpenses(db, cashboxId)
   const cashManualIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso' AND payment_method='Efectivo'").get(cashboxId).total
   const cashManualOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso' AND payment_method='Efectivo'").get(cashboxId).total
-  const expected = cashbox.opening_cash + cashTotal + cashManualIn - cashManualOut - expenses.total
+  // Solo restar los gastos pagados en efectivo (los de otros medios no salen del cajón)
+  const expected = cashbox.opening_cash + cashTotal + cashManualIn - cashManualOut - cashExpenses
   const effectiveRealCash = realCash != null ? Number(realCash) : expected
   const diff = effectiveRealCash - expected
   const countsJson = paymentCounts ? JSON.stringify(paymentCounts) : '{}'
@@ -186,15 +199,17 @@ ipcMain.handle('cashbox:report', (_, cashboxId) => {
   const manualMovements = db.prepare('SELECT * FROM cashbox_movements WHERE cashbox_id=? ORDER BY created_at ASC').all(cashboxId)
   const totalSales = byMethod.reduce((s, m) => s + m.total, 0)
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
+  const cashExpenses = expenses.filter(e => (e.payment_method || 'Efectivo') === 'Efectivo').reduce((s, e) => s + e.amount, 0)
   const totalManualIngresos = manualMovements.filter(m => m.type === 'ingreso').reduce((s, m) => s + m.amount, 0)
   const totalManualEgresos  = manualMovements.filter(m => m.type === 'egreso').reduce((s, m) => s + m.amount, 0)
   const cashSales = getCashSales(db, cashboxId)
   const cashManualIn  = manualMovements.filter(m => m.type === 'ingreso' && m.payment_method === 'Efectivo').reduce((s, m) => s + m.amount, 0)
   const cashManualOut = manualMovements.filter(m => m.type === 'egreso'  && m.payment_method === 'Efectivo').reduce((s, m) => s + m.amount, 0)
-  const expectedCash = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - totalExpenses
+  // Solo restar los gastos pagados en efectivo
+  const expectedCash = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - cashExpenses
   let paymentCounts = {}
   try { paymentCounts = JSON.parse(cashbox.payment_counts_json || '{}') } catch {}
-  return { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts }
+  return { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts }
 })
 
 ipcMain.handle('cashbox:history', (_, { page = 1, limit = 20 } = {}) => {
