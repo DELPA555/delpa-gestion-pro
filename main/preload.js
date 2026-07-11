@@ -51,6 +51,7 @@ const CHANNELS = [
   'clients:points:history', 'clients:points:adjust',
   'products:setTnSync', 'products:bulkAction', 'products:exportCSV', 'products:csvTemplate',
   'products:importCSV', 'products:getVariants', 'products:createVariant', 'products:searchByBarcode',
+  'products:updatePrice',
   'email:sendPointsSummary',
   'exchanges:create', 'exchanges:list',
   'returns:create', 'returns:list',

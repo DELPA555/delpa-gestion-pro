@@ -298,6 +298,35 @@ ipcMain.handle('products:update', (_, { id, ...data }) => {
   return result
 })
 
+// Actualiza SOLO el precio de venta (usado por la vendedora — no toca otros campos).
+// Registra el cambio en price_history con el usuario de la sesión.
+ipcMain.handle('products:updatePrice', (_, { id, price } = {}) => {
+  const db = getDB()
+  const newPrice = Number(price)
+  if (!id) throw new Error('Producto no especificado')
+  if (isNaN(newPrice) || newPrice < 0) throw new Error('Precio inválido')
+  const current = db.prepare('SELECT price, name FROM products WHERE id=?').get(id)
+  if (!current) throw new Error('Producto no encontrado')
+
+  let changedBy = 'usuario'
+  try { changedBy = require('./auth').getCurrentSession()?.username || 'usuario' } catch {}
+
+  const run = db.transaction(() => {
+    if (Number(newPrice) !== Number(current.price)) {
+      try {
+        db.prepare(
+          'INSERT INTO price_history (product_id, product_name, old_price, new_price, changed_by) VALUES (?,?,?,?,?)'
+        ).run(id, current.name, current.price, newPrice, changedBy)
+      } catch {}
+    }
+    db.prepare('UPDATE products SET price=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newPrice, id)
+    db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('UPDATE','products',?,?)`)
+      .run(id, `Precio actualizado: ${current.name} $${current.price} → $${newPrice} (${changedBy})`)
+    return true
+  })
+  return run()
+})
+
 // ─── Price history ────────────────────────────────────────────────────────────
 
 ipcMain.handle('products:priceHistory', (_, productId) => {

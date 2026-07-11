@@ -18,6 +18,7 @@ export const api = {
     get:             (id)      => inv('products:get', id),
     create:          (d)       => inv('products:create', d),
     update:          (id, d)   => inv('products:update', { id, ...d }),
+    updatePrice:     (id, price) => inv('products:updatePrice', { id, price }),
     delete:          (id)      => inv('products:delete', id),
     search:          (q)       => inv('products:search', { q }),
     setTnSync:       (id, val) => inv('products:setTnSync', { id, value: val }),

@@ -766,6 +766,11 @@ export default function Products() {
   const [labelProduct, setLabelProduct] = useState(null)
   const [labelOpen, setLabelOpen] = useState(false)
 
+  // Edición rápida de precio (vendedora)
+  const [priceEdit, setPriceEdit] = useState(null)  // producto en edición
+  const [priceVal, setPriceVal] = useState('')
+  const [savingPrice, setSavingPrice] = useState(false)
+
   const [customSizes, setCustomSizes] = useState([])
   const [customCategories, setCustomCategories] = useState([])
   const [categorySizeGroups, setCategorySizeGroups] = useState({})
@@ -895,6 +900,21 @@ export default function Products() {
     await api.products.delete(id)
     toast.success('Producto eliminado')
     load()
+  }
+
+  // Edición rápida de precio (vendedora): solo el precio de venta
+  const openPriceEdit = (p) => { setPriceEdit(p); setPriceVal(String(p.price ?? '')) }
+  const savePrice = async () => {
+    const val = Number(priceVal)
+    if (isNaN(val) || val < 0) return toast.error('Precio inválido')
+    setSavingPrice(true)
+    try {
+      await api.products.updatePrice(priceEdit.id, val)
+      toast.success('Precio actualizado')
+      setPriceEdit(null)
+      load()
+    } catch (e) { toast.error(e.message) }
+    finally { setSavingPrice(false) }
   }
 
   // TN individual product sync
@@ -1299,7 +1319,17 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                     </div>
 
                     <span className="text-xs text-zinc-400">{p.category || '—'}</span>
-                    <span className="text-sm text-white text-right font-medium tabular-nums">{formatCurrency(p.price)}</span>
+                    {isAdmin ? (
+                      <span className="text-sm text-white text-right font-medium tabular-nums">{formatCurrency(p.price)}</span>
+                    ) : (
+                      <span className="text-sm text-white text-right font-medium tabular-nums flex items-center justify-end gap-1.5">
+                        {formatCurrency(p.price)}
+                        <button onClick={e => { e.stopPropagation(); openPriceEdit(p) }} title="Editar precio de venta"
+                          className="p-1 text-zinc-500 hover:text-accent rounded hover:bg-accent/10 transition-colors no-drag">
+                          <Edit2 size={12} />
+                        </button>
+                      </span>
+                    )}
                     <span className={`text-xs text-right font-medium ${margin >= 30 ? 'text-green-400' : margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
                       {p.cost > 0 ? `${margin.toFixed(0)}%` : '—'}
                     </span>
@@ -1540,6 +1570,35 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
         onClose={() => setLabelOpen(false)}
         product={labelProduct}
       />
+
+      {/* Edición rápida de precio (vendedora) */}
+      <Modal open={!!priceEdit} onClose={() => setPriceEdit(null)} title="Editar precio de venta" width="max-w-xs">
+        {priceEdit && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-white font-medium">{priceEdit.name}</p>
+              <p className="text-xs text-zinc-500">{[priceEdit.brand, priceEdit.category].filter(Boolean).join(' · ') || priceEdit.barcode || '—'}</p>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Precio de venta $</label>
+              <input
+                type="number" min="0" step="0.01" autoFocus
+                className="input-field w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-lg text-white font-semibold tabular-nums no-drag"
+                value={priceVal}
+                onChange={e => setPriceVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !savingPrice) savePrice() }}
+              />
+              <p className="text-[11px] text-zinc-600 mt-1.5">El cambio queda registrado en el historial de precios.</p>
+            </div>
+          </div>
+        )}
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
+          <button onClick={() => setPriceEdit(null)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
+          <button onClick={savePrice} disabled={savingPrice} className="btn-primary no-drag px-5 py-2 text-sm rounded-lg">
+            {savingPrice ? 'Guardando...' : 'Guardar precio'}
+          </button>
+        </div>
+      </Modal>
     </motion.div>
   )
 }
