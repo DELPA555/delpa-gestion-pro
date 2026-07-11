@@ -91,7 +91,7 @@ function genEAN13Client() {
   return base + (10 - sum % 10) % 10
 }
 
-function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothingSizes, americanSizes, shoeSizes, categorySizeGroups, isNew, suppliers }) {
+function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothingSizes, americanSizes, shoeSizes, categorySizeGroups, isNew, suppliers, isAdmin = true }) {
   const fileRef = useRef()
   const field = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const barcodeRef = useBarcodePreview(form.barcode)
@@ -211,30 +211,45 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
-        <div>
-          <label className={labelCls}>Costo $</label>
-          <input type="number" min="0" step="0.01" className={inputCls} value={form.cost}
-            onChange={e => onCostChange(e.target.value)} placeholder="0,00" />
+      {isAdmin ? (
+        <div className="grid grid-cols-4 gap-3">
+          <div>
+            <label className={labelCls}>Costo $</label>
+            <input type="number" min="0" step="0.01" className={inputCls} value={form.cost}
+              onChange={e => onCostChange(e.target.value)} placeholder="0,00" />
+          </div>
+          <div>
+            <label className={labelCls}>Ganancia deseada %</label>
+            <input type="number" min="0" step="1" className={inputCls} value={markup}
+              onChange={e => onMarkupChange(e.target.value)} placeholder="Ej: 80" />
+          </div>
+          <div>
+            <label className={labelCls}>Precio venta $</label>
+            <input type="number" min="0" step="0.01" className={`${inputCls} border-accent/40`} value={form.price}
+              onChange={e => onPriceChange(e.target.value)} placeholder="0,00" />
+          </div>
+          <div>
+            <label className={labelCls}>Stock mínimo global</label>
+            <input type="number" min="0" className={inputCls} value={form.min_stock}
+              onChange={e => field('min_stock', e.target.value)} placeholder="5" />
+          </div>
         </div>
-        <div>
-          <label className={labelCls}>Ganancia deseada %</label>
-          <input type="number" min="0" step="1" className={inputCls} value={markup}
-            onChange={e => onMarkupChange(e.target.value)} placeholder="Ej: 80" />
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Precio venta $ *</label>
+            <input type="number" min="0" step="0.01" className={`${inputCls} border-accent/40`} value={form.price}
+              onChange={e => field('price', e.target.value)} placeholder="0,00" />
+          </div>
+          <div>
+            <label className={labelCls}>Stock mínimo global</label>
+            <input type="number" min="0" className={inputCls} value={form.min_stock}
+              onChange={e => field('min_stock', e.target.value)} placeholder="5" />
+          </div>
         </div>
-        <div>
-          <label className={labelCls}>Precio venta $</label>
-          <input type="number" min="0" step="0.01" className={`${inputCls} border-accent/40`} value={form.price}
-            onChange={e => onPriceChange(e.target.value)} placeholder="0,00" />
-        </div>
-        <div>
-          <label className={labelCls}>Stock mínimo global</label>
-          <input type="number" min="0" className={inputCls} value={form.min_stock}
-            onChange={e => field('min_stock', e.target.value)} placeholder="5" />
-        </div>
-      </div>
+      )}
 
-      {Number(form.cost) > 0 && Number(form.price) > 0 && (
+      {isAdmin && Number(form.cost) > 0 && Number(form.price) > 0 && (
         <div className="text-xs text-zinc-500 bg-[#0a0a0a] rounded-lg px-3 py-2">
           Ganancia: <span className={`font-semibold ${gananciaUnidad >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {formatCurrency(gananciaUnidad)}
@@ -258,21 +273,23 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
           {form.tn_sync ? <Cloud size={12} /> : <CloudOff size={12} />}
           {form.tn_sync ? 'Sync TN activo' : 'Sync TN desactivado'}
         </div>
-        <div
-          onClick={() => field('is_consignment', !form.is_consignment)}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors no-drag cursor-pointer',
-            form.is_consignment
-              ? 'border-purple-500/40 bg-purple-500/10 text-purple-400'
-              : 'border-border bg-surface text-zinc-500 hover:text-zinc-300'
-          )}
-        >
-          <PackageCheck size={12} />
-          {form.is_consignment ? 'Consignación activa' : 'Marcar como consignación'}
-        </div>
+        {isAdmin && (
+          <div
+            onClick={() => field('is_consignment', !form.is_consignment)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors no-drag cursor-pointer',
+              form.is_consignment
+                ? 'border-purple-500/40 bg-purple-500/10 text-purple-400'
+                : 'border-border bg-surface text-zinc-500 hover:text-zinc-300'
+            )}
+          >
+            <PackageCheck size={12} />
+            {form.is_consignment ? 'Consignación activa' : 'Marcar como consignación'}
+          </div>
+        )}
       </div>
 
-      {form.is_consignment && (
+      {isAdmin && form.is_consignment && (
         <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-3">
           <p className="text-xs font-medium text-purple-400">Configuración de consignación</p>
           <div className="grid grid-cols-2 gap-3">
@@ -652,6 +669,7 @@ function ImportResultModal({ open, onClose, result }) {
 }
 
 const COLS = '28px 2fr 1fr 1fr 1fr 72px 44px auto'
+const COLS_VENDEDORA = '28px 2fr 1fr 1fr 72px 44px auto'  // sin columna Margen (oculta el costo)
 
 // ── Historial de precios (dentro del modal de edición) ────────────────────────
 
@@ -730,7 +748,8 @@ function PriceHistoryInModal({ productId, isEdit }) {
 
 export default function Products() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'   // vendedora: solo ver (sin crear/editar/eliminar)
+  const isAdmin = user?.role === 'admin'   // vendedora: no ve costo/margen, no elimina, no edita stock
+  const cols = isAdmin ? COLS : COLS_VENDEDORA
   const [data, setData] = useState({ products: [], total: 0, pages: 1 })
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -1166,12 +1185,10 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
               <Download size={13} /> Exportar CSV
             </button>
-            {isAdmin && (
-              <button onClick={openCreate}
-                className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
-                <Plus size={15} /> Nuevo producto
-              </button>
-            )}
+            <button onClick={openCreate}
+              className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
+              <Plus size={15} /> Nuevo producto
+            </button>
           </div>
         }
       />
@@ -1245,7 +1262,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="grid text-[11px] text-zinc-500 uppercase tracking-wider px-4 py-2.5 border-b border-border bg-surface items-center"
-          style={{ gridTemplateColumns: COLS }}>
+          style={{ gridTemplateColumns: cols }}>
           {isAdmin ? (
             <button onClick={selectAll} className="flex items-center no-drag">
               {allSelected
@@ -1257,7 +1274,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
           <span>Producto</span>
           <span>Categoría</span>
           <span className="text-right">Precio</span>
-          <span className="text-right">Margen</span>
+          {isAdmin && <span className="text-right">Margen</span>}
           <span className="text-right">Stock</span>
           <span className="text-center">TN</span>
           <span />
@@ -1281,7 +1298,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                   <motion.div
                     whileHover={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
                     className={cn('grid items-center px-4 py-3 cursor-pointer', isSel && 'bg-accent/5')}
-                    style={{ gridTemplateColumns: COLS }}
+                    style={{ gridTemplateColumns: cols }}
                     onClick={() => handleExpand(p.id)}
                   >
                     {isAdmin ? (
@@ -1330,9 +1347,11 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
                         </button>
                       </span>
                     )}
-                    <span className={`text-xs text-right font-medium ${margin >= 30 ? 'text-green-400' : margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
-                      {p.cost > 0 ? `${margin.toFixed(0)}%` : '—'}
-                    </span>
+                    {isAdmin && (
+                      <span className={`text-xs text-right font-medium ${margin >= 30 ? 'text-green-400' : margin >= 10 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {p.cost > 0 ? `${margin.toFixed(0)}%` : '—'}
+                      </span>
+                    )}
                     <span className={`text-sm text-right font-bold tabular-nums ${totalStock === 0 ? 'text-red-400' : totalStock <= p.min_stock ? 'text-amber-400' : 'text-white'}`}>
                       {totalStock}
                     </span>
@@ -1497,6 +1516,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
           categorySizeGroups={categorySizeGroups}
           isNew={modal === 'create'}
           suppliers={suppliers}
+          isAdmin={isAdmin}
         />
         <div className="flex justify-between gap-3 mt-6 pt-4 border-t border-border">
           <div>

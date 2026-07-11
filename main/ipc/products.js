@@ -206,6 +206,8 @@ ipcMain.handle('products:getVariants', (_, parentId) => {
 ipcMain.handle('products:create', (_, data) => {
   const db = getDB()
   const { barcode, name, brand, category, color, cost, price, min_stock, image_data, sizes = [], tn_sync = 1 } = data
+  let createdBy = ''
+  try { createdBy = require('./auth').getCurrentSession()?.username || '' } catch {}
   const run = db.transaction(() => {
     const { lastInsertRowid: id } = db.prepare(`
       INSERT INTO products (barcode,name,brand,category,color,cost,price,min_stock,image_data,tn_sync)
@@ -215,7 +217,7 @@ ipcMain.handle('products:create', (_, data) => {
     const ins = db.prepare(`INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,?) ON CONFLICT(product_id,size) DO UPDATE SET stock=excluded.stock,min_stock=excluded.min_stock`)
     for (const s of sizes) if (s.size) ins.run(id, s.size, s.stock || 0, s.min_stock || 2)
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description,new_data) VALUES ('CREATE','products',?,?,?)`)
-      .run(id, `Producto creado: ${name}`, JSON.stringify({ name, price, cost }))
+      .run(id, `Producto creado: ${name}${createdBy ? ` (por ${createdBy})` : ''}`, JSON.stringify({ name, price, cost, createdBy }))
     return id
   })
   const id = run()
