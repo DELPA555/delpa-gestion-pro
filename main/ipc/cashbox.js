@@ -41,10 +41,26 @@ function getCashSales(db, cashboxId) {
 
 // Solo los gastos pagados EN EFECTIVO afectan el efectivo esperado de la caja.
 // Los gastos por transferencia/tarjeta/etc. no salen del cajón.
-function getCashExpenses(db, cashboxId) {
-  return db.prepare(
-    "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=? AND payment_method='Efectivo'"
-  ).get(cashboxId).total
+// Incluye además los gastos en efectivo del MISMO DÍA que quedaron SIN caja asignada
+// (caso típico: se paga el alquiler antes de abrir la caja → cashbox_id NULL).
+function getCashExpenses(db, cashbox) {
+  if (!cashbox) return 0
+  return db.prepare(`
+    SELECT COALESCE(SUM(amount),0) as total FROM expenses
+    WHERE payment_method='Efectivo'
+      AND ( cashbox_id=?
+            OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime')) )
+  `).get(cashbox.id, cashbox.opened_at).total
+}
+
+// Asigna a la caja los gastos del mismo día que quedaron sin caja (huérfanos),
+// para que queden registrados en su cierre y no se pierdan del cálculo.
+function adoptOrphanExpenses(db, cashbox) {
+  return db.prepare(`
+    UPDATE expenses SET cashbox_id=?
+    WHERE cashbox_id IS NULL
+      AND date(created_at,'localtime') = date(?, 'localtime')
+  `).run(cashbox.id, cashbox.opened_at).changes
 }
 
 ipcMain.handle('cashbox:movements', (_, cashboxId) => {
@@ -98,12 +114,18 @@ ipcMain.handle('cashbox:todaySummary', () => {
     totalOpening += (cb.opening_cash || 0)
     const byMethod = getSalesByMethod(db, cb.id)
     const cashSales = getCashSales(db, cb.id)
-    const exp = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=?").get(cb.id).total
+    // Total de gastos del día (todos los medios, incl. huérfanos del día) para mostrar
+    const exp = db.prepare(`
+      SELECT COALESCE(SUM(amount),0) as total FROM expenses
+      WHERE cashbox_id=? OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime'))
+    `).get(cb.id, cb.opened_at).total
+    // Solo los gastos EN EFECTIVO restan del efectivo esperado
+    const cashExp = getCashExpenses(db, cb)
     const cashManIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso' AND payment_method='Efectivo'").get(cb.id).total
     const cashManOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso' AND payment_method='Efectivo'").get(cb.id).total
     totalSales    += byMethod.reduce((s, m) => s + m.total, 0)
     totalExpenses += exp
-    expectedCash  += (cb.opening_cash || 0) + cashSales + cashManIn - cashManOut - exp
+    expectedCash  += (cb.opening_cash || 0) + cashSales + cashManIn - cashManOut - cashExp
   }
   return {
     openCount: openCbs.length,
@@ -131,8 +153,11 @@ ipcMain.handle('cashbox:summary', (_, cashboxId) => {
   const db = getDB()
   const cashbox = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   const byMethod = getSalesByMethod(db, cashboxId)
-  const expenses = db.prepare("SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM expenses WHERE cashbox_id=?").get(cashboxId)
-  const cashExpenses = getCashExpenses(db, cashboxId)
+  const expenses = db.prepare(`
+    SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM expenses
+    WHERE cashbox_id=? OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime'))
+  `).get(cashboxId, cashbox?.opened_at)
+  const cashExpenses = getCashExpenses(db, cashbox)
   const totalSales = byMethod.reduce((s, m) => s + m.total, 0)
   const cashSales = getCashSales(db, cashboxId)
   const manualIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso'").get(cashboxId).total
@@ -157,8 +182,10 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
   const db = getDB()
   const cashbox = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   if (!cashbox) throw new Error('Caja no encontrada')
+  // Adoptar los gastos del día que quedaron sin caja (ej: alquiler pagado antes de abrir)
+  try { adoptOrphanExpenses(db, cashbox) } catch (e) { console.error('[cashbox:close] adoptar gastos huérfanos:', e.message) }
   const cashTotal = getCashSales(db, cashboxId)
-  const cashExpenses = getCashExpenses(db, cashboxId)
+  const cashExpenses = getCashExpenses(db, cashbox)
   const cashManualIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso' AND payment_method='Efectivo'").get(cashboxId).total
   const cashManualOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso' AND payment_method='Efectivo'").get(cashboxId).total
   // Solo restar los gastos pagados en efectivo (los de otros medios no salen del cajón)
@@ -207,7 +234,11 @@ ipcMain.handle('cashbox:report', (_, cashboxId) => {
     sale.items = getItems.all(sale.id)
     sale.payments = getPayments.all(sale.id)
   }
-  const expenses = db.prepare('SELECT * FROM expenses WHERE cashbox_id=? ORDER BY created_at ASC').all(cashboxId)
+  const expenses = db.prepare(`
+    SELECT * FROM expenses
+    WHERE cashbox_id=? OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime'))
+    ORDER BY created_at ASC
+  `).all(cashboxId, cashbox.opened_at)
   const manualMovements = db.prepare('SELECT * FROM cashbox_movements WHERE cashbox_id=? ORDER BY created_at ASC').all(cashboxId)
   const totalSales = byMethod.reduce((s, m) => s + m.total, 0)
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)

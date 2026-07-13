@@ -240,8 +240,15 @@ async function sendCashboxReport(cashboxId) {
   const cashbox    = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   const byMethod   = db.prepare(`SELECT payment_method, SUM(total) as total, COUNT(*) as count FROM sales WHERE cashbox_id=? AND voided=0 GROUP BY payment_method ORDER BY total DESC`).all(cashboxId)
   const totalSales = db.prepare('SELECT COALESCE(SUM(total),0) as total FROM sales WHERE cashbox_id=? AND voided=0').get(cashboxId).total
-  const totalExpenses = db.prepare('SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=?').get(cashboxId).total
-  const cashExpenses  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE cashbox_id=? AND payment_method='Efectivo'").get(cashboxId).total
+  const totalExpenses = db.prepare(`
+    SELECT COALESCE(SUM(amount),0) as total FROM expenses
+    WHERE cashbox_id=? OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime'))
+  `).get(cashboxId, cashbox?.opened_at).total
+  const cashExpenses  = db.prepare(`
+    SELECT COALESCE(SUM(amount),0) as total FROM expenses
+    WHERE payment_method='Efectivo'
+      AND ( cashbox_id=? OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime')) )
+  `).get(cashboxId, cashbox?.opened_at).total
   const voidedSales = db.prepare('SELECT id, sale_number, total, void_reason FROM sales WHERE cashbox_id=? AND voided=1').all(cashboxId)
   const allSales   = db.prepare(`
     SELECT s.id, s.sale_number, s.total, s.created_at, s.payment_method, s.installments,
@@ -251,7 +258,11 @@ async function sendCashboxReport(cashboxId) {
   `).all(cashboxId)
   const getItems = db.prepare('SELECT product_name, size, quantity, unit_price FROM sale_items WHERE sale_id=?')
   for (const sale of allSales) sale.items = getItems.all(sale.id)
-  const expenses = db.prepare('SELECT * FROM expenses WHERE cashbox_id=? ORDER BY created_at ASC').all(cashboxId)
+  const expenses = db.prepare(`
+    SELECT * FROM expenses
+    WHERE cashbox_id=? OR (cashbox_id IS NULL AND date(created_at,'localtime') = date(?, 'localtime'))
+    ORDER BY created_at ASC
+  `).all(cashboxId, cashbox?.opened_at)
 
   const manualMovements = db.prepare('SELECT * FROM cashbox_movements WHERE cashbox_id=? ORDER BY created_at ASC').all(cashboxId)
   const totalManualIngresos = manualMovements.filter(m => m.type === 'ingreso').reduce((s, m) => s + m.amount, 0)
