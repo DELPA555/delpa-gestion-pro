@@ -22,7 +22,7 @@ ipcMain.handle('breakeven:data', () => {
 
   // Contribution margin from sale items this month
   const itemStats = db.prepare(`
-    SELECT COALESCE(SUM(si.quantity * si.unit_price),0) as revenue,
+    SELECT COALESCE(SUM(COALESCE(si.net_price, si.quantity * si.unit_price)),0) as revenue,
            COALESCE(SUM(si.quantity * COALESCE(si.unit_cost,0)),0) as cost
     FROM sale_items si
     JOIN sales s ON s.id = si.sale_id

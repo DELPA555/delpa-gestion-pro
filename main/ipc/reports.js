@@ -24,8 +24,8 @@ ipcMain.handle('reports:topProducts', (_, { from, to, limit = 20 } = {}) => {
   return getDB().prepare(`
     SELECT si.product_name, si.product_id,
            SUM(si.quantity) as qty_sold,
-           SUM(si.quantity*si.unit_price) as revenue,
-           SUM(si.quantity*(si.unit_price-si.unit_cost)) as profit
+           SUM(COALESCE(si.net_price,si.quantity*si.unit_price)) as revenue,
+           SUM(COALESCE(si.profit,si.quantity*(si.unit_price-si.unit_cost))) as profit
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     WHERE s.voided=0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
     GROUP BY si.product_id, si.product_name ORDER BY qty_sold DESC LIMIT ?
@@ -39,7 +39,7 @@ ipcMain.handle('reports:profitability', (_, { from, to } = {}) => {
     SELECT COALESCE(SUM(s.total),0) as total_ventas,
            COALESCE(SUM(si.ganancia),0) as ganancia_bruta
     FROM sales s
-    JOIN (SELECT sale_id, SUM((unit_price-unit_cost)*quantity) as ganancia FROM sale_items GROUP BY sale_id) si ON si.sale_id=s.id
+    JOIN (SELECT sale_id, SUM(COALESCE(profit,(unit_price-unit_cost)*quantity)) as ganancia FROM sale_items GROUP BY sale_id) si ON si.sale_id=s.id
     WHERE s.voided=0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
   `).get(f, t)
   const gastos = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE date(created_at,'localtime') BETWEEN ? AND ?`).get(f, t)
@@ -51,8 +51,8 @@ ipcMain.handle('reports:salesByCategory', (_, { from, to } = {}) => {
   return getDB().prepare(`
     SELECT COALESCE(p.category,'Sin categoría') as category,
            SUM(si.quantity) as qty_sold,
-           SUM(si.quantity*si.unit_price) as revenue,
-           SUM(si.quantity*(si.unit_price-si.unit_cost)) as profit
+           SUM(COALESCE(si.net_price,si.quantity*si.unit_price)) as revenue,
+           SUM(COALESCE(si.profit,si.quantity*(si.unit_price-si.unit_cost))) as profit
     FROM sale_items si
     JOIN sales s ON s.id=si.sale_id
     LEFT JOIN products p ON p.id=si.product_id
@@ -69,9 +69,9 @@ ipcMain.handle('reports:salesByProduct', (_, { from, to } = {}) => {
            si.size,
            SUM(si.quantity) as qty_sold,
            AVG(si.unit_price) as avg_price,
-           SUM(si.quantity * si.unit_price) as revenue,
+           SUM(COALESCE(si.net_price, si.quantity * si.unit_price)) as revenue,
            AVG(si.unit_cost) as avg_cost,
-           SUM(si.quantity * (si.unit_price - si.unit_cost)) as profit
+           SUM(COALESCE(si.profit, si.quantity * (si.unit_price - si.unit_cost))) as profit
     FROM sale_items si
     JOIN sales s ON s.id=si.sale_id
     LEFT JOIN products p ON p.id=si.product_id
@@ -137,8 +137,8 @@ ipcMain.handle('reports:exportCSV', async (_, { from, to, type = 'sales' } = {})
     rows = db.prepare(`
       SELECT si.product_name, COALESCE(p.category,'Sin cat.') as categoria,
              SUM(si.quantity) as cantidad,
-             SUM(si.quantity*si.unit_price) as ingresos,
-             SUM(si.quantity*(si.unit_price-si.unit_cost)) as ganancia
+             SUM(COALESCE(si.net_price,si.quantity*si.unit_price)) as ingresos,
+             SUM(COALESCE(si.profit,si.quantity*(si.unit_price-si.unit_cost))) as ganancia
       FROM sale_items si JOIN sales s ON s.id=si.sale_id LEFT JOIN products p ON p.id=si.product_id
       WHERE s.voided=0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
       GROUP BY si.product_name ORDER BY ingresos DESC
@@ -175,8 +175,8 @@ ipcMain.handle('reports:rankingProductos', (_, { from, to, category, limit = 20 
     SELECT si.product_id, si.product_name,
            COALESCE(p.category,'Sin categoría') as category,
            SUM(si.quantity) as qty_sold,
-           SUM(si.quantity * si.unit_price) as revenue,
-           SUM(si.quantity * (si.unit_price - si.unit_cost)) as profit
+           SUM(COALESCE(si.net_price, si.quantity * si.unit_price)) as revenue,
+           SUM(COALESCE(si.profit, si.quantity * (si.unit_price - si.unit_cost))) as profit
     FROM sale_items si
     JOIN sales s ON s.id = si.sale_id
     LEFT JOIN products p ON p.id = si.product_id
@@ -210,7 +210,7 @@ ipcMain.handle('reports:rankingPrev', (_, { from, to, category, limit = 20 } = {
 
   return db.prepare(`
     SELECT si.product_id, SUM(si.quantity) as qty_sold,
-           SUM(si.quantity * si.unit_price) as revenue
+           SUM(COALESCE(si.net_price, si.quantity * si.unit_price)) as revenue
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     LEFT JOIN products p ON p.id=si.product_id
     WHERE ${where}
@@ -230,7 +230,7 @@ ipcMain.handle('reports:colorAnalysis', (_, { from, to, category } = {}) => {
   const rows = db.prepare(`
     SELECT COALESCE(NULLIF(p.color,''),'Sin color') as color,
            SUM(si.quantity) as qty_sold,
-           SUM(si.quantity * si.unit_price) as revenue
+           SUM(COALESCE(si.net_price, si.quantity * si.unit_price)) as revenue
     FROM sale_items si
     JOIN sales s ON s.id = si.sale_id
     LEFT JOIN products p ON p.id = si.product_id
@@ -399,9 +399,9 @@ ipcMain.handle('reports:rentabilidadCategorias', (_, { from, to } = {}) => {
   const catQuery = (ff, tt) => db.prepare(`
     SELECT COALESCE(p.category,'Sin categoría') as category,
            SUM(si.quantity) as units_sold,
-           SUM(si.quantity*si.unit_price) as revenue,
+           SUM(COALESCE(si.net_price,si.quantity*si.unit_price)) as revenue,
            SUM(si.quantity*si.unit_cost) as total_cost,
-           SUM(si.quantity*(si.unit_price-si.unit_cost)) as profit
+           SUM(COALESCE(si.profit,si.quantity*(si.unit_price-si.unit_cost))) as profit
     FROM sale_items si
     JOIN sales s ON s.id=si.sale_id
     LEFT JOIN products p ON p.id=si.product_id

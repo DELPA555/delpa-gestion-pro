@@ -866,6 +866,40 @@ function createTables(db) {
   addColumnIfMissing(db, 'clients', 'last_purchase',  "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'points',         'INTEGER DEFAULT 0')
   addColumnIfMissing(db, 'products', 'supplier_id',   'INTEGER DEFAULT NULL')
+  // Ganancia real por línea: net_price = precio de venta menos el descuento distribuido
+  // proporcionalmente; profit = net_price − costo. NULL = fila vieja pendiente de backfill.
+  addColumnIfMissing(db, 'sale_items', 'net_price', 'REAL DEFAULT NULL')
+  addColumnIfMissing(db, 'sale_items', 'profit',    'REAL DEFAULT NULL')
+
+  // Backfill idempotente de net_price/profit: distribuye el descuento global de cada venta
+  // (sales.discount) entre sus items en proporción al importe bruto de cada línea. Se ejecuta
+  // solo sobre filas con net_price NULL, así se auto-repara si aparece una fila sin calcular.
+  try {
+    const pend = db.prepare('SELECT DISTINCT sale_id FROM sale_items WHERE net_price IS NULL').all()
+    if (pend.length) {
+      const getSale  = db.prepare('SELECT discount FROM sales WHERE id=?')
+      const getItems = db.prepare('SELECT id, unit_price, unit_cost, quantity FROM sale_items WHERE sale_id=?')
+      const upd      = db.prepare('UPDATE sale_items SET discount=?, net_price=?, profit=? WHERE id=?')
+      const backfillNet = db.transaction(() => {
+        for (const { sale_id } of pend) {
+          const items = getItems.all(sale_id)
+          const gross = items.reduce((s, it) => s + (it.unit_price || 0) * (it.quantity || 0), 0)
+          const D = getSale.get(sale_id)?.discount || 0
+          for (const it of items) {
+            const lineGross = (it.unit_price || 0) * (it.quantity || 0)
+            const lineDisc  = gross > 0 ? D * lineGross / gross : 0
+            const net       = lineGross - lineDisc
+            const profit    = net - (it.unit_cost || 0) * (it.quantity || 0)
+            upd.run(lineDisc, net, profit, it.id)
+          }
+        }
+      })
+      backfillNet()
+      console.log(`[DB Migration] Backfill net_price/profit: ${pend.length} ventas recalculadas`)
+    }
+  } catch (e) {
+    console.error('[DB Migration] Error en backfill de net_price/profit:', e.message)
+  }
 
   // One-time backfill: asociar producto → proveedor según el último ingreso de mercadería.
   // Recorre stock_entries de más antiguo a más nuevo, de modo que el proveedor del ingreso

@@ -86,7 +86,7 @@ ipcMain.handle('health:score', () => {
   try {
     const monthStart = new Date().toISOString().slice(0, 7) + '-01'
     const stats = db.prepare(`
-      SELECT COALESCE(SUM(si.quantity * si.unit_price),0) as revenue,
+      SELECT COALESCE(SUM(COALESCE(si.net_price, si.quantity * si.unit_price)),0) as revenue,
              COALESCE(SUM(si.quantity * COALESCE(si.unit_cost,0)),0) as cost
       FROM sale_items si JOIN sales s ON s.id = si.sale_id
       WHERE s.voided=0 AND date(s.created_at,'localtime') >= ? AND si.unit_price > 0

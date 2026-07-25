@@ -314,7 +314,7 @@ function gatherWeekData() {
   `).get()
 
   const topProducts = db.prepare(`
-    SELECT p.name, SUM(si.quantity) as qty, SUM(si.quantity * si.unit_price) as revenue
+    SELECT p.name, SUM(si.quantity) as qty, SUM(COALESCE(si.net_price, si.quantity * si.unit_price)) as revenue
     FROM sale_items si
     JOIN products p ON p.id = si.product_id
     JOIN sales s ON s.id = si.sale_id
@@ -378,7 +378,7 @@ function gatherMonthData() {
   `).get()
 
   const topProducts = db.prepare(`
-    SELECT p.name, SUM(si.quantity) as qty, SUM(si.quantity * si.unit_price) as revenue
+    SELECT p.name, SUM(si.quantity) as qty, SUM(COALESCE(si.net_price, si.quantity * si.unit_price)) as revenue
     FROM sale_items si
     JOIN products p ON p.id = si.product_id
     JOIN sales s ON s.id = si.sale_id

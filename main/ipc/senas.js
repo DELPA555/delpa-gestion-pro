@@ -126,9 +126,9 @@ ipcMain.handle('senas:withdraw', (_, { id, paymentMethod, sellerName }) => {
            `Retiro de seña #${id}`, cashbox?.id || null, sellerName || seña.seller_name, saleNumber)
 
     if (seña.product_id && seña.size && seña.size !== 'N/A') {
-      db.prepare(`INSERT INTO sale_items (sale_id,product_id,product_name,size,quantity,unit_price,unit_cost)
-                  VALUES (?,?,?,?,1,?,0)`)
-        .run(saleId, seña.product_id, seña.product_name, seña.size, seña.remaining)
+      db.prepare(`INSERT INTO sale_items (sale_id,product_id,product_name,size,quantity,unit_price,unit_cost,discount,net_price,profit)
+                  VALUES (?,?,?,?,1,?,0,0,?,?)`)
+        .run(saleId, seña.product_id, seña.product_name, seña.size, seña.remaining, seña.remaining, seña.remaining)
     }
 
     db.prepare('UPDATE senas SET status=?,sale_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run('retirada', saleId, id)

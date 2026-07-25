@@ -8,7 +8,7 @@ ipcMain.handle('dashboard:stats', () => {
     FROM sales WHERE voided=0 AND date(created_at,'localtime')=date('now','localtime')
   `).get()
   const bruta = db.prepare(`
-    SELECT COALESCE(SUM((si.unit_price - si.unit_cost)*si.quantity),0) as total
+    SELECT COALESCE(SUM(COALESCE(si.profit,(si.unit_price - si.unit_cost)*si.quantity)),0) as total
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     WHERE s.voided=0 AND date(s.created_at,'localtime')=date('now','localtime')
   `).get()
@@ -139,7 +139,7 @@ ipcMain.handle('dashboard:categoryComparison', () => {
   const db = getDB()
   const mo = (offset) => db.prepare(`
     SELECT COALESCE(p.category,'Sin categoría') as category,
-           COALESCE(SUM(si.quantity*si.unit_price),0) as revenue
+           COALESCE(SUM(COALESCE(si.net_price,si.quantity*si.unit_price)),0) as revenue
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     LEFT JOIN products p ON p.id=si.product_id
     WHERE s.voided=0
@@ -181,8 +181,8 @@ ipcMain.handle('dashboard:monthlyProfit', () => {
   // Se excluyen los items sin costo cargado (unit_cost 0 o NULL): no se puede
   // saber su ganancia, así que no aportan ni al numerador ni al margen.
   const grossProfit = db.prepare(`
-    SELECT COALESCE(SUM((si.unit_price - si.unit_cost) * si.quantity),0) as total,
-           COALESCE(SUM(si.unit_price * si.quantity),0) as revenueWithCost
+    SELECT COALESCE(SUM(COALESCE(si.profit,(si.unit_price - si.unit_cost) * si.quantity)),0) as total,
+           COALESCE(SUM(COALESCE(si.net_price, si.unit_price * si.quantity)),0) as revenueWithCost
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     WHERE s.voided=0
       AND si.unit_cost IS NOT NULL AND si.unit_cost > 0

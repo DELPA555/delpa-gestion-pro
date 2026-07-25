@@ -23,9 +23,9 @@ ipcMain.handle('supplieranalytics:margins', (_, { from, to } = {}) => {
       COALESCE(s.name, 'Sin proveedor') as supplier_name,
       COUNT(DISTINCT si.product_id) as product_count,
       SUM(si.quantity) as units_sold,
-      ROUND(SUM(si.quantity * si.unit_price), 2) as revenue,
+      ROUND(SUM(COALESCE(si.net_price, si.quantity * si.unit_price)), 2) as revenue,
       ROUND(SUM(si.quantity * COALESCE(si.unit_cost, 0)), 2) as cost,
-      ROUND(SUM(si.quantity * (si.unit_price - COALESCE(si.unit_cost, 0))), 2) as gross_profit
+      ROUND(SUM(COALESCE(si.profit, si.quantity * (si.unit_price - COALESCE(si.unit_cost, 0)))), 2) as gross_profit
     FROM sale_items si
     JOIN sales sa ON sa.id = si.sale_id AND sa.voided = 0
     LEFT JOIN latest_sup ls ON ls.product_id = si.product_id
