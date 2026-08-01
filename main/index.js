@@ -85,12 +85,15 @@ app.whenReady().then(() => {
   require('./ipc/breakeven')
   require('./ipc/supplieranalytics')
   require('./ipc/supplierStock')
+  require('./ipc/stockReport')
+  require('./ipc/informes')
   require('./ipc/onboarding')
   require('./ipc/changeTickets')
   const { runPointsExpiry } = require('./ipc/pointsMaintenance')
   try { runPointsExpiry() } catch (e) { console.error('[POINTS] expiry on startup:', e.message) }
   const { performBackup } = require('./ipc/googledrive')
-  const { scheduleWeeklySummary } = require('./ipc/weeklySummary')
+  require('./ipc/weeklySummary')            // mantiene los canales legacy weeklySummary:send/monthlySummary:send
+  const { scheduleInformes } = require('./ipc/informes')
   const { pingDistributor } = require('./lib/distributorPing')
 
   ipcMain.on('window:minimize', () => mainWindow?.minimize())
@@ -105,7 +108,7 @@ app.whenReady().then(() => {
   createWindow()
   setupAutoUpdater()
   setupDailyBackup()
-  scheduleWeeklySummary()
+  scheduleInformes()
   setTimeout(pingDistributor, 30 * 1000)
   setInterval(pingDistributor, 24 * 60 * 60 * 1000)
   setInterval(() => { try { performBackup() } catch {} }, 24 * 60 * 60 * 1000)

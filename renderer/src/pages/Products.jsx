@@ -26,6 +26,7 @@ import PageHeader from '@/components/shared/PageHeader'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 import LabelPrintModal, { buildBulkLabels, printA4, printBrother, useBarcodePreview } from '@/components/shared/LabelPrintModal'
+import StockReportModal from '@/components/shared/StockReportModal'
 
 const DEFAULT_JEANS_SIZES    = ['34','36','38','40','42','44','46','48','50']
 const DEFAULT_CLOTHING_SIZES = ['XS','S','M','L','XL','XXL','XXXL']
@@ -785,6 +786,9 @@ export default function Products() {
   const [labelProduct, setLabelProduct] = useState(null)
   const [labelOpen, setLabelOpen] = useState(false)
 
+  // Reporte de stock con filtros flexibles
+  const [stockReportOpen, setStockReportOpen] = useState(false)
+
   // Edición rápida de precio (vendedora)
   const [priceEdit, setPriceEdit] = useState(null)  // producto en edición
   const [priceVal, setPriceVal] = useState('')
@@ -1053,74 +1057,6 @@ export default function Products() {
     }
   }
 
-  // Print stock
-  const handlePrintStock = async () => {
-    try {
-      const all = await api.settings.getAll()
-      const bizName = all.business_name || 'DELPA'
-      const bizLogo = all.business_logo || ''
-      const res = await api.products.list({ limit: 9999 })
-      const products = res.products || []
-      const low = products.filter(p => {
-        const total = (p.sizes || []).reduce((s, x) => s + x.stock, 0)
-        return total <= (p.min_stock || 5)
-      })
-      const totalUnits = products.reduce((s, p) => s + (p.sizes || []).reduce((ss, x) => ss + x.stock, 0), 0)
-      const totalValue = products.reduce((s, p) => s + (p.sizes || []).reduce((ss, x) => ss + x.stock * p.price, 0), 0)
-
-      const rows = products.map(p => {
-        const sizes = (p.sizes || []).filter(s => s.stock > 0)
-        const total = sizes.reduce((s, x) => s + x.stock, 0)
-        const isLow = total <= (p.min_stock || 5)
-        return `<tr style="background:${isLow ? '#fff0f0' : 'white'}">
-          <td style="padding:4px 6px;border-bottom:1px solid #eee">${p.name}${p.color ? ` <span style="color:#888">${p.color}</span>` : ''}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #eee;color:#777">${p.category || '—'}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;color:#555">${p.barcode || ''}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:right">$${Number(p.price).toFixed(2)}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #eee;font-size:11px">${sizes.map(s => `${s.size}:${s.stock}`).join(' | ')}</td>
-          <td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;color:${isLow ? '#dc2626' : '#166534'}">${total}</td>
-        </tr>`
-      }).join('')
-
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:16px;color:#1a1a1a}
-h1{font-size:18px;font-weight:bold;margin-bottom:2px}
-.meta{color:#666;font-size:11px;margin-bottom:16px}
-table{width:100%;border-collapse:collapse;font-size:11px}
-th{background:#f0f0f0;padding:5px 6px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:#555}
-.total-row td{font-weight:bold;background:#f9f9f9;padding:6px;border-top:2px solid #333}
-.summary{margin-top:16px;padding:12px;background:#f9f9f9;border:1px solid #ddd;border-radius:4px;font-size:12px}
-.summary p{margin:3px 0}.low{color:#dc2626;font-weight:bold}
-@media print{@page{size:A4;margin:12mm}}</style>
-</head><body>
-${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-bottom:6px" alt="logo">` : ''}
-<h1>${bizName} — Reporte de Stock</h1>
-<p class="meta">Generado: ${new Date().toLocaleString('es-AR')} · ${products.length} productos · ${totalUnits} unidades totales</p>
-<table>
-<thead><tr><th>Producto</th><th>Categoría</th><th>Código</th><th style="text-align:right">Precio</th><th>Stock por talle</th><th style="text-align:right">Total</th></tr></thead>
-<tbody>${rows}</tbody>
-</table>
-<div class="summary">
-  <p><strong>Total de productos:</strong> ${products.length}</p>
-  <p><strong>Total de unidades:</strong> ${totalUnits.toLocaleString('es-AR')}</p>
-  <p><strong>Valor total del inventario:</strong> $${Number(totalValue).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
-  ${low.length > 0 ? `<p class="low">⚠ ${low.length} productos con stock bajo o sin stock</p>` : ''}
-</div>
-</body></html>`
-
-      const w = window.open('', '_blank', 'width=900,height=700')
-      w.document.write(html)
-      w.document.close()
-      w.onload = () => { w.print(); setTimeout(() => w.close(), 800) }
-
-      // Send PDF by email in background
-      api.email.sendStockReport().then(res => {
-        if (res?.ok) toast.success(`PDF generado y enviado por email a ${res.email_to}`)
-        else toast.error(`PDF generado, pero no se pudo enviar el email: ${res?.error || 'Error desconocido'}`)
-      }).catch(e => toast.error(`PDF generado, pero no se pudo enviar el email: ${e.message}`))
-    } catch (e) { toast.error(e.message || 'Error al generar reporte') }
-  }
-
   // Import / Export
   const handleExportCSV = async () => {
     const res = await api.products.exportCSV()
@@ -1165,7 +1101,7 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
         subtitle={`${data.total} productos en catálogo`}
         actions={
           <div className="flex items-center gap-2">
-            <button onClick={handlePrintStock}
+            <button onClick={() => setStockReportOpen(true)}
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
               <Printer size={13} /> Imprimir Stock
             </button>
@@ -1589,6 +1525,13 @@ ${bizLogo ? `<img src="${bizLogo}" style="height:36px;object-fit:contain;margin-
         open={labelOpen}
         onClose={() => setLabelOpen(false)}
         product={labelProduct}
+      />
+
+      {/* Reporte de stock con filtros flexibles */}
+      <StockReportModal
+        open={stockReportOpen}
+        onClose={() => setStockReportOpen(false)}
+        isAdmin={isAdmin}
       />
 
       {/* Edición rápida de precio (vendedora) */}

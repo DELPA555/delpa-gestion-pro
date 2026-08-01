@@ -73,6 +73,7 @@ const CHANNELS = [
   'reports:clientDebt', 'reports:priceHistoryReport', 'reports:priceHistoryProduct',
   'reports:liquidarProductos', 'reports:rentabilidadCategorias', 'reports:sinMovimiento', 'reports:vendedoras',
   'dashboard:monthComparison', 'dashboard:categoryComparison',
+  'dashboard:topProductsToday', 'dashboard:recentSales', 'dashboard:topClientsMonth', 'dashboard:overdueDebt',
   'backup:create', 'backup:restore',
   'products:priceHistory',
   'fiscal:stats', 'fiscal:ivaVentas', 'fiscal:ivaCompras', 'fiscal:posicion', 'fiscal:monotributo12m',
@@ -95,6 +96,8 @@ const CHANNELS = [
   'health:score',
   'supplierStock:suppliers', 'supplierStock:report', 'supplierStock:consignment',
   'supplierStock:exportPDF', 'supplierStock:emailSupplier',
+  'stockReport:options', 'stockReport:html', 'stockReport:email',
+  'informes:generate', 'informes:send', 'informes:latest', 'informes:list', 'informes:get', 'informes:delete',
 ]
 
 contextBridge.exposeInMainWorld('electron', {

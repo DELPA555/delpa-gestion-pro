@@ -221,7 +221,9 @@ export default function Settings() {
   const [paymentMethods, setPaymentMethods] = useState([])
   const [sellers, setSellers] = useState([])
   const [surcharges, setSurcharges] = useState(DEFAULT_SURCHARGES)
-  const [emailForm, setEmailForm] = useState({ email_smtp: 'smtp.gmail.com', email_port: '587', email_user: '', email_from: '', email_pass: '', email_to: '' })
+  const [emailForm, setEmailForm] = useState({ email_smtp: 'smtp.gmail.com', email_port: '587', email_user: '', email_from: '', email_pass: '', email_to: '',
+    report_weekly_enabled: '1', report_monthly_enabled: '1', report_email_to: '', report_email_cc: '',
+    report_weekly_dow: '1', report_weekly_hour: '19', report_monthly_day: '1', report_monthly_hour: '19' })
   const [emailTesting, setEmailTesting] = useState(false)
   const [gdStatus, setGdStatus] = useState({ connected: false, email: null, lastBackupAt: null, notConfigured: false })
   const [gdLoading, setGdLoading] = useState(false)
@@ -333,6 +335,14 @@ export default function Settings() {
         email_from: all.email_from || '',
         email_pass: all.email_pass || '',
         email_to:   all.email_to   || '',
+        report_weekly_enabled:  all.report_weekly_enabled  ?? '1',
+        report_monthly_enabled: all.report_monthly_enabled ?? '1',
+        report_email_to:  all.report_email_to  || '',
+        report_email_cc:  all.report_email_cc  || '',
+        report_weekly_dow:  all.report_weekly_dow  || '1',
+        report_weekly_hour: all.report_weekly_hour || '19',
+        report_monthly_day:  all.report_monthly_day  || '1',
+        report_monthly_hour: all.report_monthly_hour || '19',
       })
       setAfipForm({
         afip_env:           all.afip_env           || 'testing',
@@ -1017,6 +1027,89 @@ export default function Settings() {
               </div>
             </div>
           </details>
+
+          {/* ── Informes automáticos ── */}
+          <div className="pt-2 border-t border-border space-y-4">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold text-white">Informes automáticos</h4>
+              <span className="text-[10px] bg-accent/15 text-accent px-2 py-0.5 rounded-full">Nuevo</span>
+            </div>
+            <p className="text-xs text-zinc-600 -mt-2">Resúmenes semanales y mensuales con branding DELPA. Se guardan en la app (módulo Informes) y se envían por email.</p>
+
+            {/* Toggles */}
+            <div className="space-y-2.5">
+              {[
+                ['report_weekly_enabled',  'Informe semanal', 'Todos los ' + ['dom','lun','mar','mié','jue','vie','sáb'][+emailForm.report_weekly_dow] + ` ${emailForm.report_weekly_hour}hs`],
+                ['report_monthly_enabled', 'Informe mensual', `Día ${emailForm.report_monthly_day} de cada mes a las ${emailForm.report_monthly_hour}hs`],
+              ].map(([key, label, hint]) => (
+                <label key={key} className="flex items-center justify-between bg-surface border border-border rounded-lg px-4 py-2.5 cursor-pointer">
+                  <div>
+                    <p className="text-sm text-zinc-200">{label}</p>
+                    <p className="text-[11px] text-zinc-600">{hint}</p>
+                  </div>
+                  <input type="checkbox" className="w-4 h-4 accent-pink-500"
+                    checked={emailForm[key] === '1'}
+                    onChange={e => setEmailForm(f => ({ ...f, [key]: e.target.checked ? '1' : '0' }))} />
+                </label>
+              ))}
+            </div>
+
+            {/* Destinatarios de informes */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Email dueño (informes)</label>
+                <input type="email" className={inputCls}
+                  value={emailForm.report_email_to}
+                  onChange={e => setEmailForm(f => ({ ...f, report_email_to: e.target.value }))}
+                  placeholder="(usa el destinatario de arriba)" />
+              </div>
+              <div>
+                <label className={labelCls}>Email CC (contador)</label>
+                <input type="email" className={inputCls}
+                  value={emailForm.report_email_cc}
+                  onChange={e => setEmailForm(f => ({ ...f, report_email_cc: e.target.value }))}
+                  placeholder="opcional" />
+              </div>
+            </div>
+
+            {/* Programación */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Día del informe semanal</label>
+                <select className={inputCls}
+                  value={emailForm.report_weekly_dow}
+                  onChange={e => setEmailForm(f => ({ ...f, report_weekly_dow: e.target.value }))}>
+                  {['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'].map((d, i) => (
+                    <option key={i} value={String(i)}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Hora (semanal)</label>
+                <select className={inputCls}
+                  value={emailForm.report_weekly_hour}
+                  onChange={e => setEmailForm(f => ({ ...f, report_weekly_hour: e.target.value }))}>
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={String(h)}>{h}:00</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Día del mes (mensual)</label>
+                <select className={inputCls}
+                  value={emailForm.report_monthly_day}
+                  onChange={e => setEmailForm(f => ({ ...f, report_monthly_day: e.target.value }))}>
+                  {Array.from({ length: 28 }, (_, d) => <option key={d} value={String(d + 1)}>{d + 1}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Hora (mensual)</label>
+                <select className={inputCls}
+                  value={emailForm.report_monthly_hour}
+                  onChange={e => setEmailForm(f => ({ ...f, report_monthly_hour: e.target.value }))}>
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={String(h)}>{h}:00</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
 
           {/* Buttons */}
           <div className="flex gap-3 pt-1">

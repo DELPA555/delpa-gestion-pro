@@ -709,6 +709,21 @@ function createTables(db) {
       closed_by TEXT DEFAULT ''
     );
     CREATE INDEX IF NOT EXISTS idx_main_cb_open_status ON main_cashbox_openings(status);
+
+    CREATE TABLE IF NOT EXISTS saved_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,                 -- 'week' | 'month'
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      period_label TEXT DEFAULT '',
+      title TEXT DEFAULT '',
+      html TEXT DEFAULT '',
+      data_json TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME DEFAULT NULL,
+      sent_to TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_saved_reports_kind ON saved_reports(kind, created_at DESC);
   `)
 
   const migrations = [

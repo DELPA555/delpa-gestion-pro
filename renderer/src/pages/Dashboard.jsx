@@ -6,7 +6,7 @@ import {
   AreaChart, Area, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp, Vault } from 'lucide-react'
+import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp, Vault, Users, Clock, Crown } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { SkeletonCard } from '@/components/shared/SkeletonLoader'
@@ -210,11 +210,15 @@ export default function Dashboard() {
   const [monthComparison,  setMonthComparison]  = useState(null)
   const [categoryComp,     setCategoryComp]     = useState([])
   const [fiscalStats,      setFiscalStats]      = useState(null)
+  const [topProdToday,     setTopProdToday]     = useState([])
+  const [recentSales,      setRecentSales]      = useState([])
+  const [topClientsMonth,  setTopClientsMonth]  = useState([])
+  const [overdueDebt,      setOverdueDebt]      = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [s, t, p, l, cb, bdays, bmsg, wc, hm, mp, mc, cc, fs] = await Promise.all([
+      const [s, t, p, l, cb, bdays, bmsg, wc, hm, mp, mc, cc, fs, tpt, rs, tcm, od] = await Promise.all([
         api.dashboard.stats(),
         api.dashboard.salesTrend(),
         api.dashboard.salesByPayment(),
@@ -228,8 +232,16 @@ export default function Dashboard() {
         api.dashboard.monthComparison(),
         api.dashboard.categoryComparison(),
         api.fiscal.stats().catch(() => null),
+        api.dashboard.topProductsToday().catch(() => []),
+        api.dashboard.recentSales().catch(() => []),
+        api.dashboard.topClientsMonth().catch(() => []),
+        api.dashboard.overdueDebt().catch(() => []),
       ])
       setStats(s)
+      setTopProdToday(tpt || [])
+      setRecentSales(rs || [])
+      setTopClientsMonth(tcm || [])
+      setOverdueDebt(od || [])
       setMonthlyProfit(mp)
       setMonthComparison(mc)
       setCategoryComp(cc || [])
@@ -329,20 +341,36 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-            <StatCard title="Ventas hoy" value={stats?.ventas} icon={ShoppingCart} variant="blue"
-              subtitle={`${stats?.cantidadVentas ?? 0} transacciones`} delay={0} />
-            <StatCard title="Ganancia bruta" value={stats?.gananciaBruta} icon={TrendingUp} variant="green" delay={0.05} />
-            <StatCard title="Ganancia neta" value={stats?.gananciaNeta} icon={DollarSign}
-              variant={(stats?.gananciaNeta ?? 0) >= 0 ? 'green' : 'red'}
-              subtitle={`Gastos: ${formatCurrency(stats?.gastos ?? 0)}`} delay={0.1} />
-            <StatCard title="Cuentas pendientes" value={stats?.cuentasCorrientes} icon={Wallet} variant="amber" delay={0.15} />
+            {/* Ventas del día + comparativa vs ayer */}
+            <StatCard title="Ventas del día" value={stats?.ventas} icon={ShoppingCart} variant="blue" delay={0}
+              subtitle={
+                <span className="flex items-center gap-1.5">
+                  {stats?.cantidadVentas ?? 0} transacc.
+                  {stats?.pctVsAyer !== null && stats?.pctVsAyer !== undefined && (
+                    <span className={(stats.pctVsAyer >= 0 ? 'text-green-400' : 'text-red-400') + ' font-semibold'}>
+                      {stats.pctVsAyer >= 0 ? '↑' : '↓'} {Math.abs(stats.pctVsAyer).toFixed(0)}% vs ayer
+                    </span>
+                  )}
+                </span>
+              } />
+            {/* Ganancia neta + margen */}
+            <StatCard title="Ganancia neta del día" value={stats?.gananciaNeta} icon={DollarSign}
+              variant={(stats?.gananciaNeta ?? 0) >= 0 ? 'green' : 'red'} delay={0.05}
+              subtitle={`Margen ${(stats?.margenHoy ?? 0).toFixed(1)}% · Gastos ${formatCurrency(stats?.gastos ?? 0)}`} />
+            {/* Clientes atendidos hoy + ticket promedio */}
+            <StatCard title="Clientes atendidos hoy" value={stats?.clientesHoy ?? 0} icon={Users} variant="purple" plain delay={0.1}
+              subtitle={`Ticket prom. ${formatCurrency(stats?.ticketPromedio ?? 0)}`} />
+            {/* Caja actual: efectivo esperado + caja grande */}
+            <StatCard title="Caja actual" value={todayCash?.expectedCash ?? 0} icon={Wallet} variant="amber" delay={0.15}
+              subtitle={`Efvo. esperado · C. Grande ${formatCurrency(mainCash?.balance ?? 0)}`} />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard title="Unidades vendidas hoy" value={stats?.unidadesHoy ?? 0} icon={ShoppingBag} variant="indigo"
-              plain subtitle="prendas" delay={0.18} />
-            <StatCard title="Inversión en stock" value={stats?.inversionStock} icon={Package} variant="blue" delay={0.2} />
-            <StatCard title="Venta potencial (stock)" value={stats?.ventaPotencial} icon={TrendingUp} variant="purple" delay={0.22} />
+          {/* FILA extra — Ganancia bruta / Cuentas / stock (compactas) */}
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+            <StatCard title="Ganancia bruta" value={stats?.gananciaBruta} icon={TrendingUp} variant="green" delay={0.16} />
+            <StatCard title="Cuentas pendientes" value={stats?.cuentasCorrientes} icon={Wallet} variant="amber" delay={0.17} />
+            <StatCard title="Inversión en stock" value={stats?.inversionStock} icon={Package} variant="blue" delay={0.18} />
+            <StatCard title="Venta potencial (stock)" value={stats?.ventaPotencial} icon={TrendingUp} variant="purple" delay={0.19} />
           </div>
 
           {tnConnected && tnSales && (
@@ -366,6 +394,65 @@ export default function Dashboard() {
 
       {/* Ventas totales por canal (Local + Tienda Nube) */}
       <ChannelSalesCard />
+
+      {/* Top productos del día + Últimas ventas en tiempo real */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}
+          className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+            <ShoppingBag size={15} className="text-accent" />
+            <h3 className="text-sm font-medium text-white">Top productos del día</h3>
+          </div>
+          {topProdToday.length > 0 ? (
+            <div className="divide-y divide-border">
+              {topProdToday.map((p, i) => (
+                <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-6 h-6 rounded-md bg-accent/10 text-accent text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                    <span className="text-zinc-200 truncate">{p.name || 'Producto'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-white font-semibold tabular-nums">{p.qty} u.</span>
+                    <span className="text-zinc-500 text-xs tabular-nums">{formatCurrency(p.revenue)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-10 text-center text-zinc-600 text-sm">Sin ventas hoy</div>
+          )}
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
+          className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+            <Clock size={15} className="text-blue-400" />
+            <h3 className="text-sm font-medium text-white">Últimas ventas</h3>
+          </div>
+          {recentSales.length > 0 ? (
+            <div className="divide-y divide-border">
+              {recentSales.map((s) => {
+                const t = (() => { try { return new Date(s.created_at.replace(' ', 'T') + 'Z').toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' }) } catch { return '' } })()
+                return (
+                  <div key={s.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-zinc-600 text-xs tabular-nums shrink-0">{t}</span>
+                      <span className="text-zinc-300 truncate">{s.client_name || 'Cliente ocasional'}</span>
+                      {s.seller_name && <span className="text-zinc-700 text-[11px] shrink-0">· {s.seller_name}</span>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-zinc-600">{s.payment_method}</span>
+                      <span className="text-white font-semibold tabular-nums">{formatCurrency(s.total)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="py-10 text-center text-zinc-600 text-sm">Sin ventas registradas</div>
+          )}
+        </motion.div>
+      </div>
 
       {/* Charts */}
       <div className="grid grid-cols-3 gap-4">
@@ -874,6 +961,64 @@ export default function Dashboard() {
               )}
             </div>
           </motion.div>
+        </div>
+      )}
+
+      {/* Top clientas del mes + Deuda con WhatsApp */}
+      {(topClientsMonth.length > 0 || overdueDebt.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {topClientsMonth.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+              className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <Crown size={15} className="text-amber-400" />
+                <h3 className="text-sm font-medium text-white">Top clientas del mes</h3>
+              </div>
+              <div className="divide-y divide-border">
+                {topClientsMonth.map((c, i) => (
+                  <div key={c.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-lg shrink-0">{['🥇', '🥈', '🥉'][i] || '•'}</span>
+                      <span className="text-zinc-200 truncate">{c.name}</span>
+                      <span className="text-zinc-600 text-xs shrink-0">{c.points || 0} pts</span>
+                    </div>
+                    <span className="text-white font-semibold tabular-nums shrink-0">{formatCurrency(c.total)}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+          {overdueDebt.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.46 }}
+              className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <Wallet size={15} className="text-red-400" />
+                <h3 className="text-sm font-medium text-white">Clientas con saldo pendiente</h3>
+              </div>
+              <div className="divide-y divide-border">
+                {overdueDebt.map((c) => {
+                  const url = whatsappUrl(c, `Hola [nombre]! Te recordamos que tenés un saldo pendiente en tu cuenta. ¡Gracias!`)
+                  return (
+                    <div key={c.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                        <span className="text-zinc-200 truncate">{c.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-red-400 font-bold tabular-nums">{formatCurrency(c.balance)}</span>
+                        {url && (
+                          <button onClick={() => api.shell.openExternal(url)}
+                            className="no-drag flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors">
+                            <MessageCircle size={12} /> WhatsApp
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
         </div>
       )}
 

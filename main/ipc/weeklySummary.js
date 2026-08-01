@@ -560,14 +560,21 @@ function scheduleWeeklySummary() {
 
 const { ipcMain } = require('electron')
 
+// Canales legacy — ahora delegan en el motor nuevo de informes (diseño DELPA)
 ipcMain.handle('weeklySummary:send', async () => {
-  try { await sendWeeklySummary(); return { ok: true } }
-  catch (e) { return { ok: false, error: e.message } }
+  try {
+    const { generateAndMaybeSend } = require('./informes')
+    const r = await generateAndMaybeSend('week', { mode: 'current', send: true })
+    return r.sendResult || { ok: true }
+  } catch (e) { return { ok: false, error: e.message } }
 })
 
 ipcMain.handle('monthlySummary:send', async () => {
-  try { await sendMonthlySummary(); return { ok: true } }
-  catch (e) { return { ok: false, error: e.message } }
+  try {
+    const { generateAndMaybeSend } = require('./informes')
+    const r = await generateAndMaybeSend('month', { mode: 'current', send: true })
+    return r.sendResult || { ok: true }
+  } catch (e) { return { ok: false, error: e.message } }
 })
 
 module.exports = { scheduleWeeklySummary, sendWeeklySummary, sendMonthlySummary }

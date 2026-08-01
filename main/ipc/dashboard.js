@@ -29,18 +29,83 @@ ipcMain.handle('dashboard:stats', () => {
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     WHERE s.voided=0 AND date(s.created_at,'localtime')=date('now','localtime')
   `).get()
+  // Ventas de ayer (para comparativa % día vs día)
+  const ayer = db.prepare(`
+    SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count
+    FROM sales WHERE voided=0 AND date(created_at,'localtime')=date('now','localtime','-1 day')
+  `).get()
+  // Clientes atendidos hoy (distintos, con cliente asociado)
+  const clientesHoy = db.prepare(`
+    SELECT COUNT(DISTINCT client_id) as c
+    FROM sales WHERE voided=0 AND client_id IS NOT NULL
+      AND date(created_at,'localtime')=date('now','localtime')
+  `).get().c
+  const ventasNeta = bruta.total - gastos.total
+  const ticketPromedio = ventas.count > 0 ? ventas.total / ventas.count : 0
+  const pctVsAyer = ayer.total > 0 ? ((ventas.total - ayer.total) / ayer.total * 100) : null
+  const margenHoy = ventas.total > 0 ? (ventasNeta / ventas.total * 100) : 0
   return {
     ventas: ventas.total,
     cantidadVentas: ventas.count,
     gananciaBruta: bruta.total,
     gastos: gastos.total,
-    gananciaNeta: bruta.total - gastos.total,
+    gananciaNeta: ventasNeta,
     inversionStock: stock.inversion,
     ventaPotencial: stock.potencial,
     cuentasCorrientes: cuentas.total,
     unidadesHoy: unidades.total,
+    ventasAyer: ayer.total,
+    pctVsAyer,
+    clientesHoy,
+    ticketPromedio,
+    margenHoy,
   }
 })
+
+// Top 5 productos vendidos HOY
+ipcMain.handle('dashboard:topProductsToday', () =>
+  getDB().prepare(`
+    SELECT p.name, p.category, SUM(si.quantity) as qty,
+           SUM(COALESCE(si.net_price, si.quantity*si.unit_price)) as revenue
+    FROM sale_items si JOIN sales s ON s.id=si.sale_id
+    LEFT JOIN products p ON p.id=si.product_id
+    WHERE s.voided=0 AND date(s.created_at,'localtime')=date('now','localtime')
+    GROUP BY si.product_id ORDER BY qty DESC LIMIT 5
+  `).all()
+)
+
+// Últimas 5 ventas (tiempo real)
+ipcMain.handle('dashboard:recentSales', () =>
+  getDB().prepare(`
+    SELECT s.id, s.total, s.payment_method, s.seller_name, s.created_at,
+           c.name as client_name
+    FROM sales s LEFT JOIN clients c ON c.id=s.client_id
+    WHERE s.voided=0
+    ORDER BY s.id DESC LIMIT 5
+  `).all()
+)
+
+// Top 3 clientas del mes con puntos
+ipcMain.handle('dashboard:topClientsMonth', () => {
+  const db = getDB()
+  const rows = db.prepare(`
+    SELECT c.id, c.name, c.points, COUNT(*) as count, COALESCE(SUM(s.total),0) as total
+    FROM sales s JOIN clients c ON c.id=s.client_id
+    WHERE s.voided=0 AND s.client_id IS NOT NULL
+      AND strftime('%Y-%m',s.created_at,'localtime')=strftime('%Y-%m','now','localtime')
+    GROUP BY s.client_id ORDER BY total DESC LIMIT 3
+  `).all()
+  return rows
+})
+
+// Clientes con deuda (cuenta corriente) — top con teléfono para WhatsApp
+ipcMain.handle('dashboard:overdueDebt', () =>
+  getDB().prepare(`
+    SELECT id, name, phone, balance
+    FROM clients WHERE balance > 0 AND active=1
+    ORDER BY balance DESC LIMIT 3
+  `).all()
+)
 
 ipcMain.handle('dashboard:salesTrend', () =>
   getDB().prepare(`

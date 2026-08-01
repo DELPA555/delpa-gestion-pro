@@ -27,6 +27,45 @@ function buildTransporter(s) {
   })
 }
 
+// Resumen de ventas por medio de pago, split-aware (idéntico a getSalesByMethod de cashbox.js).
+// Usa sale_payments cuando existen, si no cae al payment_method de la venta.
+function getSalesByMethodEmail(db, cashboxId) {
+  const fromPayments = db.prepare(`
+    SELECT sp.payment_method, SUM(sp.final_amount) as total, COUNT(*) as count
+    FROM sale_payments sp JOIN sales s ON s.id=sp.sale_id
+    WHERE s.cashbox_id=? AND s.voided=0
+    GROUP BY sp.payment_method
+  `).all(cashboxId)
+  const fromSales = db.prepare(`
+    SELECT s.payment_method, SUM(s.total) as total, COUNT(*) as count
+    FROM sales s LEFT JOIN sale_payments sp ON sp.sale_id=s.id
+    WHERE s.cashbox_id=? AND s.voided=0 AND sp.id IS NULL
+    GROUP BY s.payment_method
+  `).all(cashboxId)
+  const merged = {}
+  for (const row of [...fromPayments, ...fromSales]) {
+    if (!merged[row.payment_method]) merged[row.payment_method] = { payment_method: row.payment_method, total: 0, count: 0 }
+    merged[row.payment_method].total += row.total
+    merged[row.payment_method].count += row.count
+  }
+  return Object.values(merged).sort((a, b) => b.total - a.total)
+}
+
+// Ventas cobradas en EFECTIVO, split-aware (idéntico a getCashSales de cashbox.js).
+function getCashSalesEmail(db, cashboxId) {
+  const fromPayments = db.prepare(`
+    SELECT COALESCE(SUM(sp.final_amount),0) as total
+    FROM sale_payments sp JOIN sales s ON s.id=sp.sale_id
+    WHERE s.cashbox_id=? AND s.voided=0 AND sp.payment_method='Efectivo'
+  `).get(cashboxId)
+  const fromSales = db.prepare(`
+    SELECT COALESCE(SUM(s.total),0) as total
+    FROM sales s LEFT JOIN sale_payments sp ON sp.sale_id=s.id
+    WHERE s.cashbox_id=? AND s.voided=0 AND s.payment_method='Efectivo' AND sp.id IS NULL
+  `).get(cashboxId)
+  return fromPayments.total + fromSales.total
+}
+
 async function generatePDF(html) {
   const tmpFile = path.join(os.tmpdir(), `delpa-caja-${Date.now()}.html`)
   fs.writeFileSync(tmpFile, html, 'utf8')
@@ -41,12 +80,13 @@ async function generatePDF(html) {
 }
 
 function buildFullReportHTML(data, biz) {
-  const { cashbox: cb, byMethod, allSales, voidedSales, expenses, totalSales, totalExpenses, expectedCash, paymentCounts } = data
+  const { cashbox: cb, byMethod, allSales, voidedSales, expenses, totalSales, totalExpenses, expectedCash, paymentCounts, cashBreakdown } = data
   const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
   const fmtDate = s => s ? fmtDateTimeAR(s) : '—'
   const fmtTime = s => s ? fmtTimeAR(s) : '—'
   const gananciaNet = totalSales - totalExpenses
   const cbDiff = cb.difference || 0
+  const cbk = cashBreakdown || {}
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -156,16 +196,26 @@ ${expenses && expenses.length > 0 ? `
   </tbody>
 </table>` : ''}
 
-<h2>Resumen final</h2>
+<h2>Cierre de caja — Efectivo</h2>
 <div class="sb">
-  <div class="sr"><span>Total ventas:</span><span class="grn">${fmt(totalSales)}</span></div>
-  <div class="sr red"><span>Total gastos:</span><span>-${fmt(totalExpenses)}</span></div>
-  <div class="sr bold ${gananciaNet >= 0 ? 'grn' : 'red'}"><span>Ganancia neta:</span><span>${gananciaNet >= 0 ? '' : '-'}${fmt(Math.abs(gananciaNet))}</span></div>
-  <div class="sr" style="margin-top:8px"><span>Efectivo esperado:</span><span>${fmt(expectedCash)}</span></div>
-  <div class="sr"><span>Efectivo real contado:</span><span>${fmt(cb.real_cash)}</span></div>
-  <div class="sr bold ${cbDiff === 0 ? 'grn' : cbDiff > 0 ? 'grn' : 'red'}">
-    <span>Diferencia:</span><span>${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span>
+  <div class="sr"><span>Fondo inicial (apertura):</span><span class="grn">+${fmt(cbk.openingCash)}</span></div>
+  <div class="sr"><span>Ventas en efectivo:</span><span class="grn">+${fmt(cbk.cashSales)}</span></div>
+  <div class="sr"><span>Ingresos manuales (efectivo):</span><span class="grn">+${fmt(cbk.cashManualIn)}</span></div>
+  <div class="sr"><span>Gastos en efectivo:</span><span class="red">-${fmt(cbk.cashExpenses)}</span></div>
+  <div class="sr"><span>Egresos manuales (efectivo):</span><span class="red">-${fmt(cbk.cashManualOut)}</span></div>
+  <div class="sr bold"><span>Efectivo esperado:</span><span>${fmt(expectedCash)}</span></div>
+  <div class="sr"><span>Efectivo contado:</span><span>${fmt(cbk.counted)}</span></div>
+  <div class="sr bold ${cbDiff >= 0 ? 'grn' : 'red'}">
+    <span>Diferencia:</span><span>${cbDiff === 0 ? '✓ ' : ''}${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span>
   </div>
+  ${cbk.transferredToMain > 0 ? `<div class="sr" style="margin-top:8px;border-top:1px dashed #ccc;padding-top:6px"><span>Transferido a Caja Grande:</span><span class="grn">${fmt(cbk.transferredToMain)}</span></div>` : ''}
+</div>
+
+<h2>Resultado del período</h2>
+<div class="sb">
+  <div class="sr"><span>Total ventas (todos los medios):</span><span class="grn">${fmt(totalSales)}</span></div>
+  <div class="sr red"><span>Total gastos:</span><span>-${fmt(totalExpenses)}</span></div>
+  <div class="sr bold ${gananciaNet >= 0 ? 'grn' : 'red'}"><span>Resultado (ventas − gastos):</span><span>${gananciaNet >= 0 ? '' : '-'}${fmt(Math.abs(gananciaNet))}</span></div>
 </div>
 
 <div class="footer">Generado por DELPA Gestión PRO · ${fmtDateTimeAR(new Date())}</div>
@@ -174,11 +224,12 @@ ${expenses && expenses.length > 0 ? `
 }
 
 function buildSummaryEmailHtml(data, biz) {
-  const { byMethod, totalSales, totalExpenses, expectedCash, cashbox: cb } = data
+  const { byMethod, totalSales, totalExpenses, expectedCash, cashbox: cb, cashBreakdown } = data
   const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
   const gananciaNet = totalSales - totalExpenses
   const bizName = biz.business_name || 'DELPA'
   const cbDiff = cb.difference || 0
+  const cbk = cashBreakdown || {}
 
   const rows = byMethod.map(m => `
     <tr>
@@ -220,11 +271,17 @@ function buildSummaryEmailHtml(data, biz) {
       <tbody>${rows}</tbody>
     </table>
 
-    <div style="background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:12px;font-size:13px">
-      <p style="margin:4px 0"><strong>Efectivo inicial:</strong> ${fmt(cb.opening_cash)}</p>
-      <p style="margin:4px 0"><strong>Efectivo esperado:</strong> ${fmt(expectedCash)}</p>
-      ${cb.real_cash != null ? `<p style="margin:4px 0"><strong>Efectivo real contado:</strong> ${fmt(cb.real_cash)}</p>` : ''}
-      ${cb.difference != null ? `<p style="margin:4px 0;font-weight:bold;color:${cbDiff >= 0 ? '#059669' : '#dc2626'}">Diferencia: ${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</p>` : ''}
+    <h3 style="color:#555;font-size:12px;margin:0 0 8px">Cierre de caja — Efectivo</h3>
+    <div style="background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:14px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Fondo inicial (apertura)</span><span style="color:#059669">+${fmt(cbk.openingCash)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Ventas en efectivo</span><span style="color:#059669">+${fmt(cbk.cashSales)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Ingresos manuales (efectivo)</span><span style="color:#059669">+${fmt(cbk.cashManualIn)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Gastos en efectivo</span><span style="color:#dc2626">-${fmt(cbk.cashExpenses)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Egresos manuales (efectivo)</span><span style="color:#dc2626">-${fmt(cbk.cashManualOut)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid #ddd;margin-top:4px;font-weight:bold"><span>Efectivo esperado</span><span>${fmt(expectedCash)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Efectivo contado</span><span style="font-weight:bold">${fmt(cbk.counted)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid ${cbDiff >= 0 ? '#059669' : '#dc2626'};margin-top:4px;font-weight:bold;font-size:15px;color:${cbDiff >= 0 ? '#059669' : '#dc2626'}"><span>Diferencia ${cbDiff === 0 ? '✓' : '⚠️'}</span><span>${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span></div>
+      ${cbk.transferredToMain > 0 ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px dashed #ccc;margin-top:6px"><span style="color:#555">Transferido a Caja Grande</span><span style="color:#059669;font-weight:bold">${fmt(cbk.transferredToMain)}</span></div>` : ''}
     </div>
 
     <p style="color:#999;font-size:11px;margin-top:16px">Se adjunta el informe completo en PDF. Generado por DELPA Gestión PRO.</p>
@@ -238,7 +295,8 @@ async function sendCashboxReport(cashboxId) {
 
   const db = getDB()
   const cashbox    = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
-  const byMethod   = db.prepare(`SELECT payment_method, SUM(total) as total, COUNT(*) as count FROM sales WHERE cashbox_id=? AND voided=0 GROUP BY payment_method ORDER BY total DESC`).all(cashboxId)
+  // Resumen por medio de pago split-aware (contempla sale_payments igual que la app)
+  const byMethod   = getSalesByMethodEmail(db, cashboxId)
   const totalSales = db.prepare('SELECT COALESCE(SUM(total),0) as total FROM sales WHERE cashbox_id=? AND voided=0').get(cashboxId).total
   const totalExpenses = db.prepare(`
     SELECT COALESCE(SUM(amount),0) as total FROM expenses
@@ -267,11 +325,17 @@ async function sendCashboxReport(cashboxId) {
   const manualMovements = db.prepare('SELECT * FROM cashbox_movements WHERE cashbox_id=? ORDER BY created_at ASC').all(cashboxId)
   const totalManualIngresos = manualMovements.filter(m => m.type === 'ingreso').reduce((s, m) => s + m.amount, 0)
   const totalManualEgresos  = manualMovements.filter(m => m.type === 'egreso').reduce((s, m) => s + m.amount, 0)
-  const cashSales    = byMethod.find(m => m.payment_method === 'Efectivo')?.total || 0
+  // Ventas en efectivo split-aware (idéntico a getCashSales de cashbox.js)
+  const cashSales = getCashSalesEmail(db, cashboxId)
   const cashManualIn  = manualMovements.filter(m => m.type === 'ingreso' && m.payment_method === 'Efectivo').reduce((s, m) => s + m.amount, 0)
   const cashManualOut = manualMovements.filter(m => m.type === 'egreso'  && m.payment_method === 'Efectivo').reduce((s, m) => s + m.amount, 0)
-  // Solo restar los gastos pagados en efectivo del efectivo esperado
-  const expectedCash = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - cashExpenses
+  // Efectivo esperado = apertura + ventas efvo + ingresos manuales efvo − gastos efvo − egresos manuales efvo.
+  // Se prioriza el valor guardado al cerrar (closing_cash) para reflejar EXACTAMENTE lo que vio la app;
+  // si la caja aún no cerró, se recalcula con la misma fórmula.
+  const computedExpected = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - cashExpenses
+  const expectedCash = cashbox.closing_cash != null ? cashbox.closing_cash : computedExpected
+  // El efectivo contado se transfiere íntegro a la Caja Grande al cerrar (solo si > 0)
+  const transferredToMain = (cashbox.real_cash != null && cashbox.real_cash > 0) ? cashbox.real_cash : 0
   let paymentCounts = {}
   try { paymentCounts = JSON.parse(cashbox.payment_counts_json || '{}') } catch {}
 
@@ -283,7 +347,23 @@ async function sendCashboxReport(cashboxId) {
     business_logo:    db.prepare("SELECT value FROM settings WHERE key='business_logo'").get()?.value || '',
   }
 
-  const reportData = { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts }
+  const reportData = {
+    cashbox, byMethod, allSales, voidedSales, expenses, manualMovements,
+    totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos,
+    expectedCash, paymentCounts,
+    // Desglose del efectivo del cierre (para el bloque claro del email/PDF)
+    cashBreakdown: {
+      openingCash: cashbox.opening_cash || 0,
+      cashSales,
+      cashManualIn,
+      cashManualOut,
+      cashExpenses,
+      expected: expectedCash,
+      counted: cashbox.real_cash,
+      difference: cashbox.difference,
+      transferredToMain,
+    },
+  }
   const summaryHtml = buildSummaryEmailHtml(reportData, biz)
   const fullHtml    = buildFullReportHTML(reportData, biz)
 

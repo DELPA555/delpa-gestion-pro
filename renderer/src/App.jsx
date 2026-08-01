@@ -17,6 +17,7 @@ import CashBox from './pages/CashBox'
 import MainCashBox from './pages/MainCashBox'
 import Expenses from './pages/Expenses'
 import Reports from './pages/Reports'
+import Informes from './pages/Informes'
 import Invoices from './pages/Invoices'
 import Audit from './pages/Audit'
 import Settings from './pages/Settings'
@@ -81,6 +82,7 @@ function AnimatedRoutes() {
           <Route path="/compras"      element={<PageErrorBoundary><Purchases /></PageErrorBoundary>} />
           <Route path="/caja-grande"  element={<PageErrorBoundary><MainCashBox /></PageErrorBoundary>} />
           <Route path="/reportes"     element={<PageErrorBoundary><Reports /></PageErrorBoundary>} />
+          <Route path="/informes"     element={<PageErrorBoundary><Informes /></PageErrorBoundary>} />
           <Route path="/facturacion"  element={<PageErrorBoundary><Invoices /></PageErrorBoundary>} />
           <Route path="/auditoria"    element={<PageErrorBoundary><Audit /></PageErrorBoundary>} />
           <Route path="/sucursales"   element={<PageErrorBoundary><Sucursales /></PageErrorBoundary>} />

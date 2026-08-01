@@ -12,6 +12,10 @@ export const api = {
     monthlyProfit:      () => inv('dashboard:monthlyProfit'),
     monthComparison:    () => inv('dashboard:monthComparison'),
     categoryComparison: () => inv('dashboard:categoryComparison'),
+    topProductsToday:   () => inv('dashboard:topProductsToday'),
+    recentSales:        () => inv('dashboard:recentSales'),
+    topClientsMonth:    () => inv('dashboard:topClientsMonth'),
+    overdueDebt:        () => inv('dashboard:overdueDebt'),
   },
   products: {
     list:            (p)       => inv('products:list', p),
@@ -293,6 +297,14 @@ export const api = {
   weeklySummary: {
     send: () => inv('weeklySummary:send'),
   },
+  informes: {
+    generate: (kind, mode) => inv('informes:generate', { kind, mode }),
+    send:     (kind, id)   => inv('informes:send', { kind, id }),
+    latest:   (kind)       => inv('informes:latest', kind),
+    list:     (kind)       => inv('informes:list', kind),
+    get:      (id)         => inv('informes:get', id),
+    delete:   (id)         => inv('informes:delete', id),
+  },
   backup: {
     create:  (password) => inv('backup:create',  { password }),
     restore: (password) => inv('backup:restore', { password }),
@@ -346,6 +358,11 @@ export const api = {
     consignment:   (p) => inv('supplierStock:consignment', p),
     exportPDF:     (p) => inv('supplierStock:exportPDF', p),
     emailSupplier: (p) => inv('supplierStock:emailSupplier', p),
+  },
+  stockReport: {
+    options: ()  => inv('stockReport:options'),
+    html:    (f) => inv('stockReport:html', f),
+    email:   (f) => inv('stockReport:email', f),
   },
   vouchers: {
     list:     (p)    => inv('voucher:list', p),
