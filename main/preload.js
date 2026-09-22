@@ -51,7 +51,7 @@ const CHANNELS = [
   'clients:points:history', 'clients:points:adjust',
   'products:setTnSync', 'products:bulkAction', 'products:exportCSV', 'products:csvTemplate',
   'products:importCSV', 'products:getVariants', 'products:createVariant', 'products:searchByBarcode',
-  'products:updatePrice',
+  'products:updatePrice', 'products:sizes', 'products:bySize',
   'email:sendPointsSummary',
   'exchanges:create', 'exchanges:list',
   'returns:create', 'returns:list',
@@ -74,6 +74,7 @@ const CHANNELS = [
   'reports:liquidarProductos', 'reports:rentabilidadCategorias', 'reports:sinMovimiento', 'reports:vendedoras',
   'dashboard:monthComparison', 'dashboard:categoryComparison',
   'dashboard:topProductsToday', 'dashboard:recentSales', 'dashboard:topClientsMonth', 'dashboard:overdueDebt',
+  'dashboard:salesRange', 'dashboard:realtimeExtras',
   'backup:create', 'backup:restore',
   'products:priceHistory',
   'fiscal:stats', 'fiscal:ivaVentas', 'fiscal:ivaCompras', 'fiscal:posicion', 'fiscal:monotributo12m',
@@ -98,6 +99,7 @@ const CHANNELS = [
   'supplierStock:exportPDF', 'supplierStock:emailSupplier',
   'stockReport:options', 'stockReport:html', 'stockReport:email',
   'informes:generate', 'informes:send', 'informes:latest', 'informes:list', 'informes:get', 'informes:delete',
+  'pausedsales:list', 'pausedsales:create', 'pausedsales:delete',
 ]
 
 contextBridge.exposeInMainWorld('electron', {

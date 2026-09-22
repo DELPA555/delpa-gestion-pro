@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, X, MessageCircle } from 'lucide-react'
 import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
+import { SUPPORT, waLink, openExternal } from '@/lib/support'
 
 function LicenseBanner({ licenseInfo }) {
   const [dismissed, setDismissed] = useState(false)
@@ -53,8 +54,14 @@ function LicenseBanner({ licenseInfo }) {
         <AlertTriangle size={14} className="shrink-0" />
         <p className="text-xs flex-1">
           <span className="font-semibold">Período de prueba: {daysRemaining} día{daysRemaining !== 1 ? 's' : ''} restante{daysRemaining !== 1 ? 's' : ''}.</span>
-          {' '}Contactá a tu proveedor para activar una licencia.
+          {' '}¿Querés continuar usando DELPA? Contactanos: 📱 {SUPPORT.phoneDisplay}
         </p>
+        <button
+          onClick={() => openExternal(waLink())}
+          className="shrink-0 flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white text-xs font-semibold px-3 py-1.5 rounded-lg no-drag transition-colors"
+        >
+          <MessageCircle size={13} /> Abrir WhatsApp
+        </button>
         <button onClick={() => setDismissed(true)} className="shrink-0 opacity-60 hover:opacity-100">
           <X size={13} />
         </button>
@@ -96,6 +103,13 @@ export default function Layout({ children, licenseInfo }) {
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
+      </div>
+      {/* Footer: soporte siempre visible */}
+      <div className="shrink-0 border-t border-border bg-surface px-4 py-1 flex items-center justify-center gap-1.5 text-[11px] text-zinc-600">
+        <span>Soporte:</span>
+        <button onClick={() => openExternal(waLink())} className="hover:text-accent transition-colors no-drag">📱 {SUPPORT.phoneDisplay}</button>
+        <span className="text-zinc-700">|</span>
+        <button onClick={() => openExternal(SUPPORT.webUrl)} className="hover:text-accent transition-colors no-drag">{SUPPORT.web}</button>
       </div>
     </div>
   )

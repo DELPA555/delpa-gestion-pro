@@ -6,8 +6,9 @@ import {
   Plus, Search, Edit2, Trash2, Package, ImagePlus, X, ChevronDown,
   Cloud, CloudOff, CheckSquare, Square, Download, Upload, FileText,
   Layers, Palette, Tag, Percent, Printer, RefreshCw, TrendingUp, TrendingDown,
-  PackageCheck,
+  PackageCheck, Ruler, ShoppingCart,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value)
@@ -747,6 +748,125 @@ function PriceHistoryInModal({ productId, isEdit }) {
   )
 }
 
+// Guarda el color/talle elegido y navega a Ventas para venta rápida.
+function sendColorToSale(navigate, group, c) {
+  const item = {
+    id: c.productId,
+    name: group.name,
+    price: c.price ?? group.price,
+    cost: c.cost ?? 0,
+    color: c.color === 'Único' ? '' : c.color,
+    sizes: [{ size: c.size, stock: c.stock }],
+    _size: c.size,
+  }
+  try { sessionStorage.setItem('delpa_pending_sale_item', JSON.stringify(item)) } catch {}
+  navigate('/ventas')
+}
+
+// Tarjeta de resultado reutilizada por el modal y por el filtro de talle.
+function SizeResultCard({ group, isAdmin, onAddToSale }) {
+  return (
+    <div className="bg-[#0a0a0a] border border-border rounded-xl p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-white truncate">{group.name}</p>
+          <p className="text-xs text-zinc-500">
+            {group.category}{group.supplier ? ` · ${group.supplier}` : ''}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-bold text-accent">{formatCurrency(group.price)}</p>
+          <p className="text-[11px] text-zinc-500">{group.totalStock} ud. en T.{group.size}</p>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {group.colors.map(c => (
+          <div key={c.productId} className="flex items-center justify-between gap-2 bg-card border border-border rounded-lg px-2.5 py-1.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs text-zinc-200 truncate">{c.color}</span>
+              <span className="text-[11px] text-zinc-500 shrink-0">· {c.stock} en stock</span>
+            </div>
+            {onAddToSale && (
+              <button
+                onClick={() => onAddToSale(group, c)}
+                className="flex items-center gap-1 text-[11px] text-accent hover:text-white px-2 py-1 rounded-lg border border-accent/30 hover:bg-accent/10 transition-colors no-drag shrink-0">
+                <ShoppingCart size={11} /> Agregar a venta
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Modal "🔍 Buscar por talle" — búsqueda en vivo con venta rápida.
+function SizeFinderModal({ open, onClose, sizesList, onAddToSale, isAdmin }) {
+  const [size, setSize] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const debounced = useDebounce(size, 250)
+
+  useEffect(() => {
+    if (open) { setSize(''); setResults([]) }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const term = debounced.trim()
+    if (!term) { setResults([]); return }
+    let cancelled = false
+    setLoading(true)
+    api.products.bySize(term)
+      .then(r => { if (!cancelled) setResults(r || []) })
+      .catch(() => { if (!cancelled) setResults([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [debounced, open])
+
+  return (
+    <Modal open={open} onClose={onClose} title="🔍 Buscar por talle" width="max-w-xl">
+      <div className="space-y-3">
+        <div className="relative">
+          <Ruler size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input
+            autoFocus
+            list="delpa-sizes-finder"
+            value={size}
+            onChange={e => setSize(e.target.value)}
+            placeholder="Escribí un talle: 38, XL, 42, M..."
+            className="input-field w-full bg-[#0a0a0a] border border-border rounded-lg pl-9 pr-3 py-2.5 text-base text-white placeholder-zinc-600 no-drag"
+          />
+          <datalist id="delpa-sizes-finder">
+            {sizesList.map(s => <option key={s} value={s} />)}
+          </datalist>
+        </div>
+
+        {!size.trim() ? (
+          <p className="text-xs text-zinc-500 text-center py-6">
+            Ingresá un talle para ver qué productos tenés disponibles.
+          </p>
+        ) : loading ? (
+          <p className="text-xs text-zinc-500 text-center py-6">Buscando…</p>
+        ) : results.length === 0 ? (
+          <p className="text-xs text-zinc-500 text-center py-6">
+            No hay productos con stock en el talle <span className="text-white font-medium">{size.trim()}</span>.
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider">
+              {results.length} producto{results.length !== 1 ? 's' : ''} en talle {size.trim()}
+            </p>
+            {results.map(g => (
+              <SizeResultCard key={g.groupId} group={g} isAdmin={isAdmin} onAddToSale={onAddToSale} />
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 export default function Products() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'   // vendedora: no ve costo/margen, no elimina, no edita stock
@@ -798,6 +918,16 @@ export default function Products() {
   const [customCategories, setCustomCategories] = useState([])
   const [categorySizeGroups, setCategorySizeGroups] = useState({})
 
+  // Filtro / buscador por talle
+  const navigate = useNavigate()
+  const [sizesList, setSizesList] = useState([])   // talles con stock (para el dropdown)
+  const [sizeFilter, setSizeFilter] = useState('') // talle seleccionado en la barra
+  const [sizeResults, setSizeResults] = useState([])
+  const [sizeLoading, setSizeLoading] = useState(false)
+  const [finderOpen, setFinderOpen] = useState(false)
+
+  const addColorToSale = useCallback((group, c) => sendColorToSale(navigate, group, c), [navigate])
+
   const jeansSizes    = useMemo(() => DEFAULT_JEANS_SIZES, [])
   const clothingSizes = useMemo(() => DEFAULT_CLOTHING_SIZES, [])
   const americanSizes = useMemo(() => DEFAULT_AMERICAN_SIZES, [])
@@ -818,7 +948,21 @@ export default function Products() {
     api.consignment.products.list().then(rows => {
       setConsignmentIds(new Set((rows || []).map(r => r.product_id)))
     }).catch(() => {})
+    api.products.sizes().then(list => setSizesList(list || [])).catch(() => {})
   }, [])
+
+  // Resultados del filtro por talle (barra superior)
+  useEffect(() => {
+    const term = sizeFilter.trim()
+    if (!term) { setSizeResults([]); return }
+    let cancelled = false
+    setSizeLoading(true)
+    api.products.bySize(term)
+      .then(r => { if (!cancelled) setSizeResults(r || []) })
+      .catch(() => { if (!cancelled) setSizeResults([]) })
+      .finally(() => { if (!cancelled) setSizeLoading(false) })
+    return () => { cancelled = true }
+  }, [sizeFilter])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1121,6 +1265,10 @@ export default function Products() {
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
               <Download size={13} /> Exportar CSV
             </button>
+            <button onClick={() => setFinderOpen(true)}
+              className="flex items-center gap-1.5 text-xs text-accent hover:text-white px-3 py-2 rounded-lg border border-accent/30 hover:bg-accent/10 transition-colors no-drag">
+              <Ruler size={13} /> Buscar por talle
+            </button>
             <button onClick={openCreate}
               className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
               <Plus size={15} /> Nuevo producto
@@ -1147,8 +1295,18 @@ export default function Products() {
           <option value="">Todas las categorías</option>
           {allCategories.map(c => <option key={c}>{c}</option>)}
         </select>
-        {(search || category) && (
-          <button onClick={() => { setSearch(''); setCategory(''); setPage(1) }}
+        <div className="relative">
+          <Ruler size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          <select
+            className="input-field bg-card border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-white no-drag"
+            value={sizeFilter} onChange={e => setSizeFilter(e.target.value)}
+          >
+            <option value="">Filtrar por talle</option>
+            {sizesList.map(s => <option key={s} value={s}>Talle {s}</option>)}
+          </select>
+        </div>
+        {(search || category || sizeFilter) && (
+          <button onClick={() => { setSearch(''); setCategory(''); setSizeFilter(''); setPage(1) }}
             className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 px-2">
             <X size={13} /> Limpiar
           </button>
@@ -1157,7 +1315,7 @@ export default function Products() {
 
       {/* Bulk action bar */}
       <AnimatePresence>
-        {someSelected && isAdmin && (
+        {someSelected && isAdmin && !sizeFilter && (
           <motion.div
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-2.5 mb-4"
@@ -1195,7 +1353,30 @@ export default function Products() {
         )}
       </AnimatePresence>
 
-      {/* Table */}
+      {/* Filtro por talle: panel de resultados (reemplaza la tabla) */}
+      {sizeFilter ? (
+        <div className="bg-card border border-border rounded-xl p-4">
+          {sizeLoading ? (
+            <p className="text-sm text-zinc-500 text-center py-10">Buscando productos en talle {sizeFilter}…</p>
+          ) : sizeResults.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-zinc-600">
+              <Ruler size={32} className="mb-3 opacity-40" />
+              <p className="text-sm">No hay productos con stock en el talle <span className="text-white font-medium">{sizeFilter}</span>.</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">
+                {sizeResults.length} producto{sizeResults.length !== 1 ? 's' : ''} con stock en talle {sizeFilter}
+              </p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {sizeResults.map(g => (
+                  <SizeResultCard key={g.groupId} group={g} isAdmin={isAdmin} onAddToSale={addColorToSale} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="grid text-[11px] text-zinc-500 uppercase tracking-wider px-4 py-2.5 border-b border-border bg-surface items-center"
           style={{ gridTemplateColumns: cols }}>
@@ -1431,6 +1612,16 @@ export default function Products() {
 
         <Pagination page={page} pages={data.pages} total={data.total} limit={25} onChange={setPage} />
       </div>
+      )}
+
+      {/* Buscador por talle (modal) */}
+      <SizeFinderModal
+        open={finderOpen}
+        onClose={() => setFinderOpen(false)}
+        sizesList={sizesList}
+        isAdmin={isAdmin}
+        onAddToSale={(g, c) => { setFinderOpen(false); addColorToSale(g, c) }}
+      />
 
       {/* Product modal */}
       <Modal

@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import QRCodeLib from 'qrcode'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download } from 'lucide-react'
+import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
 import { useAuth } from '@/context/AuthContext'
 
@@ -2301,6 +2302,8 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
             <p>Desde la terminal: <code className="bg-black/30 px-1 rounded">node tools/generate-license.js &lt;HARDWARE_ID&gt;</code></p>
             <p className="text-zinc-600">El generador usa el mismo algoritmo que la validación interna.</p>
           </div>
+
+          <SupportAndAbout />
         </div>
       )}
 
@@ -2310,6 +2313,55 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
         </div>{/* end content */}
       </div>{/* end flex layout */}
     </motion.div>
+  )
+}
+
+// ── Soporte y ventas + Acerca de DELPA ──────────────────────────────────────────
+
+function SupportAndAbout() {
+  const [version, setVersion] = useState('')
+  useEffect(() => { api.updater.getCurrentVersion().then(v => setVersion(v)).catch(() => {}) }, [])
+  return (
+    <>
+      {/* Soporte y ventas */}
+      <div className="p-4 bg-accent/5 border border-accent/20 rounded-xl space-y-3">
+        <p className="text-sm font-semibold text-white flex items-center gap-2">
+          <MessageCircle size={15} className="text-accent" /> Soporte y ventas
+        </p>
+        <div className="text-sm text-zinc-400 space-y-1">
+          <p>📱 {SUPPORT.phoneDisplay}</p>
+          <p>📧 {SUPPORT.email}</p>
+          <p>🌐 {SUPPORT.web}</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => openExternal(waLink())}
+            className="btn-primary no-drag px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+            <MessageCircle size={15} /> WhatsApp
+          </button>
+          <button onClick={() => openExternal(mailtoLink())}
+            className="no-drag px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-2">
+            <Mail size={15} /> Email
+          </button>
+        </div>
+      </div>
+
+      {/* Acerca de DELPA */}
+      <div className="p-4 bg-white/[0.03] border border-border rounded-xl space-y-1.5 text-sm">
+        <p className="text-white font-semibold">Acerca de DELPA</p>
+        <p className="text-zinc-400">Versión {version || '—'}</p>
+        <p className="text-zinc-500">Desarrollado por DELPA Gestión PRO</p>
+        <p className="text-zinc-500 flex items-center gap-1.5"><MessageCircle size={12} /> Soporte: {SUPPORT.phoneDisplay}</p>
+        <p className="text-zinc-500 flex items-center gap-1.5"><Mail size={12} /> {SUPPORT.email}</p>
+        <button onClick={() => openExternal(SUPPORT.webUrl)}
+          className="text-zinc-500 hover:text-accent transition-colors flex items-center gap-1.5 no-drag">
+          <Globe size={12} /> {SUPPORT.web}
+        </button>
+        <button onClick={() => openExternal(waLink())}
+          className="btn-primary no-drag mt-2 px-4 py-2 rounded-lg text-sm flex items-center gap-2 w-fit">
+          <MessageCircle size={15} /> Contactar por WhatsApp
+        </button>
+      </div>
+    </>
   )
 }
 

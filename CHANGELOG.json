@@ -1,4 +1,64 @@
 {
+  "v1.27.0": {
+    "fecha": "2026-09-10",
+    "titulo": "Nueva pantalla de inicio de sesión",
+    "mejoras": [
+      "Login rediseñado a pantalla completa: fondo oscuro con grid animado y un glow rosa sutil, y una tarjeta centrada con animación de entrada",
+      "Saludo según la hora (buenos días / tardes / noches) y bienvenida con el nombre y logo de tu negocio",
+      "Campos de usuario y contraseña más claros, con íconos, borde rosa al escribir y botón para mostrar/ocultar la contraseña",
+      "Si tenés varias usuarias, aparecen como botones para elegir con un toque",
+      "Botón 'Ingresar' grande, con spinner al validar y una sacudida si la contraseña es incorrecta",
+      "Contacto de soporte (WhatsApp 11 3857-4444) y versión del sistema visibles en la pantalla de login"
+    ],
+    "correcciones": []
+  },
+  "v1.26.0": {
+    "fecha": "2026-09-10",
+    "titulo": "Datos de soporte y ventas siempre a mano",
+    "mejoras": [
+      "Nuevo pie de página siempre visible con el contacto de soporte: 📱 11 3857-4444 | delpagestion.com.ar",
+      "En Configuración → Licencia se agregó una sección 'Soporte y ventas' y 'Acerca de DELPA' (versión del sistema, WhatsApp, email y sitio)",
+      "Las pantallas de prueba y de licencia vencida ahora muestran el WhatsApp de ventas (11 3857-4444) con botón para escribir directo y activar la licencia",
+      "El período de prueba para instalaciones nuevas pasó a 14 días (las instalaciones que ya venían en curso conservan su prueba original)"
+    ],
+    "correcciones": []
+  },
+  "v1.25.0": {
+    "fecha": "2026-09-10",
+    "titulo": "Ventas más lindas y carrito que no se pierde",
+    "mejoras": [
+      "Rediseño visual del punto de venta: buscador más grande con foco rosa, talles como botones grandes con el stock en color (verde/amarillo/rojo), medios de pago más grandes que se pintan de rosa al elegirlos, TOTAL en número gigante y panel de vuelto grande y verde",
+      "Botones rápidos de descuento: 5% · 10% · 15% · 20% · 30% con un toque",
+      "INGRESAR ahora es un botón verde grande de ancho completo y FACTURAR uno rosa, más fáciles de apretar",
+      "Memoria del carrito: si cambiás de sección o cerrás la app con productos cargados, al volver a Ventas el carrito se restaura solo (con cliente, descuento y medio de pago). Si algún producto se quedó sin stock, se avisa y se quita",
+      "Pausar venta: nuevo botón para dejar una venta en espera (hasta 3 a la vez) y empezar otra; después la retomás desde la lista con un click. Ideal cuando una clienta 'va a buscar algo más'",
+      "Notificaciones más claras: verde al agregar, rojo si falta stock, gris al quitar, y duran 2 segundos"
+    ],
+    "correcciones": []
+  },
+  "v1.24.0": {
+    "fecha": "2026-09-10",
+    "titulo": "Dashboard renovado, más completo y visual",
+    "mejoras": [
+      "Nuevo Dashboard de un vistazo: saludo según la hora, fecha argentina, estado de conexión (Tienda Nube / Drive / AFIP) y botón para actualizar con la hora de la última actualización",
+      "5 tarjetas grandes arriba: ventas del día (con mini gráfico de las últimas horas y comparación con ayer), ganancia neta y margen con color, ticket promedio, caja actual (chica + grande) y clientas del día (nuevas vs recurrentes)",
+      "Gráfico principal de evolución de ventas con selector de período (7 días a 6 meses), línea del período anterior, promedio móvil de 7 días, cambio entre monto y cantidad de ventas y estrella en los récords históricos",
+      "Análisis en vivo: ventas de hoy en tiempo real, top productos del día con barras, y torta de medios de pago",
+      "Velocímetro del ritmo del día con proyección de cierre, punto de equilibrio del mes, alertas de stock crítico con acceso directo a reponer y recomendaciones automáticas",
+      "Financiero del mes: rentabilidad real, flujo de caja proyectado por semana, control fiscal (monotributo o IVA), top clientas del mes, fidelización y un score de salud del negocio",
+      "Los datos que cambian (ventas y caja) se actualizan solos cada 60 segundos, sin recargar"
+    ],
+    "correcciones": []
+  },
+  "v1.23.0": {
+    "fecha": "2026-09-10",
+    "titulo": "Buscar y filtrar productos por talle",
+    "mejoras": [
+      "Buscar por talle: nuevo botón '🔍 Buscar por talle' en Productos que abre un buscador en vivo — escribís el talle (38, XL, 42…) y ves al instante qué productos tenés disponibles, con los colores, el stock de cada uno y el precio. Cada resultado tiene botón 'Agregar a venta' para venta rápida.",
+      "Filtro por talle en Productos: al lado de los filtros de categoría, un selector 'Filtrar por talle' con los talles que realmente tenés en stock. Muestra solo los productos con stock en ese talle (producto, categoría, colores, stock, precio y proveedor), ordenados por categoría y nombre.",
+      "Filtro por talle en el Punto de Venta: campo 'Talle' junto al buscador. Cuando la clienta pide 'algo en talle 38', combinás la búsqueda con el talle y ves solo lo disponible; al elegir el producto ya queda pre-seleccionado ese talle."
+    ]
+  },
   "v1.6.6": {
     "fecha": "2026-06-24",
     "mejoras": [

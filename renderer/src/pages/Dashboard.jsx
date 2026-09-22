@@ -1,1375 +1,1003 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LineChart, Line, PieChart, Pie, Cell, BarChart, Bar,
-  AreaChart, Area, LabelList,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, ShoppingCart, DollarSign, Package, Wallet, AlertTriangle, RefreshCw, ShoppingBag, Cake, MessageCircle, Globe, Receipt, TrendingDown, Brain, Zap, Archive, Target, Activity, ChevronDown, ChevronUp, Vault, Users, Clock, Crown } from 'lucide-react'
+import {
+  TrendingUp, TrendingDown, ShoppingCart, Wallet, Users, RefreshCw,
+  AlertTriangle, Brain, Target, Gauge as GaugeIcon, Package, Crown,
+  MessageCircle, Globe, Cloud, Receipt, Sparkles, Archive, Clock, DollarSign,
+  Ruler, PlusCircle, FileBarChart, PackagePlus, UserSearch, CheckCircle2, Activity,
+} from 'lucide-react'
 import { api } from '@/lib/api'
-import { formatCurrency } from '@/lib/utils'
-import { SkeletonCard } from '@/components/shared/SkeletonLoader'
+import { formatCurrency, cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
+import { SkeletonPulse } from '@/components/shared/SkeletonLoader'
 
-const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-const HOURS = Array.from({ length: 24 }, (_, i) => i)
-
-function getWeekBounds(offset = 0) {
-  const now = new Date()
-  const day = now.getDay()
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - ((day + 6) % 7) + offset * 7)
-  monday.setHours(0, 0, 0, 0)
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
-    return d.toISOString().slice(0, 10)
-  })
-}
+const AR_TZ = 'America/Argentina/Buenos_Aires'
 
 const PAYMENT_COLORS = {
   'Efectivo': '#22c55e',
   'Transferencia': '#3b82f6',
   'Mercado Pago': '#6366f1',
+  'Mercado Pago QR': '#6366f1',
   'Tarjeta Crédito': '#f59e0b',
   'Tarjeta Débito': '#f97316',
   'Cuenta Corriente': '#a855f7',
   'Otro': '#6b7280',
 }
+const paymentColor = (m) => PAYMENT_COLORS[m] || '#6b7280'
 
-const CARD_VARIANTS = {
-  green:  'bg-gradient-to-br from-green-950/50 to-card border border-green-900/30',
-  blue:   'bg-gradient-to-br from-blue-950/50 to-card border border-blue-900/30',
-  amber:  'bg-gradient-to-br from-amber-950/50 to-card border border-amber-900/30',
-  red:    'bg-gradient-to-br from-red-950/50 to-card border border-red-900/30',
-  indigo: 'bg-gradient-to-br from-indigo-950/50 to-card border border-indigo-900/30',
-  purple: 'bg-gradient-to-br from-purple-950/50 to-card border border-purple-900/30',
-}
-const ICON_VARIANTS = {
-  green:  'bg-green-500/10 text-green-400',
-  blue:   'bg-blue-500/10 text-blue-400',
-  amber:  'bg-amber-500/10 text-amber-400',
-  red:    'bg-red-500/10 text-red-400',
-  indigo: 'bg-indigo-500/10 text-indigo-400',
-  purple: 'bg-purple-500/10 text-purple-400',
+const PERIODS = [
+  { label: '7 días', days: 7 },
+  { label: '15 días', days: 15 },
+  { label: '30 días', days: 30 },
+  { label: '3 meses', days: 90 },
+  { label: '6 meses', days: 180 },
+]
+
+function greeting() {
+  const h = Number(new Date().toLocaleString('en-US', { timeZone: AR_TZ, hour: '2-digit', hour12: false }))
+  if (h < 12) return 'Buenos días'
+  if (h < 20) return 'Buenas tardes'
+  return 'Buenas noches'
 }
 
-function StatCard({ title, value, icon: Icon, variant = 'indigo', subtitle, delay = 0, plain = false }) {
+function relativeTime(from, now) {
+  if (!from) return '—'
+  const secs = Math.max(0, Math.round((now - from) / 1000))
+  if (secs < 60) return 'hace instantes'
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `hace ${mins} min`
+  const hrs = Math.round(mins / 60)
+  return `hace ${hrs} h`
+}
+
+const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+
+// ── Bloques base reutilizables ────────────────────────────────────────────────
+
+function Card({ className, children, ...rest }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.015, boxShadow: '0 8px 30px rgba(0,200,83,0.08)' }}
-      transition={{ delay, duration: 0.25 }}
-      className={`rounded-xl p-4 flex items-start gap-3 ${CARD_VARIANTS[variant]}`}
-    >
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${ICON_VARIANTS[variant]}`}>
-        <Icon size={18} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[11px] text-zinc-500 uppercase tracking-wider truncate">{title}</p>
-        {plain
-          ? <p className="text-xl font-bold text-white mt-0.5 tabular-nums">{value}</p>
-          : <p className="text-xl font-bold text-white mt-0.5 tabular-nums">{formatCurrency(value ?? 0)}</p>}
-        {subtitle && <p className="text-[11px] text-zinc-600 mt-0.5">{subtitle}</p>}
-      </div>
-    </motion.div>
-  )
-}
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-card border border-border rounded-lg px-3 py-2 text-sm shadow-xl">
-      <p className="text-zinc-400 text-xs mb-1">{label}</p>
-      <p className="text-white font-semibold">{formatCurrency(payload[0].value)}</p>
+    <div className={cn('bg-card border border-border rounded-2xl', className)} {...rest}>
+      {children}
     </div>
   )
 }
 
-function whatsappUrl(client, message) {
-  const phone = (client.phone || '').replace(/\D/g, '')
-  if (!phone) return null
-  const wp = phone.startsWith('54') ? phone : '54' + (phone.startsWith('0') ? phone.slice(1) : phone)
-  const firstName = (client.name || '').split(' ')[0]
-  const text = encodeURIComponent((message || 'Feliz cumple [nombre]!').replace('[nombre]', firstName))
-  return `https://wa.me/${wp}?text=${text}`
+function SectionTitle({ icon: Icon, children, right }) {
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+        {Icon && <Icon size={15} className="text-accent" />} {children}
+      </h2>
+      {right}
+    </div>
+  )
 }
 
-function ChannelSalesCard() {
-  const [period, setPeriod] = useState('day')
-  const [local, setLocal] = useState({ total: 0, count: 0 })
-  const [tn, setTn] = useState({ connected: false, total: 0, count: 0 })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let ok = true
-    setLoading(true)
-    Promise.all([
-      api.dashboard.localSalesPeriod(period).catch(() => ({ total: 0, count: 0 })),
-      api.tn.salesPeriod(period).catch(() => ({ connected: false, total: 0, count: 0 })),
-    ]).then(([l, t]) => {
-      if (!ok) return
-      setLocal(l || { total: 0, count: 0 })
-      setTn(t || { connected: false, total: 0, count: 0 })
-    }).finally(() => { if (ok) setLoading(false) })
-    return () => { ok = false }
-  }, [period])
-
-  const localTotal = Number(local.total) || 0
-  const tnTotal = Number(tn.total) || 0
-  const total = localTotal + tnTotal
-  const pct = (v) => total > 0 ? Math.round(v / total * 100) : 0
-  const data = [
-    { name: 'Local', value: localTotal, fill: '#22c55e' },
-    { name: 'Tienda Nube', value: tnTotal, fill: '#3b82f6' },
-  ]
-  const periods = [['day', 'Día'], ['week', 'Semana'], ['month', 'Mes']]
-
+function Delta({ pct, className }) {
+  if (pct === null || pct === undefined || isNaN(pct)) return null
+  const up = pct >= 0
+  const Icon = up ? TrendingUp : TrendingDown
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-sm font-semibold text-white">Ventas totales por canal</h3>
-          <p className="text-[11px] text-zinc-500">Local + Tienda Nube</p>
-        </div>
-        <div className="flex gap-1 bg-surface border border-border rounded-lg p-0.5">
-          {periods.map(([id, lbl]) => (
-            <button key={id} onClick={() => setPeriod(id)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors no-drag ${period === id ? 'bg-accent text-black' : 'text-zinc-400 hover:text-white'}`}>
-              {lbl}
-            </button>
-          ))}
-        </div>
-      </div>
+    <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold', up ? 'text-green-400' : 'text-red-400', className)}>
+      <Icon size={12} /> {Math.abs(pct).toFixed(1)}%
+    </span>
+  )
+}
 
-      {loading ? (
-        <div className="py-8 text-center text-zinc-600 text-sm">Cargando...</div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm text-zinc-300"><span className="w-2.5 h-2.5 rounded-sm bg-green-500"></span>Local</span>
-              <span className="text-sm text-white tabular-nums">{formatCurrency(localTotal)} <span className="text-zinc-500 text-xs">({pct(localTotal)}%)</span></span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm text-zinc-300"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500"></span>Tienda Nube</span>
-              <span className="text-sm text-white tabular-nums">{tn.connected
-                ? <>{formatCurrency(tnTotal)} <span className="text-zinc-500 text-xs">({pct(tnTotal)}%)</span></>
-                : <span className="text-zinc-600 text-xs">No conectada</span>}</span>
-            </div>
-            <div className="border-t border-border pt-3 flex items-center justify-between">
-              <span className="text-sm font-semibold text-white">TOTAL</span>
-              <span className="text-lg font-bold text-accent tabular-nums">{formatCurrency(total)}</span>
-            </div>
-            <p className="text-[11px] text-zinc-600">{(local.count || 0) + (tn.count || 0)} ventas · Local {local.count || 0} · TN {tn.count || 0}</p>
-          </div>
-          <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} layout="vertical" margin={{ left: 6, right: 78 }}>
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} width={84} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={26}>
-                  {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                  <LabelList dataKey="value" position="right" formatter={(v) => formatCurrency(v)}
-                    style={{ fill: '#e5e7eb', fontSize: 11, fontWeight: 600 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-    </motion.div>
+function ProgressBar({ pct, color, className }) {
+  return (
+    <div className={cn('h-2.5 rounded-full bg-black/40 overflow-hidden', className)}>
+      <motion.div
+        initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+        transition={{ duration: 0.7, ease: 'easeOut' }}
+        className="h-full rounded-full"
+        style={{ background: color }}
+      />
+    </div>
+  )
+}
+
+function EmptyMini({ children }) {
+  return <p className="text-xs text-zinc-600 text-center py-6">{children}</p>
+}
+
+// ── Sparkline (mini gráfico de línea) ──────────────────────────────────────────
+
+function Sparkline({ data, color = '#e91e8c', height = 40 }) {
+  if (!data || data.length < 2) return <div style={{ height }} />
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
+        <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Gauge semicircular (velocímetro) ───────────────────────────────────────────
+
+function Gauge({ value, max, label }) {
+  const cx = 110, cy = 110, r = 88, sw = 18
+  const frac = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0
+  const polar = (f) => {
+    const deg = 180 - f * 180
+    const a = (deg * Math.PI) / 180
+    return [cx + r * Math.cos(a), cy - r * Math.sin(a)]
+  }
+  const arc = (f0, f1) => {
+    const [x0, y0] = polar(f0)
+    const [x1, y1] = polar(f1)
+    return `M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}`
+  }
+  const [nx, ny] = polar(frac)
+  const zones = [
+    { f0: 0, f1: 0.4, color: '#ef4444' },
+    { f0: 0.4, f1: 0.72, color: '#f59e0b' },
+    { f0: 0.72, f1: 1, color: '#22c55e' },
+  ]
+  return (
+    <svg viewBox="0 0 220 130" className="w-full max-w-[260px] mx-auto">
+      {zones.map((z, i) => (
+        <path key={i} d={arc(z.f0, z.f1)} fill="none" stroke={z.color} strokeWidth={sw} strokeLinecap="round" opacity={0.85} />
+      ))}
+      <motion.line
+        x1={cx} y1={cy} x2={nx} y2={ny}
+        stroke="#fff" strokeWidth={3.5} strokeLinecap="round"
+        initial={{ x2: polar(0)[0], y2: polar(0)[1] }}
+        animate={{ x2: nx, y2: ny }}
+        transition={{ duration: 0.9, ease: 'easeOut' }}
+      />
+      <circle cx={cx} cy={cy} r={7} fill="#fff" />
+      {label && <text x={cx} y={cy - 22} textAnchor="middle" className="fill-zinc-400" style={{ fontSize: 11 }}>{label}</text>}
+    </svg>
+  )
+}
+
+// ── KPI card grande ─────────────────────────────────────────────────────────
+
+function KpiCard({ icon: Icon, title, children, accent }) {
+  return (
+    <Card className={cn('p-4 flex flex-col gap-1.5 relative overflow-hidden', accent && 'ring-1 ring-accent/30')}>
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-zinc-500">
+        {Icon && <Icon size={13} className="text-accent" />} {title}
+      </div>
+      {children}
+    </Card>
+  )
+}
+
+// ── Tooltip del gráfico principal ─────────────────────────────────────────────
+
+function MainTooltip({ active, payload, metric }) {
+  if (!active || !payload || !payload.length) return null
+  const p = payload[0].payload
+  const fmt = (v) => (metric === 'monto' ? formatCurrency(v) : `${v} ventas`)
+  return (
+    <div className="bg-black/90 border border-border rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-zinc-400 mb-1">{p.label}</p>
+      <p className="text-accent font-semibold">{fmt(metric === 'monto' ? p.total : p.count)}</p>
+      <p className="text-zinc-500">Período anterior: {fmt(metric === 'monto' ? p.prevTotal : p.prevCount)}</p>
+      {p.isRecord && <p className="text-amber-400 mt-0.5">⭐ Récord histórico</p>}
+    </div>
   )
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const name = capitalize(user?.name || user?.username || '')
+
+  // Estado de datos
   const [stats, setStats] = useState(null)
-  const [trend, setTrend] = useState([])
+  const [extras, setExtras] = useState(null)
   const [byPayment, setByPayment] = useState([])
-  const [intelligenceRecs, setIntelligenceRecs] = useState([])
-  const [stockBreaks, setStockBreaks] = useState([])
-  const [intelligenceLoading, setIntelligenceLoading] = useState(false)
-  const [stockSpecular, setStockSpecular] = useState([])
-  const [cashflow, setCashflow] = useState(null)
+  const [topProd, setTopProd] = useState([])
+  const [recent, setRecent] = useState([])
+  const [rangeData, setRangeData] = useState(null)
+  const [period, setPeriod] = useState(30)
+  const [metric, setMetric] = useState('monto')
+  const [monthlyProfit, setMonthlyProfit] = useState(null)
+  const [monthComp, setMonthComp] = useState(null)
   const [breakeven, setBreakeven] = useState(null)
-  const [healthScore, setHealthScore] = useState(null)
-  const [healthDrilldown, setHealthDrilldown] = useState(false)
-  const [lowStock, setLowStock] = useState([])
+  const [cashflow, setCashflow] = useState(null)
+  const [health, setHealth] = useState(null)
+  const [stockBreaks, setStockBreaks] = useState([])
+  const [recs, setRecs] = useState([])
+  const [specular, setSpecular] = useState([])
   const [todayCash, setTodayCash] = useState(null)
   const [mainCash, setMainCash] = useState(null)
-  const [todayBirthdays, setTodayBirthdays] = useState([])
-  const [birthdayMsg, setBirthdayMsg] = useState('Feliz cumple [nombre]! 🎁')
+  const [cashOpen, setCashOpen] = useState(false)
+  const [fiscal, setFiscal] = useState(null)
+  const [topClients, setTopClients] = useState([])
+  const [overdue, setOverdue] = useState([])
+  const [conn, setConn] = useState({ tn: null, drive: null, afip: null })
+
   const [loading, setLoading] = useState(true)
-  const [weekData, setWeekData] = useState([])
-  const [heatmapData, setHeatmapData] = useState({})
-  const [tnSales, setTnSales] = useState(null)
-  const [tnConnected, setTnConnected] = useState(false)
-  const [monthlyProfit,    setMonthlyProfit]    = useState(null)
-  const [monthComparison,  setMonthComparison]  = useState(null)
-  const [categoryComp,     setCategoryComp]     = useState([])
-  const [fiscalStats,      setFiscalStats]      = useState(null)
-  const [topProdToday,     setTopProdToday]     = useState([])
-  const [recentSales,      setRecentSales]      = useState([])
-  const [topClientsMonth,  setTopClientsMonth]  = useState([])
-  const [overdueDebt,      setOverdueDebt]      = useState([])
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [now, setNow] = useState(Date.now())
+  const lastLoad = useRef(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [s, t, p, l, cb, bdays, bmsg, wc, hm, mp, mc, cc, fs, tpt, rs, tcm, od] = await Promise.all([
-        api.dashboard.stats(),
-        api.dashboard.salesTrend(),
-        api.dashboard.salesByPayment(),
-        api.dashboard.lowStock(),
-        api.cashbox.todaySummary(),
-        api.clients.birthdays(),
-        api.settings.get('birthday_message'),
-        api.dashboard.weekComparison(),
-        api.dashboard.heatmap(),
-        api.dashboard.monthlyProfit(),
-        api.dashboard.monthComparison(),
-        api.dashboard.categoryComparison(),
-        api.fiscal.stats().catch(() => null),
-        api.dashboard.topProductsToday().catch(() => []),
-        api.dashboard.recentSales().catch(() => []),
-        api.dashboard.topClientsMonth().catch(() => []),
-        api.dashboard.overdueDebt().catch(() => []),
-      ])
-      setStats(s)
-      setTopProdToday(tpt || [])
-      setRecentSales(rs || [])
-      setTopClientsMonth(tcm || [])
-      setOverdueDebt(od || [])
-      setMonthlyProfit(mp)
-      setMonthComparison(mc)
-      setCategoryComp(cc || [])
-      setFiscalStats(fs)
-      setTrend(t.map(d => ({ ...d, day: d.day.slice(5) })))
-      setByPayment(p.map(it => ({ ...it, fill: PAYMENT_COLORS[it.payment_method] || '#6b7280' })))
-      setLowStock(l)
-      setTodayCash(cb)
-      setTodayBirthdays(bdays || [])
-      if (bmsg) setBirthdayMsg(bmsg)
-
-      // Week comparison
-      const thisWeek = getWeekBounds(0)
-      const lastWeek = getWeekBounds(-1)
-      const byDay = Object.fromEntries((wc || []).map(r => [r.day, r.total]))
-      setWeekData(DAYS_ES.map((label, i) => ({
-        label,
-        'Esta semana': Math.round(byDay[thisWeek[i]] || 0),
-        'Semana anterior': Math.round(byDay[lastWeek[i]] || 0),
-      })))
-
-      // Heatmap
-      const hm2 = {}
-      for (const r of (hm || [])) {
-        const key = `${r.dow}-${r.hour}`
-        hm2[key] = { count: r.count, total: r.total }
-      }
-      setHeatmapData(hm2)
-    } finally {
-      setLoading(false)
-    }
+  // Reloj para el "hace X minutos"
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(t)
   }, [])
 
-  useEffect(() => {
-    api.tn.status().then(s => {
-      const connected = s?.connected || false
-      setTnConnected(connected)
-      if (connected) api.tn.salesToday().then(setTnSales).catch(() => {})
-    }).catch(() => {})
-  }, [])
-
-  // Load intelligence widgets lazily (after main load, non-blocking)
-  useEffect(() => {
-    setIntelligenceLoading(true)
-    Promise.allSettled([
-      api.intelligence.recommendations(),
-      api.intelligence.stockBreaks(),
-    ]).then(([recs, breaks]) => {
-      if (recs.status === 'fulfilled') setIntelligenceRecs(recs.value || [])
-      if (breaks.status === 'fulfilled') setStockBreaks(breaks.value || [])
-    }).finally(() => setIntelligenceLoading(false))
-  }, [])
-
-  useEffect(() => {
-    Promise.allSettled([
-      api.intelligence.stockSpecular(),
-      api.cashflow.projection(),
-      api.breakeven.data(),
-      api.health.score(),
+  // ── Carga de datos que cambian seguido (ventas, caja) ─────────────────────
+  const loadLive = useCallback(async () => {
+    const res = await Promise.allSettled([
+      api.dashboard.stats(),
+      api.dashboard.realtimeExtras(),
+      api.dashboard.salesByPayment(),
+      api.dashboard.topProductsToday(8),
+      api.dashboard.recentSales(8),
+      api.cashbox.todaySummary(),
       api.mainCashbox.balance(),
-    ]).then(([spec, cf, be, hs, mc]) => {
-      if (spec.status === 'fulfilled') setStockSpecular(spec.value || [])
-      if (cf.status === 'fulfilled') setCashflow(cf.value)
-      if (be.status === 'fulfilled') setBreakeven(be.value)
-      if (hs.status === 'fulfilled') setHealthScore(hs.value)
-      if (mc.status === 'fulfilled') setMainCash(mc.value)
+      api.cashbox.current(),
+    ])
+    const v = (i) => (res[i].status === 'fulfilled' ? res[i].value : undefined)
+    if (v(0) !== undefined) setStats(v(0))
+    if (v(1) !== undefined) setExtras(v(1))
+    if (v(2) !== undefined) setByPayment((v(2) || []).map(it => ({ ...it, fill: paymentColor(it.payment_method) })))
+    if (v(3) !== undefined) setTopProd(v(3) || [])
+    if (v(4) !== undefined) setRecent(v(4) || [])
+    if (v(5) !== undefined) setTodayCash(v(5))
+    if (v(6) !== undefined) setMainCash(v(6))
+    if (v(7) !== undefined) setCashOpen(!!v(7))
+    setLastUpdated(Date.now())
+  }, [])
+
+  // ── Carga de datos más pesados / estables ─────────────────────────────────
+  const loadHeavy = useCallback(async () => {
+    const res = await Promise.allSettled([
+      api.dashboard.monthlyProfit(),
+      api.dashboard.monthComparison(),
+      api.breakeven.data(),
+      api.cashflow.projection(),
+      api.health.score(),
+      api.intelligence.stockBreaks(),
+      api.intelligence.recommendations(),
+      api.intelligence.stockSpecular(),
+      api.fiscal.stats(),
+      api.dashboard.topClientsMonth(),
+      api.dashboard.overdueDebt(),
+    ])
+    const v = (i) => (res[i].status === 'fulfilled' ? res[i].value : undefined)
+    if (v(0) !== undefined) setMonthlyProfit(v(0))
+    if (v(1) !== undefined) setMonthComp(v(1))
+    if (v(2) !== undefined) setBreakeven(v(2))
+    if (v(3) !== undefined) setCashflow(v(3))
+    if (v(4) !== undefined) setHealth(v(4))
+    if (v(5) !== undefined) setStockBreaks(v(5) || [])
+    if (v(6) !== undefined) setRecs(v(6) || [])
+    if (v(7) !== undefined) setSpecular(v(7) || [])
+    if (v(8) !== undefined) setFiscal(v(8))
+    if (v(9) !== undefined) setTopClients(v(9) || [])
+    if (v(10) !== undefined) setOverdue(v(10) || [])
+  }, [])
+
+  const loadRange = useCallback(async (d) => {
+    try { setRangeData(await api.dashboard.salesRange(d)) } catch { /* Sin datos */ }
+  }, [])
+
+  const loadConn = useCallback(async () => {
+    const res = await Promise.allSettled([api.tn.status(), api.googledrive.status(), api.afip.status()])
+    setConn({
+      tn: res[0].status === 'fulfilled' ? res[0].value : null,
+      drive: res[1].status === 'fulfilled' ? res[1].value : null,
+      afip: res[2].status === 'fulfilled' ? res[2].value : null,
     })
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const loadAll = useCallback(async () => {
+    lastLoad.current = Date.now()
+    setRefreshing(true)
+    try {
+      await Promise.all([loadLive(), loadHeavy(), loadRange(period), loadConn()])
+    } finally {
+      setRefreshing(false)
+      setLoading(false)
+    }
+  }, [loadLive, loadHeavy, loadRange, loadConn, period])
 
-  const navigate = useNavigate()
-  const today = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  // Carga inicial
+  useEffect(() => { loadAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh cada 60s de la parte "en vivo" (cache implícito: no recargamos lo pesado)
+  useEffect(() => {
+    const t = setInterval(() => { loadLive() }, 60000)
+    return () => clearInterval(t)
+  }, [loadLive])
+
+  // Cambio de período → recargar solo el gráfico
+  useEffect(() => { if (!loading) loadRange(period) }, [period]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Derivados ──────────────────────────────────────────────────────────────
+
+  const sparkData = useMemo(() => {
+    if (!extras?.hourly?.length) return []
+    return extras.hourly.slice(-7).map(h => ({ v: h.total }))
+  }, [extras])
+
+  const chartData = useMemo(() => {
+    if (!rangeData?.data) return []
+    const arr = rangeData.data
+    const key = metric === 'monto' ? 'total' : 'count'
+    const win = 7
+    return arr.map((d, i) => {
+      const from = Math.max(0, i - win + 1)
+      const slice = arr.slice(from, i + 1)
+      const ma = slice.reduce((s, x) => s + x[key], 0) / slice.length
+      const isRecord = metric === 'monto' && rangeData.allTimeMax > 0 && d.total >= rangeData.allTimeMax && d.total > 0
+      const [, mm, dd] = d.day.split('-')
+      return { ...d, label: `${dd}/${mm}`, ma7: Math.round(ma), isRecord }
+    })
+  }, [rangeData, metric])
+
+  const marginColor = (m) => (m >= 30 ? 'text-green-400' : m >= 15 ? 'text-amber-400' : 'text-red-400')
+
+  // Proyección del día (velocímetro)
+  const proj = useMemo(() => {
+    if (!stats) return { value: 0, max: 1, vsWeekday: null }
+    const h = Number(new Date().toLocaleString('en-US', { timeZone: AR_TZ, hour: '2-digit', hour12: false }))
+    const OPEN = 9, CLOSE = 21
+    let frac = h < OPEN ? 0.05 : h >= CLOSE ? 1 : (h - OPEN) / (CLOSE - OPEN)
+    frac = Math.max(0.05, Math.min(1, frac))
+    const value = frac >= 1 ? stats.ventas : stats.ventas / frac
+    const weekdayAvg = extras?.weekdayAvg || 0
+    const max = Math.max(weekdayAvg * 1.6, value * 1.15, stats.ventas * 1.2, 1)
+    const vsWeekday = weekdayAvg > 0 ? (value - weekdayAvg) / weekdayAvg * 100 : null
+    return { value, max, vsWeekday, weekdayAvg }
+  }, [stats, extras])
+
+  // Recomendaciones IA combinadas
+  const recCards = useMemo(() => {
+    const cards = []
+    if (specular?.[0]) {
+      const s = specular[0]
+      cards.push({
+        icon: Archive, tone: 'text-amber-400',
+        text: `Stock especular: ${formatCurrency(s.capital_inmovilizado)} inmovilizados en ${s.product_name} T.${s.size}. Considerá liquidar.`,
+        action: 'Ver productos', go: '/productos',
+      })
+    }
+    for (const r of (recs || []).slice(0, 2)) {
+      cards.push({ icon: Package, tone: 'text-accent', text: r.message, action: 'Reponer', go: '/reposicion' })
+    }
+    for (const sc of (health?.scores || [])) {
+      if (sc.tip && cards.length < 5) {
+        cards.push({ icon: Target, tone: 'text-highlight', text: `${sc.label}: ${sc.tip}`, action: 'Configuración', go: '/configuracion' })
+      }
+    }
+    return cards.slice(0, 5)
+  }, [specular, recs, health])
+
+  const waLink = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '')
+    if (!digits) return null
+    return `https://wa.me/${digits.startsWith('54') ? digits : '54' + digits}`
+  }
+
+  const fechaHoy = capitalize(new Date().toLocaleDateString('es-AR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: AR_TZ,
+  }))
+
+  // ── Skeleton inicial ─────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="p-6 space-y-5">
+        <SkeletonPulse className="h-16 w-full rounded-2xl" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => <SkeletonPulse key={i} className="h-32 rounded-2xl" />)}
+        </div>
+        <SkeletonPulse className="h-72 w-full rounded-2xl" />
+        <div className="grid md:grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => <SkeletonPulse key={i} className="h-64 rounded-2xl" />)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}
-      className="p-6 space-y-5"
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
+      className="p-6 space-y-6"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* ══ SECCIÓN 1 — HEADER ══ */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white capitalize">Dashboard</h1>
-          <p className="text-sm text-zinc-500 capitalize mt-0.5">{today}</p>
+          <h1 className="text-2xl font-bold text-white">
+            {greeting()}{name ? `, ${name}` : ''} <span className="align-middle">👋</span>
+          </h1>
+          <p className="text-sm text-zinc-500 mt-0.5">{fechaHoy}</p>
         </div>
-        <button onClick={load} disabled={loading} className="no-drag flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5 border border-transparent hover:border-border disabled:opacity-40">
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <ConnBadge icon={Globe} label="Tienda Nube" ok={conn.tn?.connected} />
+            <ConnBadge icon={Cloud} label="Drive" ok={conn.drive?.connected} />
+            <ConnBadge icon={Receipt} label="AFIP" ok={conn.afip?.connected} />
+          </div>
+          <button
+            onClick={loadAll} disabled={refreshing}
+            className="flex items-center gap-2 text-xs text-zinc-300 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag disabled:opacity-60"
+          >
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            <span>Actualizar</span>
+            <span className="text-zinc-600 hidden sm:inline">· {relativeTime(lastUpdated, now)}</span>
+          </button>
+        </div>
       </div>
 
-      {/* KPI grid */}
-      {loading ? (
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-            {/* Ventas del día + comparativa vs ayer */}
-            <StatCard title="Ventas del día" value={stats?.ventas} icon={ShoppingCart} variant="blue" delay={0}
-              subtitle={
-                <span className="flex items-center gap-1.5">
-                  {stats?.cantidadVentas ?? 0} transacc.
-                  {stats?.pctVsAyer !== null && stats?.pctVsAyer !== undefined && (
-                    <span className={(stats.pctVsAyer >= 0 ? 'text-green-400' : 'text-red-400') + ' font-semibold'}>
-                      {stats.pctVsAyer >= 0 ? '↑' : '↓'} {Math.abs(stats.pctVsAyer).toFixed(0)}% vs ayer
-                    </span>
-                  )}
-                </span>
-              } />
-            {/* Ganancia neta + margen */}
-            <StatCard title="Ganancia neta del día" value={stats?.gananciaNeta} icon={DollarSign}
-              variant={(stats?.gananciaNeta ?? 0) >= 0 ? 'green' : 'red'} delay={0.05}
-              subtitle={`Margen ${(stats?.margenHoy ?? 0).toFixed(1)}% · Gastos ${formatCurrency(stats?.gastos ?? 0)}`} />
-            {/* Clientes atendidos hoy + ticket promedio */}
-            <StatCard title="Clientes atendidos hoy" value={stats?.clientesHoy ?? 0} icon={Users} variant="purple" plain delay={0.1}
-              subtitle={`Ticket prom. ${formatCurrency(stats?.ticketPromedio ?? 0)}`} />
-            {/* Caja actual: efectivo esperado + caja grande */}
-            <StatCard title="Caja actual" value={todayCash?.expectedCash ?? 0} icon={Wallet} variant="amber" delay={0.15}
-              subtitle={`Efvo. esperado · C. Grande ${formatCurrency(mainCash?.balance ?? 0)}`} />
+      {/* ══ SECCIÓN 2 — KPIs PRINCIPALES ══ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* Card 1 — Ventas del día */}
+        <KpiCard icon={ShoppingCart} title="Ventas del día" accent>
+          <p className="text-2xl font-bold text-white tabular-nums leading-tight">{formatCurrency(stats?.ventas || 0)}</p>
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <span>{stats?.cantidadVentas || 0} ventas</span>
+            <Delta pct={stats?.pctVsAyer} />
           </div>
+          <div className="mt-1"><Sparkline data={sparkData} /></div>
+          <p className="text-[10px] text-zinc-600">últimas horas</p>
+        </KpiCard>
 
-          {/* FILA extra — Ganancia bruta / Cuentas / stock (compactas) */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-            <StatCard title="Ganancia bruta" value={stats?.gananciaBruta} icon={TrendingUp} variant="green" delay={0.16} />
-            <StatCard title="Cuentas pendientes" value={stats?.cuentasCorrientes} icon={Wallet} variant="amber" delay={0.17} />
-            <StatCard title="Inversión en stock" value={stats?.inversionStock} icon={Package} variant="blue" delay={0.18} />
-            <StatCard title="Venta potencial (stock)" value={stats?.ventaPotencial} icon={TrendingUp} variant="purple" delay={0.19} />
-          </div>
-
-          {tnConnected && tnSales && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-              className="bg-gradient-to-br from-blue-950/40 to-card border border-blue-900/30 rounded-xl p-4 flex items-center gap-4"
-            >
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
-                <Globe size={18} className="text-blue-400" />
-              </div>
-              <div>
-                <p className="text-[11px] text-zinc-500 uppercase tracking-wider">Ventas web hoy (Tienda Nube)</p>
-                <p className="text-xl font-bold text-white tabular-nums mt-0.5">{formatCurrency(tnSales.total ?? 0)}</p>
-                <p className="text-[11px] text-zinc-600 mt-0.5">{tnSales.count ?? 0} pedidos pagados</p>
-              </div>
-            </motion.div>
+        {/* Card 2 — Ganancia neta */}
+        <KpiCard icon={DollarSign} title="Ganancia neta hoy">
+          <p className={cn('text-2xl font-bold tabular-nums leading-tight', (stats?.gananciaNeta || 0) >= 0 ? 'text-white' : 'text-red-400')}>
+            {formatCurrency(stats?.gananciaNeta || 0)}
+          </p>
+          <p className={cn('text-xs font-semibold', marginColor(stats?.margenHoy || 0))}>
+            Margen {(stats?.margenHoy || 0).toFixed(1)}%
+          </p>
+          {extras && (
+            <p className="text-[11px] text-zinc-500 mt-1">
+              Prom. 7 días: <span className="text-zinc-300">{formatCurrency(Math.round(extras.avgNet7d))}</span>
+              {extras.avgNet7d > 0 && (
+                <Delta className="ml-1" pct={((stats?.gananciaNeta || 0) - extras.avgNet7d) / extras.avgNet7d * 100} />
+              )}
+            </p>
           )}
-        </>
-      )}
+        </KpiCard>
 
-      {/* Ventas totales por canal (Local + Tienda Nube) */}
-      <ChannelSalesCard />
+        {/* Card 3 — Ticket promedio */}
+        <KpiCard icon={Receipt} title="Ticket promedio">
+          <p className="text-2xl font-bold text-white tabular-nums leading-tight">{formatCurrency(stats?.ticketPromedio || 0)}</p>
+          {monthlyProfit && monthlyProfit.monthlyCount > 0 && (
+            <p className="text-[11px] text-zinc-500">
+              Mes: <span className="text-zinc-300">{formatCurrency(monthlyProfit.monthlySales / monthlyProfit.monthlyCount)}</span>
+            </p>
+          )}
+          <p className="text-[11px] text-zinc-500">
+            {stats?.cantidadVentas > 0 ? (stats.unidadesHoy / stats.cantidadVentas).toFixed(1) : '0'} items por venta
+          </p>
+        </KpiCard>
 
-      {/* Top productos del día + Últimas ventas en tiempo real */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}
-          className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <ShoppingBag size={15} className="text-accent" />
-            <h3 className="text-sm font-medium text-white">Top productos del día</h3>
+        {/* Card 4 — Caja actual */}
+        <KpiCard icon={Wallet} title="Caja actual">
+          <p className="text-2xl font-bold text-accent tabular-nums leading-tight">
+            {formatCurrency((todayCash?.expectedCash || 0) + (mainCash?.balance || 0))}
+          </p>
+          <div className="text-[11px] text-zinc-500 space-y-0.5">
+            <div className="flex justify-between"><span>Caja chica</span><span className="text-zinc-300 tabular-nums">{formatCurrency(todayCash?.expectedCash || 0)}</span></div>
+            <div className="flex justify-between"><span>Caja grande</span><span className="text-zinc-300 tabular-nums">{formatCurrency(mainCash?.balance || 0)}</span></div>
           </div>
-          {topProdToday.length > 0 ? (
-            <div className="divide-y divide-border">
-              {topProdToday.map((p, i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-6 h-6 rounded-md bg-accent/10 text-accent text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-zinc-200 truncate">{p.name || 'Producto'}</span>
+          <span className={cn('mt-1 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full w-fit',
+            cashOpen ? 'bg-green-500/15 text-green-400' : 'bg-zinc-500/15 text-zinc-400')}>
+            <span className={cn('w-1.5 h-1.5 rounded-full', cashOpen ? 'bg-green-400' : 'bg-zinc-500')} />
+            {cashOpen ? 'Caja abierta' : 'Caja cerrada'}
+          </span>
+        </KpiCard>
+
+        {/* Card 5 — Clientes del día */}
+        <KpiCard icon={Users} title="Clientas del día">
+          <p className="text-2xl font-bold text-white tabular-nums leading-tight">{stats?.clientesHoy || 0}</p>
+          <p className="text-[11px] text-zinc-500">
+            <span className="text-green-400">{extras?.clientes?.nuevas || 0} nuevas</span> · {extras?.clientes?.recurrentes || 0} recurrentes
+          </p>
+          {extras?.clientes?.topBuyer && (
+            <p className="text-[11px] text-zinc-500 truncate">
+              🏆 {extras.clientes.topBuyer.name} · <span className="text-zinc-300">{formatCurrency(extras.clientes.topBuyer.total)}</span>
+            </p>
+          )}
+        </KpiCard>
+      </div>
+
+      {/* ══ SECCIÓN 3 — GRÁFICO PRINCIPAL ══ */}
+      <Card className="p-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+          <SectionTitle icon={Activity}>Evolución de ventas</SectionTitle>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              {PERIODS.map(p => (
+                <button key={p.days} onClick={() => setPeriod(p.days)}
+                  className={cn('px-2.5 py-1 text-xs no-drag transition-colors', period === p.days ? 'bg-accent text-white' : 'text-zinc-400 hover:bg-white/5')}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              {[{ id: 'monto', l: 'Monto' }, { id: 'ventas', l: 'Ventas' }].map(m => (
+                <button key={m.id} onClick={() => setMetric(m.id)}
+                  className={cn('px-2.5 py-1 text-xs no-drag transition-colors', metric === m.id ? 'bg-highlight text-white' : 'text-zinc-400 hover:bg-white/5')}>
+                  {m.l}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {chartData.length === 0 ? <EmptyMini>Sin datos</EmptyMini> : (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
+              <XAxis dataKey="label" stroke="#52525b" tick={{ fontSize: 10 }}
+                interval={Math.max(0, Math.floor(chartData.length / 10))} minTickGap={12} />
+              <YAxis stroke="#52525b" tick={{ fontSize: 10 }}
+                tickFormatter={(v) => metric === 'monto' ? `$${(v / 1000).toFixed(0)}k` : v} width={44} />
+              <Tooltip content={<MainTooltip metric={metric} />} />
+              <Line type="monotone" dataKey={metric === 'monto' ? 'prevTotal' : 'prevCount'} stroke="#6b7280"
+                strokeWidth={1.5} strokeDasharray="5 4" dot={false} name="Período anterior" isAnimationActive={false} />
+              <Line type="monotone" dataKey="ma7" stroke="#22c55e" strokeWidth={1.5} dot={false} name="Prom. 7 días" opacity={0.7} isAnimationActive={false} />
+              <Line type="monotone" dataKey={metric === 'monto' ? 'total' : 'count'} stroke="#e91e8c" strokeWidth={2.5}
+                name="Actual"
+                dot={(props) => {
+                  const { cx, cy, payload, index } = props
+                  if (payload.isRecord) return <text key={index} x={cx} y={cy - 8} textAnchor="middle" fontSize={13}>⭐</text>
+                  return <circle key={index} cx={cx} cy={cy} r={0} fill="none" />
+                }}
+                activeDot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+        <div className="flex items-center gap-4 mt-2 text-[11px] text-zinc-500">
+          <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-accent inline-block" /> Actual</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ background: '#6b7280' }} /> Período anterior</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-green-500 inline-block" /> Prom. 7 días</span>
+          <span>⭐ Récord histórico</span>
+        </div>
+      </Card>
+
+      {/* ══ SECCIÓN 4 — ANÁLISIS EN TIEMPO REAL ══ */}
+      <div className="grid lg:grid-cols-3 gap-3">
+        {/* Ventas en vivo */}
+        <Card className="p-4">
+          <SectionTitle icon={Clock}>Ventas de hoy en vivo</SectionTitle>
+          {recent.length === 0 ? <EmptyMini>Todavía no hay ventas hoy</EmptyMini> : (
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+              {recent.map(s => (
+                <div key={s.id} className="flex items-center gap-2 bg-surface border border-border rounded-lg px-2.5 py-2">
+                  <span className="text-[11px] text-zinc-500 tabular-nums w-10 shrink-0">
+                    {new Date(s.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: AR_TZ })}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-white truncate">{s.main_product || s.client_name || `Venta #${s.id}`}</p>
+                    <p className="text-[10px] text-zinc-500 truncate">{s.seller_name || 'Sin vendedora'}</p>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-white font-semibold tabular-nums">{p.qty} u.</span>
-                    <span className="text-zinc-500 text-xs tabular-nums">{formatCurrency(p.revenue)}</span>
-                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: `${paymentColor(s.payment_method)}22`, color: paymentColor(s.payment_method) }}>
+                    {s.payment_method || 'Otro'}
+                  </span>
+                  <span className="text-xs font-semibold text-white tabular-nums shrink-0 w-20 text-right">{formatCurrency(s.total)}</span>
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="py-10 text-center text-zinc-600 text-sm">Sin ventas hoy</div>
           )}
-        </motion.div>
+        </Card>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
-          className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Clock size={15} className="text-blue-400" />
-            <h3 className="text-sm font-medium text-white">Últimas ventas</h3>
-          </div>
-          {recentSales.length > 0 ? (
-            <div className="divide-y divide-border">
-              {recentSales.map((s) => {
-                const t = (() => { try { return new Date(s.created_at.replace(' ', 'T') + 'Z').toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' }) } catch { return '' } })()
+        {/* Top productos del día */}
+        <Card className="p-4">
+          <SectionTitle icon={Package}>Top productos del día</SectionTitle>
+          {topProd.length === 0 ? <EmptyMini>Sin ventas de productos hoy</EmptyMini> : (
+            <div className="space-y-2">
+              {topProd.map((p, i) => {
+                const max = topProd[0]?.qty || 1
                 return (
-                  <div key={s.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-zinc-600 text-xs tabular-nums shrink-0">{t}</span>
-                      <span className="text-zinc-300 truncate">{s.client_name || 'Cliente ocasional'}</span>
-                      {s.seller_name && <span className="text-zinc-700 text-[11px] shrink-0">· {s.seller_name}</span>}
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-zinc-200 truncate flex items-center gap-1">
+                        {i === 0 && <span title="Más vendido">🔥</span>}{p.name || 'Producto'}
+                      </span>
+                      <span className="text-zinc-400 tabular-nums shrink-0 ml-2">{p.qty} u · {formatCurrency(p.revenue)}</span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-zinc-600">{s.payment_method}</span>
-                      <span className="text-white font-semibold tabular-nums">{formatCurrency(s.total)}</span>
-                    </div>
+                    <ProgressBar pct={(p.qty / max) * 100} color={i === 0 ? '#e91e8c' : '#6366f1'} className="h-2" />
                   </div>
                 )
               })}
             </div>
-          ) : (
-            <div className="py-10 text-center text-zinc-600 text-sm">Sin ventas registradas</div>
           )}
-        </motion.div>
-      </div>
+        </Card>
 
-      {/* Charts */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Trend */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28 }}
-          className="col-span-2 bg-card border border-border rounded-xl p-4"
-        >
-          <h3 className="text-sm font-medium text-white mb-4">Ventas — últimos 30 días</h3>
-          {trend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={trend} margin={{ left: -10, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
-                <XAxis dataKey="day" stroke="#3f3f3f" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false} />
-                <YAxis stroke="#3f3f3f" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false}
-                  tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Line type="monotone" dataKey="total" stroke="#00c853" strokeWidth={2}
-                  dot={false} activeDot={{ r: 4, fill: '#00c853', stroke: '#111111', strokeWidth: 2 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-zinc-600 text-sm">Sin datos en los últimos 30 días</div>
-          )}
-        </motion.div>
-
-        {/* By payment */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.33 }}
-          className="bg-card border border-border rounded-xl p-4"
-        >
-          <h3 className="text-sm font-medium text-white mb-3">Medios de pago (hoy)</h3>
-          {byPayment.length > 0 ? (
+        {/* Medios de pago */}
+        <Card className="p-4">
+          <SectionTitle icon={Wallet}>Medios de pago (hoy)</SectionTitle>
+          {byPayment.length === 0 ? <EmptyMini>Sin datos</EmptyMini> : (
             <>
-              <ResponsiveContainer width="100%" height={140}>
+              <ResponsiveContainer width="100%" height={150}>
                 <PieChart>
-                  <Pie data={byPayment} dataKey="total" nameKey="payment_method"
-                    cx="50%" cy="50%" outerRadius={58} innerRadius={35} paddingAngle={2}>
+                  <Pie data={byPayment} dataKey="total" nameKey="payment_method" cx="50%" cy="50%" innerRadius={38} outerRadius={62} paddingAngle={2}>
                     {byPayment.map((e, i) => <Cell key={i} fill={e.fill} />)}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#111111', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 12 }}
-                    formatter={(v) => [formatCurrency(v), '']}
-                  />
+                  <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ background: '#000', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="space-y-1.5 mt-2">
-                {byPayment.map(p => (
-                  <div key={p.payment_method} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.fill }} />
-                      <span className="text-zinc-400 truncate">{p.payment_method}</span>
+              <div className="space-y-1 mt-1">
+                {(() => {
+                  const total = byPayment.reduce((s, x) => s + x.total, 0) || 1
+                  return byPayment.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between text-[11px]">
+                      <span className="flex items-center gap-1.5 text-zinc-400">
+                        <span className="w-2 h-2 rounded-full" style={{ background: p.fill }} /> {p.payment_method || 'Otro'}
+                      </span>
+                      <span className="text-zinc-300 tabular-nums">{formatCurrency(p.total)} · {((p.total / total) * 100).toFixed(0)}%</span>
                     </div>
-                    <span className="text-white font-medium tabular-nums">{formatCurrency(p.total)}</span>
-                  </div>
-                ))}
+                  ))
+                })()}
               </div>
             </>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-zinc-600 text-sm">Sin ventas hoy</div>
           )}
-        </motion.div>
+        </Card>
       </div>
 
-      {/* Cash breakdown */}
-      {todayCash && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.38 }}
-          className="bg-card border border-border rounded-xl p-4"
-        >
-          <h3 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
-            <Wallet size={14} className="text-accent" />
-            Desglose de caja
-            {todayCash.openCount > 1 && (
-              <span className="ml-1 text-xs bg-accent/15 text-accent px-2 py-0.5 rounded-full">
-                {todayCash.openCount} turnos
-              </span>
-            )}
-          </h3>
-          <div className="grid grid-cols-4 gap-3 text-sm">
-            {[
-              { label: 'Apertura', value: todayCash.totalOpening, color: 'text-zinc-300' },
-              { label: 'Total ventas', value: todayCash.totalSales, color: 'text-green-400' },
-              { label: 'Gastos', value: todayCash.totalExpenses, color: 'text-red-400' },
-              { label: 'Efectivo esperado', value: todayCash.expectedCash, color: 'text-accent font-bold' },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="bg-surface rounded-lg p-3 border border-border">
-                <p className="text-[11px] text-zinc-600 uppercase tracking-wider mb-1">{label}</p>
-                <p className={`text-base tabular-nums ${color}`}>{formatCurrency(value)}</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Caja Grande — acceso rápido */}
-      {mainCash && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.39 }}
-          onClick={() => navigate('/caja-grande')}
-          className="bg-gradient-to-br from-accent/15 to-card border border-accent/25 rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:border-accent/50 transition-colors no-drag"
-        >
-          <div className="w-11 h-11 rounded-xl bg-accent/15 flex items-center justify-center shrink-0">
-            <Vault size={20} className="text-accent" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wider">Caja Grande — saldo acumulado</p>
-            <p className="text-2xl font-bold text-white tabular-nums mt-0.5">{formatCurrency(mainCash.balance)}</p>
-          </div>
-          <div className="text-right hidden sm:block">
-            <p className="text-[11px] text-zinc-600">Ingresos cajas chicas: <span className="text-green-400">{formatCurrency(mainCash.ingresosCajaChica)}</span></p>
-            <p className="text-[11px] text-zinc-600 mt-0.5">Manuales: <span className="text-blue-400">+{formatCurrency(mainCash.ingresosManual)}</span> / <span className="text-red-400">-{formatCurrency(mainCash.egresosManual)}</span></p>
-          </div>
-          <span className="text-accent text-sm shrink-0">→</span>
-        </motion.div>
-      )}
-
-      {/* Week comparison */}
-      {weekData.some(d => d['Esta semana'] > 0 || d['Semana anterior'] > 0) && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-card border border-border rounded-xl p-4"
-        >
-          <h3 className="text-sm font-medium text-white mb-4">Comparativa semanal — esta semana vs. anterior</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={weekData} margin={{ left: -10, right: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
-              <XAxis dataKey="label" stroke="#3f3f3f" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false} />
-              <YAxis stroke="#3f3f3f" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false}
-                tickFormatter={v => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#111111', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 12 }}
-                formatter={(v, name) => [formatCurrency(v), name]}
-              />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#6b7280' }} />
-              <Bar dataKey="Esta semana" fill="#00c853" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Semana anterior" fill="#3f3f3f" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
-      )}
-
-      {/* ── Widget Fiscal ── */}
-      {fiscalStats && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.38 }}
-          className={`bg-card border rounded-xl p-4 ${
-            fiscalStats.alertaAnio === 'roja' ? 'border-red-500/40' :
-            fiscalStats.alertaAnio === 'amarilla' ? 'border-amber-500/40' :
-            'border-border'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <Receipt size={15} className="text-accent" />
-            <h3 className="text-sm font-medium text-white">
-              Control fiscal — {fiscalStats.regimen === 'MONO' ? `Monotributo Cat. ${fiscalStats.monoCategoria}` : 'Responsable Inscripto'}
-            </h3>
-            {(fiscalStats.alertaAnio === 'roja' || fiscalStats.alertaMes === 'roja') && (
-              <span className="ml-auto text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">⚠ Límite cerca</span>
-            )}
-            {(fiscalStats.alertaAnio === 'amarilla' || fiscalStats.alertaMes === 'amarilla') && !fiscalStats.alertaAnio?.includes('roja') && (
-              <span className="ml-auto text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">80% del límite</span>
+      {/* ══ SECCIÓN 5 — VELOCÍMETRO Y PUNTO DE EQUILIBRIO ══ */}
+      <div className="grid lg:grid-cols-2 gap-3">
+        {/* Velocímetro */}
+        <Card className="p-4">
+          <SectionTitle icon={GaugeIcon}>Ritmo del día</SectionTitle>
+          <Gauge value={proj.value} max={proj.max} label={metric === 'monto' ? '' : ''} />
+          <div className="text-center -mt-2">
+            <p className="text-[11px] text-zinc-500">Proyección del día</p>
+            <p className="text-2xl font-bold text-accent tabular-nums">{formatCurrency(Math.round(proj.value))}</p>
+            <p className="text-xs text-zinc-500 mt-1">Si seguís a este ritmo, cerrás cerca de {formatCurrency(Math.round(proj.value))}</p>
+            {proj.vsWeekday !== null && (
+              <p className="text-xs mt-1">
+                <Delta pct={proj.vsWeekday} /> <span className="text-zinc-500">vs. promedio de este día</span>
+              </p>
             )}
           </div>
+        </Card>
 
-          {fiscalStats.regimen === 'MONO' ? (
-            <div className="space-y-4">
-              {/* Este mes */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-zinc-400">Facturado este mes</span>
-                  <span className="font-medium text-white tabular-nums">
-                    {formatCurrency(fiscalStats.facturadoMes)}
-                    <span className="text-zinc-600 ml-1">/ {formatCurrency(fiscalStats.limiteMes)}</span>
-                  </span>
+        {/* Punto de equilibrio */}
+        <Card className="p-4">
+          <SectionTitle icon={Target}>Punto de equilibrio del mes</SectionTitle>
+          {!breakeven ? <EmptyMini>Sin datos</EmptyMini> : (() => {
+            const pct = breakeven.pct || 0
+            const color = pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444'
+            const dailyPace = breakeven.daysElapsed > 0 ? breakeven.monthlySales / breakeven.daysElapsed : 0
+            const daysToBreak = dailyPace > 0 ? Math.ceil(breakeven.remaining / dailyPace) : null
+            return (
+              <div className="space-y-3">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-3xl font-bold tabular-nums" style={{ color }}>{pct.toFixed(0)}%</p>
+                    <p className="text-[11px] text-zinc-500">alcanzado</p>
+                  </div>
+                  <div className="text-right text-[11px] text-zinc-500 space-y-0.5">
+                    <div>Gastos fijos: <span className="text-amber-400 tabular-nums">{formatCurrency(breakeven.fixedCosts)}</span></div>
+                    <div>Vendido: <span className="text-white tabular-nums">{formatCurrency(breakeven.monthlySales)}</span></div>
+                  </div>
                 </div>
-                <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      fiscalStats.pctMes >= 95 ? 'bg-red-500' :
-                      fiscalStats.pctMes >= 80 ? 'bg-amber-400' : 'bg-accent'
-                    }`}
-                    style={{ width: `${Math.min(100, fiscalStats.pctMes)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] mt-1 text-zinc-600">
-                  <span>{fiscalStats.pctMes.toFixed(1)}% utilizado</span>
-                  <span>Disponible: {formatCurrency(fiscalStats.disponibleMes)}</span>
-                </div>
+                <ProgressBar pct={pct} color={color} className="h-3" />
+                {breakeven.achieved ? (
+                  <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 size={13} /> ¡Ya cubriste tus gastos fijos este mes!</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-zinc-400">Faltan <span className="text-white font-semibold">{formatCurrency(breakeven.remaining)}</span> en ventas para cubrir los gastos fijos.</p>
+                    {daysToBreak !== null && daysToBreak <= 60 && (
+                      <p className="text-xs text-zinc-500">Lo lográs en ~{daysToBreak} día{daysToBreak !== 1 ? 's' : ''} más si mantenés el ritmo.</p>
+                    )}
+                  </>
+                )}
               </div>
+            )
+          })()}
+        </Card>
+      </div>
 
-              {/* Este año */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-zinc-400">Facturado este año</span>
-                  <span className="font-medium text-white tabular-nums">
-                    {formatCurrency(fiscalStats.facturadoAnio)}
-                    <span className="text-zinc-600 ml-1">/ {formatCurrency(fiscalStats.limiteAnual)}</span>
-                  </span>
-                </div>
-                <div className="h-2.5 bg-zinc-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      fiscalStats.pctAnio >= 95 ? 'bg-red-500' :
-                      fiscalStats.pctAnio >= 80 ? 'bg-amber-400' : 'bg-green-500'
-                    }`}
-                    style={{ width: `${Math.min(100, fiscalStats.pctAnio)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] mt-1 text-zinc-600">
-                  <span>{fiscalStats.pctAnio.toFixed(1)}% del límite anual</span>
-                  <span>Libre: {formatCurrency(fiscalStats.disponibleAnio)}</span>
-                </div>
-              </div>
-
-              {/* Aclaración: solo CAE */}
-              {fiscalStats.soloCae && (
-                <div className="text-[10px] text-zinc-600 text-right">
-                  Basado en {fiscalStats.facturasAnio || 0} factura{fiscalStats.facturasAnio !== 1 ? 's' : ''} electrónica{fiscalStats.facturasAnio !== 1 ? 's' : ''} con CAE
-                </div>
-              )}
-
-              {/* Proyección y alertas */}
-              {fiscalStats.proyeccionMes && (
-                <div className="text-xs text-zinc-500 bg-zinc-800/50 rounded-lg px-3 py-2">
-                  📅 Al ritmo actual, superarías el límite en <strong className="text-white">{fiscalStats.proyeccionMes}</strong>
-                </div>
-              )}
-              {fiscalStats.pctAnio >= 95 && (
-                <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                  ⚠ Superaste el 95% del límite anual. Considerá recategorizar o consultar a tu contador.
-                </div>
-              )}
+      {/* ══ SECCIÓN 6 — STOCK E IA ══ */}
+      <div className="grid lg:grid-cols-2 gap-3">
+        {/* Alertas de stock */}
+        <Card className="p-4">
+          <SectionTitle icon={AlertTriangle}>Atención requerida — Stock</SectionTitle>
+          {stockBreaks.length === 0 ? (
+            <div className="flex items-center gap-2 text-sm text-green-400 py-4">
+              <CheckCircle2 size={16} /> Stock saludable — sin alertas críticas
             </div>
           ) : (
-            // Responsable Inscripto — posición IVA
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: 'IVA Débito', value: formatCurrency(fiscalStats.debitoFiscal),  color: 'text-red-400',   icon: TrendingDown },
-                { label: 'IVA Crédito', value: formatCurrency(fiscalStats.creditoFiscal), color: 'text-green-400', icon: TrendingUp },
-                {
-                  label: fiscalStats.posicionIva >= 0 ? 'A pagar' : 'A favor',
-                  value: formatCurrency(Math.abs(fiscalStats.posicionIva)),
-                  color: fiscalStats.posicionIva >= 0 ? 'text-amber-400' : 'text-green-400',
-                  icon: fiscalStats.posicionIva >= 0 ? TrendingDown : TrendingUp,
-                },
-              ].map(({ label, value, color, icon: Icon }) => (
-                <div key={label} className="bg-surface rounded-xl p-3">
-                  <p className="text-[10px] text-zinc-500 mb-1">{label}</p>
-                  <p className={`text-lg font-bold tabular-nums ${color}`}>{value}</p>
-                </div>
-              ))}
-              <div className="col-span-3 text-[10px] text-zinc-600 px-1">
-                Vencimiento DDJJ IVA aprox.: <span className="text-zinc-400">{fiscalStats.vencimientoDDJJ}</span>
-                {' · '}Alícuota: {fiscalStats.ivaAlicuota}%
-              </div>
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      {/* Monthly comparison */}
-      {monthComparison?.days?.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.41 }}
-          className="bg-card border border-border rounded-xl p-4"
-        >
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-medium text-white">Comparativa mensual — este mes vs. mes anterior</h3>
-              <div className="flex gap-4 mt-1">
-                {monthComparison.pctVar !== null && (
-                  <span className={`text-xs font-semibold ${Number(monthComparison.pctVar) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {Number(monthComparison.pctVar) >= 0 ? '↑' : '↓'} {Math.abs(Number(monthComparison.pctVar))}% vs. mes anterior
-                  </span>
-                )}
-                {monthComparison.bestDay && (
-                  <span className="text-xs text-zinc-500">Mejor día: <span className="text-green-400">día {monthComparison.bestDay} ({formatCurrency(monthComparison.bestAmount)})</span></span>
-                )}
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-zinc-500">Este mes</p>
-              <p className="text-lg font-bold text-white tabular-nums">{formatCurrency(monthComparison.totalEste)}</p>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={monthComparison.days} margin={{ left: -10, right: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
-              <XAxis dataKey="day" stroke="#3f3f3f" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false}
-                tickFormatter={v => `${v}`} />
-              <YAxis stroke="#3f3f3f" tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false}
-                tickFormatter={v => v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#111', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 12 }}
-                formatter={(v, name) => [formatCurrency(v), name]}
-                labelFormatter={v => `Día ${v}`}
-              />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#6b7280' }} />
-              <Line type="monotone" dataKey="este_mes"      name="Este mes"      stroke="#e91e8c" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-              <Line type="monotone" dataKey="mes_anterior"  name="Mes anterior"  stroke="#4b5563" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-
-          {/* Comparativa por categoría */}
-          {categoryComp.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <h4 className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-3">Categorías — este mes vs. anterior</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {categoryComp.slice(0, 6).map(c => (
-                  <div key={c.category} className="flex items-center justify-between bg-surface rounded-lg px-3 py-2">
-                    <span className="text-xs text-zinc-400 truncate mr-2">{c.category}</span>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-xs font-medium text-white tabular-nums">{formatCurrency(c.este_mes)}</span>
-                      {c.pct !== null && (
-                        <span className={`text-[10px] font-semibold ${Number(c.pct) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {Number(c.pct) >= 0 ? '+' : ''}{c.pct}%
-                        </span>
-                      )}
+            <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+              {stockBreaks.slice(0, 8).map((b, i) => {
+                const dot = b.level === 'red' ? '🔴' : b.level === 'orange' ? '🟠' : '🟡'
+                return (
+                  <div key={i} className="flex items-center gap-2 bg-surface border border-border rounded-lg px-2.5 py-2">
+                    <span className="shrink-0">{dot}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-white truncate">{b.product_name} T.{b.size}</p>
+                      <p className="text-[10px] text-zinc-500">Se acaba en {b.days_left} día{b.days_left !== 1 ? 's' : ''} · quedan {b.current_stock} u.</p>
                     </div>
+                    <button onClick={() => navigate('/reposicion')}
+                      className="text-[10px] text-accent hover:text-white border border-accent/30 hover:bg-accent/10 rounded-lg px-2 py-1 no-drag shrink-0">
+                      Crear pedido
+                    </button>
                   </div>
-                ))}
-              </div>
+                )
+              })}
             </div>
           )}
-        </motion.div>
-      )}
+        </Card>
 
-      {/* Sales heatmap */}
-      {Object.keys(heatmapData).length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.43 }}
-          className="bg-card border border-border rounded-xl p-4"
-        >
-          <h3 className="text-sm font-medium text-white mb-4">Mapa de calor de ventas — últimos 90 días</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '32px repeat(24, 1fr)', gap: 2 }}>
-            <div />
-            {HOURS.map(h => (
-              <div key={h} className="text-[9px] text-zinc-600 text-center">{h}h</div>
-            ))}
-            {DAYS_ES.map((day, dow) => {
-              const rowVals = HOURS.map(h => heatmapData[`${dow}-${String(h).padStart(2, '0')}`]?.count || 0)
-              const maxVal = Math.max(...Object.values(heatmapData).map(v => v.count), 1)
-              return [
-                <div key={`label-${dow}`} className="text-[10px] text-zinc-500 flex items-center">{day}</div>,
-                ...HOURS.map(h => {
-                  const cell = heatmapData[`${dow}-${String(h).padStart(2, '0')}`]
-                  const val = cell?.count || 0
-                  const intensity = val / maxVal
-                  return (
-                    <div
-                      key={`${dow}-${h}`}
-                      title={val > 0 ? `${day} ${h}h: ${val} venta${val !== 1 ? 's' : ''}` : ''}
-                      className="rounded-sm"
-                      style={{
-                        height: 14,
-                        backgroundColor: val > 0
-                          ? `rgba(0,200,83,${0.1 + intensity * 0.75})`
-                          : 'rgba(255,255,255,0.03)',
-                      }}
-                    />
-                  )
-                }),
-              ]
-            })}
-          </div>
-          <div className="flex items-center gap-2 mt-3 justify-end">
-            <span className="text-[10px] text-zinc-600">Menos</span>
-            {[0.1, 0.3, 0.55, 0.75, 0.85].map(v => (
-              <div key={v} className="w-3 h-3 rounded-sm" style={{ backgroundColor: `rgba(0,200,83,${v})` }} />
-            ))}
-            <span className="text-[10px] text-zinc-600">Más</span>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Birthdays today */}
-      {todayBirthdays.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-card border border-border rounded-xl overflow-hidden"
-        >
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Cake size={15} className="text-pink-400" />
-            <h3 className="text-sm font-medium text-white">Cumpleaños de hoy — {todayBirthdays.length} {todayBirthdays.length === 1 ? 'clienta' : 'clientas'}</h3>
-          </div>
-          <div className="divide-y divide-border">
-            {todayBirthdays.map(client => {
-              const url = whatsappUrl(client, birthdayMsg)
-              return (
-                <div key={client.id} className="row-alt flex items-center justify-between px-4 py-2.5 text-sm transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-7 h-7 rounded-full bg-pink-500/10 flex items-center justify-center shrink-0">
-                      <Cake size={13} className="text-pink-400" />
-                    </span>
-                    <span className="text-zinc-200 font-medium truncate">{client.name}</span>
-                    {client.phone && <span className="text-zinc-600 text-xs shrink-0">{client.phone}</span>}
+        {/* Recomendaciones IA */}
+        <Card className="p-4">
+          <SectionTitle icon={Brain}>DELPA recomienda</SectionTitle>
+          {recCards.length === 0 ? (
+            <div className="flex items-center gap-2 text-sm text-zinc-400 py-4"><Sparkles size={16} className="text-accent" /> Todo en orden por ahora.</div>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+              {recCards.map((c, i) => (
+                <div key={i} className="flex items-start gap-2.5 bg-surface border border-border rounded-lg px-3 py-2.5">
+                  <c.icon size={16} className={cn('mt-0.5 shrink-0', c.tone)} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-zinc-300 leading-snug">{c.text}</p>
+                    <button onClick={() => navigate(c.go)} className="text-[11px] text-accent hover:text-white mt-1 no-drag">{c.action} →</button>
                   </div>
-                  {url && (
-                    <button
-                      onClick={() => api.shell.openExternal(url)}
-                      className="no-drag shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
-                    >
-                      <MessageCircle size={12} /> WhatsApp
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Profitability & Projection */}
-      {monthlyProfit && (
-        <div className="grid grid-cols-2 gap-4">
-          {/* Real profitability */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.44 }}
-            className="bg-card border border-border rounded-xl p-4 space-y-3"
-          >
-            <h3 className="text-sm font-medium text-white flex items-center gap-2">
-              <DollarSign size={14} className="text-accent" /> Rentabilidad real del mes
-            </h3>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-500">Ventas del mes</span>
-                <span className="font-semibold tabular-nums text-zinc-300">{formatCurrency(monthlyProfit.monthlySales)}</span>
-              </div>
-              {[
-                { label: 'Ganancia bruta', value: monthlyProfit.grossProfit, color: 'text-green-400' },
-                { label: 'Gastos variables', value: -monthlyProfit.monthlyExpenses, color: 'text-red-400' },
-                { label: 'Gastos fijos', value: -monthlyProfit.fixedCostsTotal, color: 'text-amber-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between text-xs">
-                  <span className="text-zinc-500">{label}</span>
-                  <span className={`font-semibold tabular-nums ${color}`}>{formatCurrency(Math.abs(value))}</span>
                 </div>
               ))}
-              <div className="border-t border-border pt-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-white">Ganancia neta</span>
-                <span className={`text-base font-bold tabular-nums ${monthlyProfit.realProfit >= 0 ? 'text-accent' : 'text-red-400'}`}>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ══ SECCIÓN 7 — FINANCIERO DEL MES ══ */}
+      <div className="grid lg:grid-cols-3 gap-3">
+        {/* Rentabilidad real */}
+        <Card className="p-4">
+          <SectionTitle icon={DollarSign}>Rentabilidad del mes</SectionTitle>
+          {!monthlyProfit ? <EmptyMini>Sin datos</EmptyMini> : (
+            <div className="space-y-1.5 text-sm">
+              <Row label="Total ventas" value={monthlyProfit.monthlySales} />
+              <Row label="Ganancia bruta" value={monthlyProfit.grossProfit} valueClass="text-green-400" />
+              <Row label="Gastos variables" value={-monthlyProfit.monthlyExpenses} valueClass="text-red-400" />
+              <Row label="Gastos fijos" value={-monthlyProfit.fixedCostsTotal} valueClass="text-amber-400" />
+              <div className="border-t border-border my-1.5" />
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-300 font-medium">Ganancia neta</span>
+                <span className={cn('text-base font-bold tabular-nums', monthlyProfit.realProfit >= 0 ? 'text-accent' : 'text-red-400')}>
                   {formatCurrency(monthlyProfit.realProfit)}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-zinc-600">Margen sobre ventas</span>
-                <span className={`font-semibold tabular-nums ${monthlyProfit.margin >= 0 ? 'text-accent/80' : 'text-red-400'}`}>
-                  {monthlyProfit.margin.toFixed(1)}%
-                </span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Margen</span>
+                <span className={cn('font-semibold', marginColor(monthlyProfit.margin))}>{monthlyProfit.margin.toFixed(1)}%</span>
               </div>
-            </div>
-          </motion.div>
-
-          {/* Monthly projection */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.46 }}
-            className="bg-card border border-border rounded-xl p-4 space-y-3"
-          >
-            <h3 className="text-sm font-medium text-white flex items-center gap-2">
-              <TrendingUp size={14} className="text-blue-400" /> Proyección del mes
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-zinc-500">Ventas hasta hoy</span>
-                <span className="text-white font-semibold tabular-nums">{formatCurrency(monthlyProfit.monthlySales)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500">Proyección total</span>
-                <span className="text-blue-400 font-semibold tabular-nums">{formatCurrency(monthlyProfit.projected)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-500">Días restantes</span>
-                <span className="text-zinc-300">{monthlyProfit.daysLeft} de {monthlyProfit.daysInMonth}</span>
-              </div>
-              {monthlyProfit.monthlyGoal > 0 && (
-                <div className="pt-2 space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Meta mensual</span>
-                    <span className="text-zinc-300 tabular-nums">{formatCurrency(monthlyProfit.monthlyGoal)}</span>
-                  </div>
-                  <div className="w-full bg-white/[0.06] rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-2 rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(100, (monthlyProfit.monthlySales / monthlyProfit.monthlyGoal) * 100).toFixed(1)}%`,
-                        background: monthlyProfit.monthlySales >= monthlyProfit.monthlyGoal ? '#00c853' : '#3b82f6',
-                      }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-zinc-600 text-right">
-                    {((monthlyProfit.monthlySales / monthlyProfit.monthlyGoal) * 100).toFixed(1)}% de la meta
-                  </p>
+              {monthComp?.pctVar !== null && monthComp?.pctVar !== undefined && (
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-zinc-500">Ventas vs. mes anterior</span>
+                  <Delta pct={Number(monthComp.pctVar)} />
                 </div>
               )}
             </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Top clientas del mes + Deuda con WhatsApp */}
-      {(topClientsMonth.length > 0 || overdueDebt.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {topClientsMonth.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
-              className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <Crown size={15} className="text-amber-400" />
-                <h3 className="text-sm font-medium text-white">Top clientas del mes</h3>
-              </div>
-              <div className="divide-y divide-border">
-                {topClientsMonth.map((c, i) => (
-                  <div key={c.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-lg shrink-0">{['🥇', '🥈', '🥉'][i] || '•'}</span>
-                      <span className="text-zinc-200 truncate">{c.name}</span>
-                      <span className="text-zinc-600 text-xs shrink-0">{c.points || 0} pts</span>
-                    </div>
-                    <span className="text-white font-semibold tabular-nums shrink-0">{formatCurrency(c.total)}</span>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
           )}
-          {overdueDebt.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.46 }}
-              className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <Wallet size={15} className="text-red-400" />
-                <h3 className="text-sm font-medium text-white">Clientas con saldo pendiente</h3>
-              </div>
-              <div className="divide-y divide-border">
-                {overdueDebt.map((c) => {
-                  const url = whatsappUrl(c, `Hola [nombre]! Te recordamos que tenés un saldo pendiente en tu cuenta. ¡Gracias!`)
-                  return (
-                    <div key={c.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                        <span className="text-zinc-200 truncate">{c.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-red-400 font-bold tabular-nums">{formatCurrency(c.balance)}</span>
-                        {url && (
-                          <button onClick={() => api.shell.openExternal(url)}
-                            className="no-drag flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors">
-                            <MessageCircle size={12} /> WhatsApp
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </motion.div>
-          )}
-        </div>
-      )}
+        </Card>
 
-      {/* Low stock */}
-      {lowStock.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.42 }}
-          className="bg-card border border-border rounded-xl overflow-hidden"
-        >
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <AlertTriangle size={15} className="text-amber-400" />
-            <h3 className="text-sm font-medium text-white">Stock mínimo — {lowStock.length} alertas</h3>
-          </div>
-          <div className="divide-y divide-border max-h-52 overflow-y-auto">
-            {lowStock.map((item, i) => (
-              <div key={i} className="row-alt flex items-center justify-between px-4 py-2 text-sm transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${item.stock === 0 ? 'bg-red-500' : 'bg-amber-500'}`} />
-                  <span className="text-zinc-200 truncate">{item.name}</span>
-                  <span className="text-zinc-600 shrink-0">T.{item.size}</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className={`font-bold tabular-nums ${item.stock === 0 ? 'text-red-400' : 'text-amber-400'}`}>
-                    {item.stock} ud.
-                  </span>
-                  <span className="text-zinc-700 text-xs">mín {item.min_stock}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Intelligence widgets */}
-      {!intelligenceLoading && intelligenceRecs.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="bg-card border border-border rounded-xl overflow-hidden"
-        >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Brain size={15} className="text-purple-400" />
-              <h3 className="text-sm font-medium text-white">Recomendaciones inteligentes</h3>
-            </div>
-            <button onClick={() => navigate('/reposicion')}
-              className="no-drag text-xs text-accent hover:underline">Ver pedidos →</button>
-          </div>
-          <div className="divide-y divide-border">
-            {intelligenceRecs.map((rec, i) => {
-              const urgencyConfig = {
-                critical: { dot: 'bg-red-500', text: 'text-red-400', badge: 'bg-red-500/10 text-red-400 border-red-500/30', label: 'Crítico' },
-                high:     { dot: 'bg-orange-400', text: 'text-orange-400', badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30', label: 'Alto' },
-                seasonal: { dot: 'bg-blue-400', text: 'text-blue-400', badge: 'bg-blue-500/10 text-blue-400 border-blue-500/30', label: 'Estacional' },
-                medium:   { dot: 'bg-amber-400', text: 'text-amber-400', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', label: 'Medio' },
+        {/* Flujo de caja */}
+        <Card className="p-4">
+          <SectionTitle icon={TrendingUp}>Flujo de caja proyectado</SectionTitle>
+          {!cashflow?.projection ? <EmptyMini>Sin datos</EmptyMini> : (() => {
+            const weeks = [0, 1, 2, 3].map(w => {
+              const slice = cashflow.projection.slice(w * 7, w * 7 + 7)
+              return {
+                label: `Sem ${w + 1}`,
+                ingresos: Math.round(slice.reduce((s, d) => s + d.ingresos, 0)),
+                egresos: Math.round(slice.reduce((s, d) => s + d.egresos, 0)),
               }
-              const uc = urgencyConfig[rec.urgency] || urgencyConfig.medium
-              return (
-                <div key={i} className="row-alt flex items-start justify-between px-4 py-3 text-sm transition-colors">
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${uc.dot}`} />
-                    <div className="min-w-0">
-                      <p className="text-zinc-200 text-xs leading-relaxed">{rec.message}</p>
-                      <p className="text-zinc-600 text-[10px] mt-0.5">
-                        Stock actual: {rec.current_stock} u. · Velocidad: {rec.daily_velocity} u/día · Necesitás: {rec.units_needed} u.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${uc.badge}`}>{uc.label}</span>
-                    <button onClick={() => navigate('/reposicion')}
-                      className="no-drag text-xs text-accent hover:underline whitespace-nowrap">Crear pedido</button>
-                  </div>
+            })
+            const finalBalance = cashflow.projection[cashflow.projection.length - 1]?.balance || 0
+            return (
+              <>
+                <ResponsiveContainer width="100%" height={150}>
+                  <BarChart data={weeks} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
+                    <XAxis dataKey="label" stroke="#52525b" tick={{ fontSize: 10 }} />
+                    <YAxis stroke="#52525b" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={40} />
+                    <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ background: '#000', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 12 }} />
+                    <Bar dataKey="ingresos" stackId="a" fill="#22c55e" name="Ingresos" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="egresos" stackId="b" fill="#ef4444" name="Egresos" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex items-center justify-between text-xs mt-2">
+                  <span className="text-zinc-500">Saldo proyectado fin de mes</span>
+                  <span className={cn('font-bold tabular-nums', finalBalance >= 0 ? 'text-accent' : 'text-red-400')}>{formatCurrency(finalBalance)}</span>
                 </div>
-              )
-            })}
-          </div>
-        </motion.div>
-      )}
+              </>
+            )
+          })()}
+        </Card>
 
-      {/* ── Widget: Stock Especular ──────────────────────────────────── */}
-      {stockSpecular.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.04 }}
-          className="bg-card border border-amber-900/30 rounded-xl overflow-hidden"
-        >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Archive size={15} className="text-amber-400" />
-              <h3 className="text-sm font-medium text-white">Capital inmovilizado — sin movimiento 60 días</h3>
-              <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                {formatCurrency(stockSpecular.reduce((s, r) => s + r.capital_inmovilizado, 0))}
-              </span>
-            </div>
-            <button onClick={() => navigate('/remitos')}
-              className="no-drag text-xs text-accent hover:underline">Crear remito →</button>
-          </div>
-          <div className="divide-y divide-border max-h-52 overflow-y-auto">
-            {stockSpecular.slice(0, 10).map((item, i) => (
-              <div key={i} className="row-alt flex items-center justify-between px-4 py-2.5 text-sm transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                  <span className="text-zinc-200 truncate">{item.product_name}</span>
-                  <span className="text-zinc-600 text-xs shrink-0">T.{item.size}</span>
-                  <span className="text-zinc-700 text-xs shrink-0">{item.stock} u.</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-amber-400 font-bold text-xs tabular-nums">{formatCurrency(item.capital_inmovilizado)}</span>
-                  <span className="text-zinc-600 text-[10px]">Desc. sugerido: {formatCurrency(item.discount_price)}</span>
-                </div>
+        {/* Control fiscal */}
+        <Card className="p-4">
+          <SectionTitle icon={Receipt}>Control fiscal</SectionTitle>
+          {!fiscal ? <EmptyMini>Sin datos</EmptyMini> : fiscal.regimen === 'MONO' ? (
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs mb-1"><span className="text-zinc-500">Mes (cat. {fiscal.monoCategoria})</span>
+                  <span className="text-zinc-300 tabular-nums">{(fiscal.pctMes || 0).toFixed(0)}%</span></div>
+                <ProgressBar pct={fiscal.pctMes || 0} color={fiscal.alertaMes === 'roja' ? '#ef4444' : fiscal.alertaMes === 'amarilla' ? '#f59e0b' : '#22c55e'} />
+                <p className="text-[10px] text-zinc-600 mt-0.5">{formatCurrency(fiscal.facturadoMes)} de {formatCurrency(fiscal.limiteMes)}</p>
               </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* ── Widget: Flujo de Caja Proyectado ─────────────────────────── */}
-      {cashflow && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06 }}
-          className={`bg-card rounded-xl p-4 border ${
-            cashflow.status === 'red' ? 'border-red-900/40' :
-            cashflow.status === 'yellow' ? 'border-amber-900/40' : 'border-border'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={15} className={cashflow.status === 'green' ? 'text-green-400' : cashflow.status === 'yellow' ? 'text-amber-400' : 'text-red-400'} />
-              <h3 className="text-sm font-medium text-white">Flujo de caja proyectado — próximos 30 días</h3>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="text-zinc-500">Ingreso prom: <span className="text-green-400 font-medium">{formatCurrency(cashflow.avgDaily)}/día</span></span>
-              <span className="text-zinc-500">Egreso prom: <span className="text-red-400 font-medium">{formatCurrency(cashflow.avgExpDaily)}/día</span></span>
-              <div className={`w-3 h-3 rounded-full shrink-0 ${cashflow.status === 'green' ? 'bg-green-500' : cashflow.status === 'yellow' ? 'bg-amber-400' : 'bg-red-500'}`} title={`${cashflow.negativeDays} días negativos`} />
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={cashflow.projection} margin={{ left: -10, right: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
-              <XAxis dataKey="day" stroke="#3f3f3f" tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false}
-                tickFormatter={v => `D${v}`} interval={4} />
-              <YAxis stroke="#3f3f3f" tick={{ fontSize: 9, fill: '#6b7280' }} tickLine={false}
-                tickFormatter={v => v >= 0 ? `$${(v/1000).toFixed(0)}k` : `-$${(Math.abs(v)/1000).toFixed(0)}k`} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#111', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 11 }}
-                formatter={(v, name) => [formatCurrency(v), name]}
-                labelFormatter={v => `Día ${v}`}
-              />
-              <Area type="monotone" dataKey="balance" name="Balance" stroke="#00c853" fill="rgba(0,200,83,0.08)" strokeWidth={2} dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-          {cashflow.negativeDays > 0 && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-              <AlertTriangle size={12} />
-              ⚠ {cashflow.negativeDays} día{cashflow.negativeDays !== 1 ? 's' : ''} con balance negativo proyectado — considerá reducir egresos o incrementar ventas
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      {/* ── Widget: Punto de Equilibrio ───────────────────────────────── */}
-      {breakeven && breakeven.fixedCosts > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08 }}
-          className={`bg-card rounded-xl p-4 border ${breakeven.achieved ? 'border-green-900/40' : 'border-border'}`}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Target size={15} className={breakeven.achieved ? 'text-green-400' : 'text-accent'} />
-            <h3 className="text-sm font-medium text-white">Punto de equilibrio — {new Date().toLocaleString('es-AR', { month: 'long', year: 'numeric' })}</h3>
-            {breakeven.achieved && (
-              <span className="ml-auto text-xs bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full">
-                ✓ Gastos cubiertos
-              </span>
-            )}
-          </div>
-
-          {breakeven.achieved ? (
-            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
-              <p className="text-green-400 font-bold text-base">¡Ya cubriste los gastos fijos del mes!</p>
-              <p className="text-xs text-zinc-500 mt-1">
-                Vendiste {formatCurrency(breakeven.monthlySales)} vs punto de equilibrio {formatCurrency(breakeven.breakeven)}
-              </p>
+              <div>
+                <div className="flex justify-between text-xs mb-1"><span className="text-zinc-500">Año</span>
+                  <span className="text-zinc-300 tabular-nums">{(fiscal.pctAnio || 0).toFixed(0)}%</span></div>
+                <ProgressBar pct={fiscal.pctAnio || 0} color={fiscal.alertaAnio === 'roja' ? '#ef4444' : fiscal.alertaAnio === 'amarilla' ? '#f59e0b' : '#22c55e'} />
+                <p className="text-[10px] text-zinc-600 mt-0.5">{formatCurrency(fiscal.facturadoAnio)} de {formatCurrency(fiscal.limiteAnual)}</p>
+              </div>
+              {(fiscal.alertaMes !== 'ok' || fiscal.alertaAnio !== 'ok') && (
+                <p className="text-[11px] text-amber-400 flex items-center gap-1"><AlertTriangle size={12} /> Cerca del límite de facturación</p>
+              )}
+              <p className="text-[10px] text-zinc-600">* Solo facturas con CAE de AFIP</p>
             </div>
           ) : (
+            <div className="space-y-1.5 text-sm">
+              <Row label="Débito fiscal" value={fiscal.debitoFiscal || 0} valueClass="text-red-400" />
+              <Row label="Crédito fiscal" value={fiscal.creditoFiscal || 0} valueClass="text-green-400" />
+              <div className="border-t border-border my-1.5" />
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-300 font-medium">Posición IVA</span>
+                <span className={cn('font-bold tabular-nums', (fiscal.posicionIva || 0) >= 0 ? 'text-red-400' : 'text-green-400')}>{formatCurrency(fiscal.posicionIva || 0)}</span>
+              </div>
+              {fiscal.vencimientoDDJJ && <p className="text-[11px] text-zinc-500">Vence DDJJ: {fiscal.vencimientoDDJJ}</p>}
+              <p className="text-[10px] text-zinc-600">* Solo facturas con CAE de AFIP</p>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ══ SECCIÓN 8 — CLIENTES Y FIDELIZACIÓN ══ */}
+      <div className="grid lg:grid-cols-2 gap-3">
+        {/* Top clientas del mes */}
+        <Card className="p-4">
+          <SectionTitle icon={Crown}>Top clientas del mes</SectionTitle>
+          {topClients.length === 0 ? <EmptyMini>Sin ventas con cliente este mes</EmptyMini> : (
             <div className="space-y-2">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-zinc-400">Ventas del mes</span>
-                <span className="text-white font-medium">{formatCurrency(breakeven.monthlySales)} <span className="text-zinc-600">/ {formatCurrency(breakeven.breakeven)}</span></span>
-              </div>
-              <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${breakeven.pct >= 80 ? 'bg-green-500' : breakeven.pct >= 50 ? 'bg-amber-400' : 'bg-accent'}`}
-                  style={{ width: `${Math.min(100, breakeven.pct)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] text-zinc-600">
-                <span>{breakeven.pct.toFixed(0)}% del punto de equilibrio</span>
-                <span>Faltan {formatCurrency(breakeven.remaining)} para cubrir gastos</span>
-              </div>
+              {topClients.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-3">
+                  <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
+                    i === 0 ? 'bg-accent/20 text-accent' : 'bg-white/5 text-zinc-400')}>
+                    {(c.name || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate flex items-center gap-1">
+                      {c.name}{i === 0 && <span className="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">👑 VIP</span>}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">{c.count} compras · {c.points || 0} pts</p>
+                  </div>
+                  <span className="text-sm font-semibold text-white tabular-nums shrink-0">{formatCurrency(c.total)}</span>
+                </div>
+              ))}
             </div>
           )}
+        </Card>
 
-          <div className="grid grid-cols-3 gap-3 mt-3">
-            {[
-              { label: 'Gastos fijos/mes', value: formatCurrency(breakeven.fixedCosts), color: 'text-red-400' },
-              { label: 'Margen contribución', value: `${(breakeven.marginRate * 100).toFixed(0)}%`, color: 'text-blue-400' },
-              { label: 'Punto de equilibrio', value: formatCurrency(breakeven.breakeven), color: 'text-white' },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="bg-surface rounded-lg px-3 py-2">
-                <p className="text-[10px] text-zinc-600 uppercase">{label}</p>
-                <p className={`text-sm font-bold tabular-nums mt-0.5 ${color}`}>{value}</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* ── Widget: Score de Salud del Negocio ────────────────────────── */}
-      {healthScore && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.09 }}
-          className={`bg-card rounded-xl p-4 border ${
-            healthScore.color === 'green' ? 'border-green-900/40' :
-            healthScore.color === 'yellow' ? 'border-amber-900/40' :
-            healthScore.color === 'orange' ? 'border-orange-900/40' : 'border-red-900/40'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <Activity size={15} className={
-              healthScore.color === 'green' ? 'text-green-400' :
-              healthScore.color === 'yellow' ? 'text-amber-400' :
-              healthScore.color === 'orange' ? 'text-orange-400' : 'text-red-400'
-            } />
-            <h3 className="text-sm font-medium text-white">Score de salud del negocio</h3>
-          </div>
-
-          <div className="flex items-center gap-6">
-            {/* Score circle */}
-            <div className="flex flex-col items-center shrink-0">
-              <div className={`w-20 h-20 rounded-full flex flex-col items-center justify-center border-4 ${
-                healthScore.color === 'green' ? 'border-green-500 bg-green-500/10' :
-                healthScore.color === 'yellow' ? 'border-amber-400 bg-amber-500/10' :
-                healthScore.color === 'orange' ? 'border-orange-400 bg-orange-500/10' : 'border-red-500 bg-red-500/10'
-              }`}>
-                <span className={`text-2xl font-black tabular-nums ${
-                  healthScore.color === 'green' ? 'text-green-400' :
-                  healthScore.color === 'yellow' ? 'text-amber-400' :
-                  healthScore.color === 'orange' ? 'text-orange-400' : 'text-red-400'
-                }`}>{healthScore.total}</span>
-                <span className="text-[9px] text-zinc-600 uppercase tracking-wider">/ 100</span>
-              </div>
-              <span className={`text-xs font-semibold mt-1 ${
-                healthScore.color === 'green' ? 'text-green-400' :
-                healthScore.color === 'yellow' ? 'text-amber-400' :
-                healthScore.color === 'orange' ? 'text-orange-400' : 'text-red-400'
-              }`}>{healthScore.label}</span>
+        {/* Fidelización */}
+        <Card className="p-4">
+          <SectionTitle icon={Sparkles}>Estado de fidelización</SectionTitle>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="bg-surface border border-border rounded-lg p-2.5">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Puntos activos</p>
+              <p className="text-lg font-bold text-white tabular-nums">{(extras?.puntos?.active || 0).toLocaleString('es-AR')}</p>
             </div>
-
-            {/* Category bars */}
-            <div className="flex-1 space-y-2">
-              {healthScore.scores.map(s => (
-                <div key={s.label}>
-                  <div className="flex justify-between text-[11px] mb-0.5">
-                    <span className="text-zinc-400">{s.label}</span>
-                    <span className="text-zinc-500 tabular-nums">{s.pts}/{s.max}</span>
-                  </div>
-                  <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        s.pts / s.max >= 0.8 ? 'bg-green-500' :
-                        s.pts / s.max >= 0.5 ? 'bg-amber-400' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${(s.pts / s.max) * 100}%` }}
-                    />
+            <div className="bg-surface border border-border rounded-lg p-2.5">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Por vencer este mes</p>
+              <p className="text-lg font-bold text-amber-400 tabular-nums">{(extras?.puntos?.porVencer || 0).toLocaleString('es-AR')}</p>
+            </div>
+            <div className="bg-surface border border-border rounded-lg p-2.5">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Nuevas clientas</p>
+              <p className="text-lg font-bold text-green-400 tabular-nums">
+                {extras?.nuevasClientas?.esteMes || 0}
+                <span className="text-[11px] text-zinc-600 font-normal"> vs {extras?.nuevasClientas?.mesAnterior || 0} mes ant.</span>
+              </p>
+            </div>
+            <div className="bg-surface border border-border rounded-lg p-2.5">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Con deuda vencida</p>
+              <p className="text-lg font-bold text-red-400 tabular-nums">{overdue.length}</p>
+            </div>
+          </div>
+          {overdue.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-zinc-500 uppercase tracking-wider">Cobranzas pendientes</p>
+              {overdue.map(c => (
+                <div key={c.id} className="flex items-center justify-between gap-2 bg-surface border border-border rounded-lg px-2.5 py-1.5">
+                  <span className="text-xs text-white truncate">{c.name}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold text-red-400 tabular-nums">{formatCurrency(c.balance)}</span>
+                    {waLink(c.phone) && (
+                      <a href={waLink(c.phone)} target="_blank" rel="noreferrer"
+                        onClick={(e) => { e.preventDefault(); api.shell.openExternal(waLink(c.phone)) }}
+                        className="text-green-400 hover:text-green-300 no-drag"><MessageCircle size={14} /></a>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          )}
+        </Card>
+      </div>
 
-          {/* Tips drilldown */}
-          <button
-            onClick={() => setHealthDrilldown(v => !v)}
-            className="no-drag mt-3 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-accent transition-colors"
-          >
-            {healthDrilldown ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            {healthDrilldown ? 'Ocultar consejos' : 'Ver consejos para mejorar'}
+      {/* ══ SECCIÓN 9 — SCORE DE SALUD ══ */}
+      <Card className="p-4">
+        <SectionTitle icon={Activity} right={
+          health && <span className="text-xs text-zinc-500">Tu negocio está al <span className="text-white font-semibold">{health.total}%</span> de su potencial</span>
+        }>Score de salud del negocio</SectionTitle>
+        {!health ? <EmptyMini>Sin datos</EmptyMini> : (
+          <>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-4xl font-bold tabular-nums" style={{ color: health.color === 'green' ? '#22c55e' : health.color === 'yellow' ? '#f59e0b' : health.color === 'orange' ? '#f97316' : '#ef4444' }}>
+                {health.total}
+              </span>
+              <div className="flex-1">
+                <div className="flex h-3 rounded-full overflow-hidden bg-black/40">
+                  {health.scores.map((s, i) => (
+                    <div key={i} title={s.label} style={{ width: `${s.max}%`, background: s.pts / s.max >= 0.75 ? '#22c55e' : s.pts / s.max >= 0.5 ? '#f59e0b' : '#ef4444', opacity: 0.3 + 0.7 * (s.pts / s.max) }} />
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500 mt-1">{health.label}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {health.scores.map((s, i) => {
+                const ratio = s.pts / s.max
+                const color = ratio >= 0.75 ? 'text-green-400' : ratio >= 0.5 ? 'text-amber-400' : 'text-red-400'
+                return (
+                  <div key={i} className="bg-surface border border-border rounded-lg p-2.5">
+                    <p className="text-[11px] text-zinc-500">{s.label}</p>
+                    <p className={cn('text-lg font-bold tabular-nums', color)}>{s.pts}<span className="text-zinc-600 text-xs">/{s.max}</span></p>
+                    {s.tip && <p className="text-[10px] text-zinc-600 leading-tight mt-0.5">{s.tip}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* ══ SECCIÓN 10 — ACCESOS RÁPIDOS ══ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        {[
+          { icon: PlusCircle, label: 'Nueva venta', go: '/ventas' },
+          { icon: PackagePlus, label: 'Ingresar mercadería', go: '/ingreso' },
+          { icon: UserSearch, label: 'Buscar clienta', go: '/clientes' },
+          { icon: FileBarChart, label: 'Ver informes', go: '/informes' },
+          { icon: Wallet, label: 'Abrir caja', go: '/caja' },
+          { icon: Ruler, label: 'Buscar por talle', go: '/productos' },
+        ].map((b, i) => (
+          <button key={i} onClick={() => navigate(b.go)}
+            className="flex flex-col items-center justify-center gap-1.5 bg-card border border-border rounded-xl py-4 hover:border-accent/40 hover:bg-accent/5 transition-colors no-drag group">
+            <b.icon size={20} className="text-zinc-400 group-hover:text-accent transition-colors" />
+            <span className="text-xs text-zinc-400 group-hover:text-white text-center px-1">{b.label}</span>
           </button>
-          {healthDrilldown && (
-            <div className="mt-3 space-y-1.5">
-              {healthScore.scores.filter(s => s.tip).map(s => (
-                <div key={s.label} className="flex items-start gap-2 text-xs bg-surface rounded-lg px-3 py-2">
-                  <span className="text-amber-400 shrink-0 mt-0.5">→</span>
-                  <span className="text-zinc-300"><span className="text-zinc-500">{s.label}:</span> {s.tip}</span>
-                </div>
-              ))}
-              {healthScore.scores.every(s => !s.tip) && (
-                <p className="text-xs text-green-400 text-center py-2">¡Todo en orden! Seguí así.</p>
-              )}
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      {!intelligenceLoading && stockBreaks.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.07 }}
-          className="bg-card border border-red-900/30 rounded-xl overflow-hidden"
-        >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Zap size={15} className="text-red-400" />
-              <h3 className="text-sm font-medium text-white">Alertas de quiebre de stock</h3>
-              <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">{stockBreaks.length} alertas</span>
-            </div>
-            <button onClick={() => navigate('/reposicion')}
-              className="no-drag text-xs text-accent hover:underline">Pedir ahora →</button>
-          </div>
-          <div className="divide-y divide-border max-h-52 overflow-y-auto">
-            {stockBreaks.map((item, i) => {
-              const levelConfig = {
-                red:    { dot: 'bg-red-500',    text: 'text-red-400',    label: `${item.days_left}d` },
-                orange: { dot: 'bg-orange-400', text: 'text-orange-400', label: `${item.days_left}d` },
-                yellow: { dot: 'bg-amber-400',  text: 'text-amber-400',  label: `${item.days_left}d` },
-              }
-              const lc = levelConfig[item.level] || levelConfig.yellow
-              return (
-                <div key={i} className="row-alt flex items-center justify-between px-4 py-2.5 text-sm transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${lc.dot}`} />
-                    <span className="text-zinc-200 truncate">{item.product_name}</span>
-                    <span className="text-zinc-600 text-xs shrink-0">T.{item.size}</span>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-zinc-500 text-xs tabular-nums">{item.current_stock} en stock</span>
-                    <span className={`font-bold text-xs tabular-nums ${lc.text}`}>{lc.label} restantes</span>
-                    <button onClick={() => navigate('/reposicion')}
-                      className="no-drag text-xs text-zinc-500 hover:text-accent transition-colors">Pedir</button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </motion.div>
-      )}
+        ))}
+      </div>
     </motion.div>
+  )
+}
+
+// ── Fila de tabla financiera ──────────────────────────────────────────────────
+function Row({ label, value, valueClass }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-zinc-500">{label}</span>
+      <span className={cn('font-semibold tabular-nums', valueClass || 'text-zinc-300')}>{formatCurrency(value)}</span>
+    </div>
+  )
+}
+
+// ── Badge de conexión ─────────────────────────────────────────────────────────
+function ConnBadge({ icon: Icon, label, ok }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border',
+      ok ? 'border-green-500/30 text-green-400 bg-green-500/5' : 'border-border text-zinc-500')}>
+      <Icon size={12} /> {label} {ok ? '✓' : '·'}
+    </span>
   )
 }

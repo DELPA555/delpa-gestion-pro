@@ -7,7 +7,6 @@ const PING_URL = 'https://script.google.com/macros/s/AKfycbxZfzVmml8GljdWS4Pw7Mu
 const PLACEHOLDER_NAMES = ['', 'DELPA', 'DELPA GESTION PRO', 'DELPA GESTIÓN PRO']
 
 function getLicenseData(db) {
-  const TRIAL_DAYS = 20
   const licRow = db.prepare("SELECT value FROM settings WHERE key='license_code'").get()
   const expiryRow = db.prepare("SELECT value FROM settings WHERE key='license_expiry'").get()
   if (licRow?.value && expiryRow?.value) {
@@ -18,13 +17,15 @@ function getLicenseData(db) {
     const daysLeft = Math.ceil((expMs - Date.now()) / 86400000)
     return { licenseStatus: daysLeft >= 0 ? 'active' : 'expired', daysLeft: Math.max(0, daysLeft) }
   }
+  const savedTrial = db.prepare("SELECT value FROM settings WHERE key='license_trial_days'").get()
+  const trialDays = savedTrial?.value ? (Number(savedTrial.value) || 20) : 20 // grandfather de instalaciones previas
   const instRow = db.prepare("SELECT value FROM settings WHERE key='license_installed_at'").get()
   if (instRow?.value) {
     const daysPassed = Math.floor((Date.now() - new Date(instRow.value).getTime()) / 86400000)
-    const daysLeft = Math.max(0, TRIAL_DAYS - daysPassed)
+    const daysLeft = Math.max(0, trialDays - daysPassed)
     return { licenseStatus: daysLeft > 0 ? 'trial' : 'expired', daysLeft }
   }
-  return { licenseStatus: 'trial', daysLeft: TRIAL_DAYS }
+  return { licenseStatus: 'trial', daysLeft: 14 }
 }
 
 function pingDistributor() {

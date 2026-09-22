@@ -4,8 +4,9 @@ const crypto = require('crypto')
 const os = require('os')
 
 const LICENSE_SECRET = 'DELPA2024-PRO-LICENSE-KEY-v1'
-const TRIAL_DAYS     = 20
-const GRACE_DAYS     = 3  // Days after expiry before hard block
+const TRIAL_DAYS       = 14  // Instalaciones NUEVAS
+const LEGACY_TRIAL_DAYS = 20 // Instalaciones previas (ya en curso) — se respeta su prueba original
+const GRACE_DAYS       = 3   // Days after expiry before hard block
 
 function getHardwareId() {
   const cpus = os.cpus()
@@ -111,15 +112,22 @@ ipcMain.handle('license:status', () => {
   // No valid subscription license → fall back to trial
   let instRow = db.prepare("SELECT value FROM settings WHERE key='license_installed_at'").get()
   if (!instRow?.value) {
+    // Instalación NUEVA: se fija la fecha y la duración de prueba (14 días).
     const now = new Date().toISOString()
     db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_installed_at',?)").run(now)
-    return { status: 'trial', daysRemaining: TRIAL_DAYS, hardwareId }
+    db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_trial_days',?)").run(String(TRIAL_DAYS))
+    return { status: 'trial', daysRemaining: TRIAL_DAYS, trialDays: TRIAL_DAYS, hardwareId }
   }
+  // Instalación existente: se respeta la duración guardada; si no hay (instalación
+  // previa a esta versión), se mantiene la prueba original de 20 días — no se acorta.
+  const savedTrial = db.prepare("SELECT value FROM settings WHERE key='license_trial_days'").get()
+  const trialDays = savedTrial?.value ? (Number(savedTrial.value) || LEGACY_TRIAL_DAYS) : LEGACY_TRIAL_DAYS
   const daysPassed  = Math.floor((Date.now() - new Date(instRow.value).getTime()) / 86400000)
-  const daysRemaining = Math.max(0, TRIAL_DAYS - daysPassed)
+  const daysRemaining = Math.max(0, trialDays - daysPassed)
   return {
     status: daysRemaining > 0 ? 'trial' : 'expired',
     daysRemaining,
+    trialDays,
     hardwareId,
     reason: 'trial',
   }

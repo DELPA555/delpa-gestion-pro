@@ -203,6 +203,18 @@ function createTables(db) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS paused_sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      items_json TEXT NOT NULL,
+      client_id INTEGER,
+      client_name TEXT DEFAULT '',
+      discount REAL DEFAULT 0,
+      discount_type TEXT DEFAULT 'amount',
+      payment_method TEXT DEFAULT 'Efectivo',
+      total REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
     CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);

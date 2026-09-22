@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ShieldCheck, AlertCircle, Copy, Check } from 'lucide-react'
+import { ShieldCheck, AlertCircle, Copy, Check, MessageCircle, Mail } from 'lucide-react'
 import { api } from '@/lib/api'
+import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 
-export default function ActivationScreen({ hardwareId, reason, onActivated }) {
+export default function ActivationScreen({ hardwareId, reason, trialDays, onActivated }) {
+  const dias = trialDays || 14
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,13 +44,37 @@ export default function ActivationScreen({ hardwareId, reason, onActivated }) {
             <ShieldCheck size={24} className="text-red-400" />
           </div>
           <h1 className="text-xl font-bold text-white">
-            {reason === 'trial' ? 'Período de prueba vencido' : 'Licencia vencida'}
+            {reason === 'trial' ? `Tu período de prueba de ${dias} días ha vencido` : 'Licencia vencida'}
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
             {reason === 'trial'
-              ? 'Para continuar usando DELPA Gestión PRO ingresá tu código de licencia'
-              : 'Tu suscripción venció. Ingresá el nuevo código de activación para continuar'}
+              ? 'Para continuar usando DELPA activá tu licencia'
+              : 'Tu suscripción venció. Activá tu licencia para continuar'}
           </p>
+        </div>
+
+        {/* Soporte y ventas — contacto prominente */}
+        <div className="bg-accent/5 border border-accent/20 rounded-2xl p-5 mb-4 space-y-3">
+          <p className="text-sm text-white font-medium text-center">Para continuar usando DELPA, activá tu licencia:</p>
+          <div className="text-sm text-zinc-400 space-y-1 text-center">
+            <p>📱 WhatsApp: <span className="text-white font-semibold">{SUPPORT.phoneDisplay}</span></p>
+            <p>📧 {SUPPORT.email}</p>
+            <p>🌐 {SUPPORT.web}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => openExternal(waLink())}
+              className="btn-primary no-drag flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+            >
+              <MessageCircle size={17} /> Contactar por WhatsApp
+            </button>
+            <button
+              onClick={() => openExternal(mailtoLink())}
+              className="no-drag px-4 py-3 rounded-xl text-sm border border-border text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors flex items-center justify-center gap-2"
+            >
+              <Mail size={16} /> Email
+            </button>
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-5">

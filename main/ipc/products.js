@@ -151,6 +151,66 @@ ipcMain.handle('products:search', (_, { q }) => {
   return rows.map(p => ({ ...p, sizes: sizesStmt.all(p.id) }))
 })
 
+// ─── Distinct sizes currently in stock (for the size filter dropdown) ─────────
+
+ipcMain.handle('products:sizes', () => {
+  const db = getDB()
+  const rows = db.prepare(`
+    SELECT DISTINCT ps.size AS size
+    FROM product_sizes ps JOIN products p ON p.id = ps.product_id
+    WHERE p.active=1 AND ps.stock > 0 AND ps.size IS NOT NULL AND TRIM(ps.size) <> ''
+    ORDER BY ${SIZE_ORDER}, ps.size
+  `).all()
+  return rows.map(r => r.size)
+})
+
+// ─── Products with stock in a given size (buscador por talle / filtro) ────────
+// Agrupa por producto lógico (padre) y lista los colores disponibles en ese talle.
+
+ipcMain.handle('products:bySize', (_, arg) => {
+  const db = getDB()
+  const size = typeof arg === 'string' ? arg : (arg?.size || '')
+  const term = String(size).trim()
+  if (!term) return []
+
+  const rows = db.prepare(`
+    SELECT ps.size AS size, ps.stock AS stock,
+           p.id AS product_id, p.name AS name, p.category AS category,
+           p.price AS price, p.cost AS cost, p.color AS color,
+           COALESCE(p.is_variant,0) AS is_variant,
+           COALESCE(p.parent_product_id, p.id) AS group_id,
+           s.name AS supplier_name
+    FROM product_sizes ps
+    JOIN products p ON p.id = ps.product_id
+    LEFT JOIN suppliers s ON s.id = p.supplier_id
+    WHERE p.active=1 AND ps.stock > 0 AND UPPER(TRIM(ps.size)) = UPPER(?)
+    ORDER BY p.category, p.name, p.color
+  `).all(term)
+
+  const groups = new Map()
+  for (const r of rows) {
+    let g = groups.get(r.group_id)
+    if (!g) {
+      g = {
+        groupId: r.group_id, name: r.name, category: r.category || 'Sin categoría',
+        price: r.price, supplier: r.supplier_name || '', size: r.size,
+        totalStock: 0, colors: [],
+      }
+      groups.set(r.group_id, g)
+    }
+    g.colors.push({
+      productId: r.product_id, color: r.color || 'Único',
+      stock: r.stock, price: r.price, cost: r.cost || 0, size: r.size,
+    })
+    g.totalStock += r.stock
+    // El precio / nombre / categoría "canónicos" salen de la fila padre si existe.
+    if (!r.is_variant) { g.name = r.name; g.category = r.category || g.category; g.price = r.price }
+  }
+
+  return [...groups.values()].sort((a, b) =>
+    (a.category || '').localeCompare(b.category || '', 'es') || a.name.localeCompare(b.name, 'es'))
+})
+
 // ─── Search by barcode (product or size barcode) — for scanner ────────────────
 
 ipcMain.handle('products:searchByBarcode', (_, code) => {

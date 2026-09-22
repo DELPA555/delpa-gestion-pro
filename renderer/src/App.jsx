@@ -245,6 +245,7 @@ function AppContent() {
       <ActivationScreen
         hardwareId={licenseInfo.hardwareId || ''}
         reason={licenseInfo.reason || 'subscription'}
+        trialDays={licenseInfo.trialDays}
         onActivated={checkLicense}
       />
     )
@@ -264,6 +265,8 @@ function AppContent() {
       <Toaster
         theme="dark"
         position="bottom-right"
+        richColors
+        duration={2000}
         toastOptions={{
           style: { background: '#141414', border: '1px solid #2a2a2a', color: '#f0f0f0' },
         }}
