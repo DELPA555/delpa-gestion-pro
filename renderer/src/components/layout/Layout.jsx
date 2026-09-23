@@ -1,8 +1,67 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, X, MessageCircle } from 'lucide-react'
+import { AlertTriangle, X, MessageCircle, GraduationCap } from 'lucide-react'
 import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
 import { SUPPORT, waLink, openExternal } from '@/lib/support'
+import { api } from '@/lib/api'
+import Tour from '@/components/Tour'
+import TrainingBanner from '@/components/TrainingBanner'
+import { MAIN_TOUR, MODULE_TOURS } from '@/lib/tourSteps'
+
+const ACCENT = '#e91e8c'
+
+// Orquesta el tour: auto-inicio la primera vez + escucha 'tour:start' (principal o por módulo).
+function TourHost() {
+  const [steps, setSteps] = useState(null)
+  const [isMain, setIsMain] = useState(false)
+  const [askModal, setAskModal] = useState(false)
+
+  useEffect(() => {
+    // Auto-inicio: solo si nunca vio ni saltó el tour principal.
+    Promise.all([api.settings.get('tour_completed'), api.settings.get('tour_skipped')])
+      .then(([done, skipped]) => { if (done !== '1' && skipped !== '1') setAskModal(true) })
+      .catch(() => {})
+    const onStart = (e) => {
+      const mod = e.detail?.module
+      if (mod && MODULE_TOURS[mod]) { setIsMain(false); setSteps(MODULE_TOURS[mod]) }
+      else { setIsMain(true); setSteps(MAIN_TOUR) }
+    }
+    window.addEventListener('tour:start', onStart)
+    return () => window.removeEventListener('tour:start', onStart)
+  }, [])
+
+  const startMain = () => { setAskModal(false); setIsMain(true); setSteps(MAIN_TOUR) }
+  const laterMain = () => { setAskModal(false); api.settings.set('tour_skipped', '1').catch(() => {}) }
+
+  const close = (reason) => {
+    if (isMain) {
+      api.settings.set('tour_completed', '1').catch(() => {})
+      if (reason === 'skip') api.settings.set('tour_skipped', '1').catch(() => {})
+    }
+    setSteps(null)
+  }
+
+  return (
+    <>
+      {askModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border p-6 text-center" style={{ background: '#181818', borderColor: ACCENT }}>
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: ACCENT + '22', color: ACCENT }}>
+              <GraduationCap size={28} />
+            </div>
+            <h3 className="text-xl font-bold text-white">¿Hacemos un recorrido rápido?</h3>
+            <p className="mt-2 text-sm text-zinc-400">Te mostramos en un par de minutos todo lo que podés hacer con DELPA. Podés salir cuando quieras.</p>
+            <div className="mt-5 flex gap-2">
+              <button onClick={laterMain} className="flex-1 rounded-lg border border-zinc-700 py-2.5 text-sm font-semibold text-zinc-300 hover:bg-white/5">Ahora no</button>
+              <button onClick={startMain} className="flex-1 rounded-lg py-2.5 text-sm font-bold text-white" style={{ background: ACCENT }}>Sí, mostrame</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <Tour open={!!steps} steps={steps || []} onClose={close} />
+    </>
+  )
+}
 
 function LicenseBanner({ licenseInfo }) {
   const [dismissed, setDismissed] = useState(false)
@@ -98,12 +157,14 @@ export default function Layout({ children, licenseInfo }) {
     <div className="flex flex-col h-screen bg-surface overflow-hidden">
       <TitleBar />
       <LicenseBanner licenseInfo={licenseInfo} />
+      <TrainingBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>
+      <TourHost />
       {/* Footer: soporte siempre visible */}
       <div className="shrink-0 border-t border-border bg-surface px-4 py-1 flex items-center justify-center gap-1.5 text-[11px] text-zinc-600">
         <span>Soporte:</span>

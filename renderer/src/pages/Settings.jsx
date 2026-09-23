@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import QRCodeLib from 'qrcode'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe } from 'lucide-react'
+import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
@@ -44,6 +44,7 @@ const TAB_GROUPS = [
     items: [
       { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
       { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
+      { id: 'ayuda',             label: 'Tutorial y ayuda', Icon: HelpCircle },
     ],
   },
 ]
@@ -2310,6 +2311,9 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
       {/* ── Tab: Actualizaciones ── */}
       {tab === 'actualizaciones' && <TabActualizaciones inputCls={inputCls} />}
 
+      {/* ── Tab: Tutorial y ayuda ── */}
+      {tab === 'ayuda' && <TabAyuda />}
+
         </div>{/* end content */}
       </div>{/* end flex layout */}
     </motion.div>
@@ -2366,6 +2370,77 @@ function SupportAndAbout() {
 }
 
 // ── Tab Actualizaciones ────────────────────────────────────────────────────────
+
+function TabAyuda() {
+  const [tips, setTips] = useState(true)
+
+  useEffect(() => {
+    api.settings.get('tooltips_enabled').then((v) => setTips(v !== '0')).catch(() => {})
+  }, [])
+
+  const toggleTips = async () => {
+    const next = !tips
+    setTips(next)
+    try { await api.settings.set('tooltips_enabled', next ? '1' : '0') } catch {}
+    window.dispatchEvent(new CustomEvent('tooltips:changed', { detail: next }))
+  }
+
+  const verTour = () => window.dispatchEvent(new CustomEvent('tour:start'))
+
+  const reiniciar = async () => {
+    if (!window.confirm('¿Reiniciar el tutorial desde cero? Se volverá a mostrar el recorrido guiado y el checklist de configuración.')) return
+    try {
+      await Promise.all([
+        api.settings.set('tour_completed', '0'),
+        api.settings.set('tour_skipped', '0'),
+        api.settings.set('onboarding_completed', '0'),
+        api.onboarding.reset(),
+      ])
+      window.dispatchEvent(new CustomEvent('onboarding:open'))
+      toast.success('Tutorial reiniciado. Se mostrará de nuevo el recorrido y el checklist.')
+    } catch { toast.error('No se pudo reiniciar el tutorial') }
+  }
+
+  return (
+    <div className="max-w-xl space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2"><GraduationCap size={18} className="text-accent" /> Tutorial y ayuda</h2>
+        <p className="text-sm text-zinc-500 mt-0.5">Recorrido guiado, tooltips y reinicio del tutorial.</p>
+      </div>
+
+      <div className="flex items-center justify-between rounded-xl border border-border bg-[#0a0a0a] p-4">
+        <div>
+          <p className="text-sm text-white font-medium">Mostrar tooltips de ayuda</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Muestra explicaciones al pasar el mouse sobre botones e íconos clave.</p>
+        </div>
+        <button onClick={toggleTips}
+          className={cn('relative w-11 h-6 rounded-full transition-colors no-drag shrink-0', tips ? 'bg-accent' : 'bg-zinc-700')}>
+          <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform', tips ? 'translate-x-5' : 'translate-x-0.5')} />
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-border bg-[#0a0a0a] p-4 space-y-3">
+        <div>
+          <p className="text-sm text-white font-medium">Recorrido guiado</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Volvé a ver el tour completo del sistema cuando quieras.</p>
+        </div>
+        <button onClick={verTour} className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover no-drag">
+          <GraduationCap size={16} /> Ver tour completo
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+        <div>
+          <p className="text-sm text-white font-medium">Reiniciar tutorial desde cero</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Vuelve a mostrar el recorrido guiado y el checklist de configuración. Útil cuando cambia de vendedora o quiere repasar.</p>
+        </div>
+        <button onClick={reiniciar} className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 px-4 py-2 text-sm font-semibold text-amber-400 hover:bg-amber-500/10 no-drag">
+          <RefreshCw size={15} /> Reiniciar tutorial
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function TabActualizaciones({ inputCls }) {
   const [currentVersion, setCurrentVersion] = useState('...')

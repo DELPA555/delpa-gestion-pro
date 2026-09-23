@@ -15,6 +15,9 @@ import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import { SkeletonPulse } from '@/components/shared/SkeletonLoader'
+import OnboardingChecklist from '@/components/OnboardingChecklist'
+import HelpTip from '@/components/Tooltip'
+import { TOOLTIPS } from '@/lib/tourSteps'
 
 const AR_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -434,8 +437,11 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Checklist de primeros pasos (desaparece al completarse) */}
+      <OnboardingChecklist />
+
       {/* ══ SECCIÓN 2 — KPIs PRINCIPALES ══ */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div data-tour="dash-ventas" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* Card 1 — Ventas del día */}
         <KpiCard icon={ShoppingCart} title="Ventas del día" accent>
           <p className="text-2xl font-bold text-white tabular-nums leading-tight">{formatCurrency(stats?.ventas || 0)}</p>
@@ -729,8 +735,8 @@ export default function Dashboard() {
         </Card>
 
         {/* Recomendaciones IA */}
-        <Card className="p-4">
-          <SectionTitle icon={Brain}>DELPA recomienda</SectionTitle>
+        <Card className="p-4" data-tour="dash-ia">
+          <SectionTitle icon={Brain} right={<HelpTip text={TOOLTIPS.ia}><span className="cursor-help text-zinc-600">ⓘ</span></HelpTip>}>DELPA recomienda</SectionTitle>
           {recCards.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-zinc-400 py-4"><Sparkles size={16} className="text-accent" /> Todo en orden por ahora.</div>
           ) : (
@@ -816,7 +822,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Control fiscal */}
-        <Card className="p-4">
+        <Card className="p-4" data-tour="dash-fiscal">
           <SectionTitle icon={Receipt}>Control fiscal</SectionTitle>
           {!fiscal ? <EmptyMini>Sin datos</EmptyMini> : fiscal.regimen === 'MONO' ? (
             <div className="space-y-3">
@@ -928,7 +934,7 @@ export default function Dashboard() {
       <Card className="p-4">
         <SectionTitle icon={Activity} right={
           health && <span className="text-xs text-zinc-500">Tu negocio está al <span className="text-white font-semibold">{health.total}%</span> de su potencial</span>
-        }>Score de salud del negocio</SectionTitle>
+        }><span className="inline-flex items-center gap-1">Score de salud del negocio <HelpTip text={TOOLTIPS.healthScore}><span className="cursor-help text-zinc-600">ⓘ</span></HelpTip></span></SectionTitle>
         {!health ? <EmptyMini>Sin datos</EmptyMini> : (
           <>
             <div className="flex items-center gap-3 mb-4">

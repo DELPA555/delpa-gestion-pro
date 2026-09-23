@@ -403,6 +403,12 @@ export const api = {
     create: (d)  => inv('pausedsales:create', d),
     delete: (id) => inv('pausedsales:delete', id),
   },
+  training: {
+    status: ()   => inv('training:status'),
+    toggle: (on) => inv('training:toggle', on),
+    sale:   (d)  => inv('training:sale', d),
+    clear:  ()   => inv('training:clear'),
+  },
   tn: {
     connect:        ()    => inv('tn:connect'),
     status:         ()    => inv('tn:status'),

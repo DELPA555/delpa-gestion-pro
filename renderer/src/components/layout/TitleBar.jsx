@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Minus, Square, X, Maximize2, Cloud, CloudOff, Sun, Moon, ShieldAlert, ArrowUpCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
+import HelpMenu from '@/components/HelpMenu'
 
 function formatClock() {
   const now = new Date()
@@ -115,14 +116,15 @@ export default function TitleBar() {
   return (
     <div className="drag-region flex items-center justify-between h-9 bg-surface border-b border-border shrink-0 select-none">
       {/* Left: logo dot + name + clock */}
-      <div className="flex items-center gap-2 px-4" style={{ pointerEvents: 'none' }}>
+      <div data-tour="brand" className="flex items-center gap-2 px-4" style={{ pointerEvents: 'none' }}>
         <div className="w-2 h-2 rounded-full bg-accent shrink-0" />
         <span className="text-xs font-medium text-zinc-300">{businessName}</span>
         <span className="text-xs text-zinc-600 ml-1">{clock}</span>
       </div>
 
-      {/* Right: sync icon + window controls */}
+      {/* Right: help + sync icon + window controls */}
       <div className="no-drag flex items-center h-full gap-1 pr-1">
+        <HelpMenu />
         {/* License badge */}
         {licenseInfo?.status === 'active' && licenseInfo.daysRemaining !== null && licenseInfo.daysRemaining <= 30 && (
           <div

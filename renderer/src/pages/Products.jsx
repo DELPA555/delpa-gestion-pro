@@ -1265,13 +1265,18 @@ export default function Products() {
               className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-3 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
               <Download size={13} /> Exportar CSV
             </button>
-            <button onClick={() => setFinderOpen(true)}
+            <button data-tour="productos-talle" onClick={() => setFinderOpen(true)}
               className="flex items-center gap-1.5 text-xs text-accent hover:text-white px-3 py-2 rounded-lg border border-accent/30 hover:bg-accent/10 transition-colors no-drag">
               <Ruler size={13} /> Buscar por talle
             </button>
-            <button onClick={openCreate}
+            <button data-tour="productos-nuevo" onClick={openCreate}
               className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
               <Plus size={15} /> Nuevo producto
+            </button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('tour:start', { detail: { module: 'productos' } }))}
+              title="Ayuda de Productos"
+              className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white px-2.5 py-2 rounded-lg border border-border hover:bg-white/5 transition-colors no-drag">
+              ❓
             </button>
           </div>
         }

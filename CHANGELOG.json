@@ -1,4 +1,20 @@
 {
+  "v1.28.0": {
+    "fecha": "2026-09-22",
+    "titulo": "Tutorial y modo guiado para arrancar sin vueltas",
+    "mejoras": [
+      "Checklist de primeros pasos en el Dashboard: te muestra qué falta configurar (licencia, negocio, productos, email, Drive, primera venta, Mercado Pago, AFIP) con barra de progreso y botón directo a cada paso. Desaparece sola al completarse.",
+      "Recorrido guiado interactivo: la primera vez te ofrece un tour por todo el sistema resaltando cada sección. Se puede saltar y volver a ver cuando quieras.",
+      "Botón de ayuda ❓ siempre visible arriba a la derecha: tour completo, checklist, tutoriales, soporte por WhatsApp y datos de la app.",
+      "Mini-tours por módulo (Ventas y Productos) con el botón ❓ en cada pantalla.",
+      "Tooltips de ayuda: al pasar el mouse sobre botones clave (INGRESAR, FACTURAR, descuento, pausar venta, score de salud, IA) aparece una explicación. Se pueden apagar en Configuración.",
+      "Modo entrenamiento: practicá ventas sin afectar datos reales. Se activa desde el botón de ayuda, muestra un banner y los tickets salen marcados como PRÁCTICA. Ideal para capacitar vendedoras nuevas.",
+      "En Configuración → Tutorial y ayuda podés reiniciar el tutorial desde cero (útil al cambiar de vendedora)."
+    ],
+    "correcciones": [
+      "El checklist de primeros pasos ahora detecta bien cuando cargaste el nombre del negocio y el email (antes no lo reconocía)."
+    ]
+  },
   "v1.27.0": {
     "fecha": "2026-09-10",
     "titulo": "Nueva pantalla de inicio de sesión",

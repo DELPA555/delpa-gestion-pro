@@ -215,6 +215,18 @@ function createTables(db) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Modo entrenamiento: ventas de práctica (NO afectan stock/caja/datos reales).
+    -- Se vacía al desactivar el modo entrenamiento.
+    CREATE TABLE IF NOT EXISTS sales_training (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      items_json TEXT NOT NULL,
+      client_name TEXT DEFAULT '',
+      seller_name TEXT DEFAULT '',
+      total REAL DEFAULT 0,
+      payment_method TEXT DEFAULT 'Efectivo',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
     CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);

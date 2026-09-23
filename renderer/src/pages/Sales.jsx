@@ -12,6 +12,8 @@ import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime, debounce, cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import Pagination from '@/components/shared/Pagination'
+import HelpTip from '@/components/Tooltip'
+import { TOOLTIPS } from '@/lib/tourSteps'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 import Modal from '@/components/shared/Modal'
@@ -112,6 +114,7 @@ function printTicket(sale, biz = {}, pointsInfo = null) {
   @media print { @page { size:80mm auto; margin:0 } }
 </style></head><body>
 ${logoHtml}<h1>${bizName}</h1>
+${sale.is_training ? '<p class="center bold" style="border:2px solid #000;padding:3px;margin:3px 0;font-size:13px">TICKET DE PRÁCTICA — NO VÁLIDO</p>' : ''}
 ${biz.business_address ? `<p class="center">${biz.business_address}</p>` : ''}${biz.business_phone ? `<p class="center">Tel: ${biz.business_phone}</p>` : ''}${biz.business_cuit ? `<p class="center">CUIT: ${biz.business_cuit}</p>` : ''}
 <p class="center" style="margin:3px 0"><span class="tipo">${tipoLabel}</span></p>
 ${cbteNum ? `<p class="center" style="font-size:11px">N° ${cbteNum}</p>` : ''}
@@ -333,6 +336,7 @@ export default function Sales() {
   const [sellers, setSellers] = useState([])
   const [surcharges, setSurcharges] = useState({})
   const [paymentMethods, setPaymentMethods] = useState(BASE_PAYMENT_METHODS)
+  const [trainingMode, setTrainingMode] = useState(false)
   const [clientSearch, setClientSearch] = useState('')
   const [clientResults, setClientResults] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
@@ -935,10 +939,43 @@ export default function Sales() {
   const discardPausedSale = async (id) => { await api.pausedSales.delete(id); loadPaused() }
   const newCleanSale = () => { clearCart(); try { localStorage.removeItem('carrito_activo') } catch {} ; setRestoreBanner(null); setPauseModal(false) }
 
+  // Modo entrenamiento: refleja el flag global (settings.training_mode).
+  useEffect(() => {
+    api.training.status().then((s) => setTrainingMode(!!s.active)).catch(() => {})
+    const onChange = (e) => setTrainingMode(!!e.detail)
+    window.addEventListener('training:changed', onChange)
+    return () => window.removeEventListener('training:changed', onChange)
+  }, [])
+
+  // Venta de PRÁCTICA: no toca stock/caja/puntos/AFIP. Solo imprime ticket de práctica
+  // y la registra en sales_training (que se borra al salir del modo entrenamiento).
+  const completePracticeSale = async () => {
+    const items = cart.map((it) => ({
+      product_name: it.editedName || it.productName, size: it.size,
+      quantity: it.qty, unit_price: Number(it.editedPrice) || it.unitPrice,
+    }))
+    const saleData = {
+      id: 0, sale_number: 'PRÁCTICA', created_at: new Date().toISOString(),
+      client_name: selectedClient?.name || '', seller_name: seller, items,
+      subtotal, discount: discountAmt, discount_type: discountType, discount_value: Number(discount) || 0,
+      total, payment_method: splitPayment ? 'Múltiple' : paymentMethod,
+      installments: splitPayment ? 1 : installments,
+      amount_received: isCash ? receivedAmt : 0, change_given: isCash ? changeAmt : 0,
+      is_training: 1,
+    }
+    try { await api.training.sale({ items, client_name: saleData.client_name, seller_name: seller, total, payment_method: saleData.payment_method }) } catch {}
+    setLastSale(saleData); setLastSalePoints(null)
+    clearCart(); setPay('Efectivo'); setInstallments(1)
+    toast.success('Venta de PRÁCTICA registrada (no afecta datos reales)', { duration: 2500 })
+    return saleData
+  }
+
   const completeSale = async (afipData = null, { mpPaymentId = '' } = {}) => {
     if (cart.length === 0) return toast.error('El carrito está vacío')
     if (splitPayment && Math.abs(splitRemaining) > 0.01)
       return toast.error(`Falta asignar ${formatCurrency(Math.abs(splitRemaining))} en medios de pago`)
+    // En modo entrenamiento la venta es de práctica: nunca toca datos reales.
+    if (trainingMode) return completePracticeSale()
     setCompleting(true)
     try {
       const paymentsPayload = splitPayment ? splitRows.map(r => ({
@@ -1043,6 +1080,7 @@ export default function Sales() {
 
   const handleFacturar = async () => {
     if (cart.length === 0) return toast.error('El carrito está vacío')
+    if (trainingMode) return toast.error('En modo entrenamiento no se emiten facturas. Usá INGRESAR para practicar.')
     setFacturaAfipError('')
     setFacturaSuccess(null)
     let cf = condFiscal
@@ -1160,8 +1198,8 @@ export default function Sales() {
     const clientEmail = selectedClient?.email || ''
     const clientPhone = selectedClient?.phone || ''
 
-    // Intercept MP QR flow
-    if (!splitPayment && paymentMethod === 'Mercado Pago QR') {
+    // Intercept MP QR flow (en modo entrenamiento no se cobra por MP: va a práctica)
+    if (!trainingMode && !splitPayment && paymentMethod === 'Mercado Pago QR') {
       if (cart.length === 0) return toast.error('El carrito está vacío')
 
       // Check POS is configured
@@ -1640,12 +1678,19 @@ export default function Sales() {
             </button>
           ))}
         </div>
-        <button onClick={() => { loadPaused(); setPauseModal(true) }}
+        <HelpTip text={TOOLTIPS.pausar} side="bottom">
+        <button data-tour="ventas-pausar" onClick={() => { loadPaused(); setPauseModal(true) }}
           className="no-drag mb-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#252525] text-zinc-400 hover:text-white hover:border-accent/50 transition-colors text-xs">
           <Pause size={13} /> Pausar venta
           {pausedSales.length > 0 && (
             <span className="ml-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-white text-[10px] font-bold flex items-center justify-center">{pausedSales.length}</span>
           )}
+        </button>
+        </HelpTip>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('tour:start', { detail: { module: 'ventas' } }))}
+          title="Ayuda de Ventas"
+          className="no-drag mb-1.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#252525] text-zinc-400 hover:text-white hover:border-accent/50 transition-colors text-xs">
+          ❓ Ayuda
         </button>
       </div>
 
@@ -1662,10 +1707,10 @@ export default function Sales() {
           )}
           <div className="flex flex-1 overflow-hidden">
           {/* LEFT: Cart */}
-          <div className="flex flex-col w-[55%] border-r border-[#252525] overflow-hidden">
+          <div data-tour="ventas-carrito" className="flex flex-col w-[55%] border-r border-[#252525] overflow-hidden">
             <div className="p-4 space-y-3 border-b border-[#252525] shrink-0">
               {/* Product search + talle */}
-              <div className="flex gap-2">
+              <div data-tour="ventas-buscador" className="flex gap-2">
                 <div className="relative flex-1">
                   <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-accent" />
                   <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)}
@@ -1903,7 +1948,7 @@ export default function Sales() {
             {/* Payment method */}
             {!splitPayment ? (
               <>
-                <div>
+                <div data-tour="ventas-pagos">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className={labelCls}>Medio de pago</label>
                     <button onClick={enableSplitPayment}
@@ -2060,7 +2105,7 @@ export default function Sales() {
             {/* Discount */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs text-zinc-500 uppercase tracking-wider">Descuento</label>
+                <label className="text-xs text-zinc-500 uppercase tracking-wider inline-flex items-center gap-1">Descuento <HelpTip text={TOOLTIPS.descuentoPct}><span className="cursor-help text-zinc-600 normal-case">ⓘ</span></HelpTip></label>
                 <div className="flex gap-1 no-drag">
                   <button onClick={() => setDiscountType('amount')}
                     className={cn('px-2.5 py-1 rounded-md text-xs border transition-colors',
@@ -2209,24 +2254,28 @@ export default function Sales() {
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-tour="ventas-ingresar">
+              <HelpTip text={TOOLTIPS.ingresar} side="top">
               <button
                 onClick={handleIngresar}
                 disabled={cart.length === 0 || completing || facturando}
                 className="no-drag w-full disabled:opacity-40 disabled:cursor-not-allowed font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 text-base bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/30 transition-all"
               >
                 <CheckCircle size={18} />
-                {completing ? 'Procesando...' : 'INGRESAR'}
+                {completing ? 'Procesando...' : (trainingMode ? 'INGRESAR (PRÁCTICA)' : 'INGRESAR')}
               </button>
+              </HelpTip>
               <div className="flex gap-2">
+                <HelpTip text={trainingMode ? 'Deshabilitado en modo entrenamiento' : TOOLTIPS.facturar} side="top">
                 <button
                   onClick={handleFacturar}
-                  disabled={cart.length === 0 || completing || facturando}
+                  disabled={cart.length === 0 || completing || facturando || trainingMode}
                   className="no-drag flex-1 disabled:opacity-40 disabled:cursor-not-allowed font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-base bg-accent hover:bg-accent-hover text-white shadow-lg shadow-accent/20 transition-all"
                 >
                   <ShieldCheck size={18} />
                   FACTURAR
                 </button>
+                </HelpTip>
                 <button onClick={clearCart} title="F10 — Limpiar"
                   className="no-drag px-4 py-3 border border-[#252525] rounded-xl text-zinc-500 hover:text-white hover:border-zinc-500 transition-colors text-sm">
                   F10

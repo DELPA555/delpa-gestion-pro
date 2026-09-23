@@ -85,7 +85,7 @@ export default function Sidebar() {
   }, [loadBiz, checkTnOrders])
 
   return (
-    <aside className="flex flex-col w-52 h-full shrink-0 bg-gradient-to-b from-[#0d0d0d] to-[#070707] border-r border-border">
+    <aside data-tour="sidebar" className="flex flex-col w-52 h-full shrink-0 bg-gradient-to-b from-[#0d0d0d] to-[#070707] border-r border-border">
       {/* Logo / Business header */}
       <div className="px-4 py-4 border-b border-border">
         {biz.logo ? (
@@ -100,7 +100,7 @@ export default function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2">
         {NAV.map(({ to, label, Icon }) => (
-          <NavLink key={to} to={to} className="block">
+          <NavLink key={to} to={to} data-tour={`nav-${to.slice(1)}`} className="block">
             {({ isActive }) => (
               <motion.div
                 whileHover={{ x: 2 }}
@@ -147,7 +147,7 @@ export default function Sidebar() {
         >
           <LogOut size={11} /> Cerrar sesión
         </button>
-        <div className="text-[10px] text-zinc-700">v1.27.0 · DELPA</div>
+        <div className="text-[10px] text-zinc-700">v1.28.0 · DELPA</div>
       </div>
     </aside>
   )

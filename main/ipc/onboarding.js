@@ -1,15 +1,17 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 
+// Cada check devuelve una fila con n>0 SOLO si el paso está cumplido (uniforme:
+// tanto para conteos como para presencia de un setting de texto).
 const TASKS = [
-  { id: 'add_product',  label: 'Agregar tu primer producto',        route: '/productos',     check: `SELECT COUNT(*) as n FROM products WHERE active=1` },
-  { id: 'add_supplier', label: 'Agregar un proveedor',              route: '/proveedores',   check: `SELECT COUNT(*) as n FROM suppliers WHERE active=1` },
-  { id: 'add_client',   label: 'Agregar una clienta',               route: '/clientes',      check: `SELECT COUNT(*) as n FROM clients WHERE active=1` },
-  { id: 'make_sale',    label: 'Registrar tu primera venta',        route: '/ventas',        check: `SELECT COUNT(*) as n FROM sales WHERE voided=0` },
-  { id: 'open_cashbox', label: 'Abrir la caja por primera vez',     route: '/caja',          check: `SELECT COUNT(*) as n FROM cashbox` },
-  { id: 'add_expense',  label: 'Registrar un gasto',                route: '/gastos',        check: `SELECT COUNT(*) as n FROM expenses` },
-  { id: 'setup_email',  label: 'Configurar email para informes',    route: '/configuracion', check: `SELECT value as n FROM settings WHERE key='email_to' AND value != ''` },
-  { id: 'setup_biz',    label: 'Personalizar nombre del negocio',   route: '/configuracion', check: `SELECT value as n FROM settings WHERE key='business_name' AND value != '' AND value != 'DELPA'` },
+  { id: 'license',   label: 'Activaste tu licencia',              route: '/configuracion', check: `SELECT 1 as n FROM settings WHERE key='license_code' AND value != ''` },
+  { id: 'biz_name',  label: 'Configuraste el nombre del negocio', route: '/configuracion', check: `SELECT 1 as n FROM settings WHERE key='business_name' AND value != '' AND value != 'DELPA'` },
+  { id: 'product',   label: 'Cargaste tu primer producto',        route: '/productos',     check: `SELECT COUNT(*) as n FROM products WHERE active=1` },
+  { id: 'email',     label: 'Configurá el email para informes',   route: '/configuracion', check: `SELECT 1 as n FROM settings WHERE key='email_to' AND value != ''` },
+  { id: 'drive',     label: 'Conectá Google Drive para backup',   route: '/configuracion', external: 'drive' }, // se resuelve en el front (googledrive.status)
+  { id: 'sale',      label: 'Realizá tu primera venta',           route: '/ventas',        check: `SELECT COUNT(*) as n FROM sales WHERE voided=0` },
+  { id: 'mp',        label: 'Conectá Mercado Pago QR',            route: '/configuracion', check: `SELECT 1 as n FROM settings WHERE key='mp_access_token' AND value != ''` },
+  { id: 'afip',      label: 'Configurá AFIP/Facturación',         route: '/configuracion', check: `SELECT 1 as n FROM settings WHERE key='cuit_nro' AND value != ''` },
 ]
 
 ipcMain.handle('onboarding:status', () => {
@@ -17,11 +19,10 @@ ipcMain.handle('onboarding:status', () => {
   const dismissed = db.prepare(`SELECT value FROM settings WHERE key='onboarding_dismissed'`).get()?.value === '1'
   const tasks = TASKS.map(task => {
     let completed = false
-    try {
-      const row = db.prepare(task.check).get()
-      completed = Number(row?.n || row?.value || 0) > 0
-    } catch {}
-    return { id: task.id, label: task.label, route: task.route, completed }
+    if (task.check) {
+      try { completed = Number(db.prepare(task.check).get()?.n || 0) > 0 } catch {}
+    }
+    return { id: task.id, label: task.label, route: task.route, completed, external: task.external || null }
   })
   const completedCount = tasks.filter(t => t.completed).length
   return { tasks, completedCount, total: tasks.length, dismissed }

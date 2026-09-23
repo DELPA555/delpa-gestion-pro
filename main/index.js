@@ -90,6 +90,7 @@ app.whenReady().then(() => {
   require('./ipc/onboarding')
   require('./ipc/changeTickets')
   require('./ipc/pausedsales')
+  require('./ipc/training')
   const { runPointsExpiry } = require('./ipc/pointsMaintenance')
   try { runPointsExpiry() } catch (e) { console.error('[POINTS] expiry on startup:', e.message) }
   const { performBackup } = require('./ipc/googledrive')
