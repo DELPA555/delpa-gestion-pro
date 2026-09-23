@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import { useAuth } from '@/context/AuthContext'
 
 const TAB_GROUPS = [
@@ -636,7 +637,7 @@ export default function Settings() {
       exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}
       className="p-6"
     >
-      <PageHeader title="Configuración" subtitle="Personalizá el sistema a tu negocio" />
+      <PageHeader title="Configuración" subtitle="Personalizá el sistema a tu negocio" actions={<HelpButton module="config" label="Configuración" />} />
 
       <div className="flex gap-6 mt-6">
         {/* ── Nav lateral ── */}

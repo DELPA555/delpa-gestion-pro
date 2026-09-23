@@ -1,4 +1,17 @@
 {
+  "v1.29.0": {
+    "fecha": "2026-09-23",
+    "titulo": "Ayuda en todos los módulos + medio de pago en señas",
+    "mejoras": [
+      "Botón de ayuda ❓ con mini-tour en TODOS los módulos: Caja, Caja Grande, Clientes, Reportes, Facturación, Consignación, Inventario, Pedidos a proveedores, Egresos, Etiquetas y Configuración (antes solo Ventas y Productos).",
+      "Cada mini-tour explica para qué sirve el módulo, sus elementos principales y las acciones más importantes.",
+      "Señas: ahora podés elegir el medio de pago con el que cobrás la seña (Efectivo, Transferencia, Débito, Crédito o MP QR). Si es efectivo, calcula el vuelto.",
+      "El ticket de seña muestra con qué medio se cobró (y recibido/vuelto si fue en efectivo), y el historial suma la columna “Cobrada con”."
+    ],
+    "correcciones": [
+      "Señas: el cierre de caja ahora cuadra bien. Antes toda seña se contaba como efectivo, así que una seña cobrada por transferencia hacía figurar de más el efectivo esperado. Ahora cada seña suma al medio de pago real con el que se cobró."
+    ]
+  },
   "v1.28.0": {
     "fecha": "2026-09-22",
     "titulo": "Tutorial y modo guiado para arrancar sin vueltas",

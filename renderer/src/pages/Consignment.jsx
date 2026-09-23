@@ -8,6 +8,7 @@ import {
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import Modal from '@/components/shared/Modal'
 
 const inputCls = 'w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-accent outline-none transition-colors'
@@ -288,16 +289,19 @@ export default function Consignment() {
         title="Consignación"
         subtitle="Gestión de productos en consignación y liquidaciones a proveedores"
         actions={
-          tab === 'record' ? (
-            <button onClick={() => { setRecordModal(true); loadConsProducts() }}
-              className="no-drag btn-primary flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
-              <Plus size={14} /> Registrar venta
-            </button>
-          ) : null
+          <div className="flex gap-2">
+            <HelpButton module="consignacion" label="Consignación" />
+            {tab === 'record' && (
+              <button onClick={() => { setRecordModal(true); loadConsProducts() }}
+                className="no-drag btn-primary flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
+                <Plus size={14} /> Registrar venta
+              </button>
+            )}
+          </div>
         }
       />
 
-      <div className="flex border-b border-border">
+      <div data-tour="consignacion-lista" className="flex border-b border-border">
         {tabs.map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',

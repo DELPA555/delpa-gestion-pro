@@ -10,6 +10,7 @@ import { api } from '@/lib/api'
 import { bizContactFooterHtml } from '@/lib/printFooter'
 import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import EmptyState from '@/components/shared/EmptyState'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 
@@ -666,10 +667,13 @@ export default function SupplierOrders() {
       className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <PageHeader title="Pedidos a Proveedores" subtitle="Gestión de órdenes de reposición" />
-        <button onClick={openNew}
-          className="no-drag btn-primary flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium">
-          <Plus size={14} /> Nuevo pedido
-        </button>
+        <div className="flex gap-2">
+          <HelpButton module="reposicion" label="Pedidos a Proveedores" />
+          <button data-tour="reposicion-nuevo" onClick={openNew}
+            className="no-drag btn-primary flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium">
+            <Plus size={14} /> Nuevo pedido
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}

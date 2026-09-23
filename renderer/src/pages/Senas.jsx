@@ -48,6 +48,8 @@ ${seña.totalPrice > 0 ? `<div class="row"><span>Precio total:</span><span>${fmt
 <div class="div"></div>
 <div class="hi">
   <div class="row b"><span>Seña recibida:</span><span style="font-size:12pt">${fmtMoney(seña.advanceAmount)}</span></div>
+  <div class="row"><span>Cobrada con:</span><span class="b">${seña.paymentMethod || 'Efectivo'}</span></div>
+  ${(seña.paymentMethod || 'Efectivo') === 'Efectivo' && seña.amountReceived > 0 ? `<div class="row"><span>Recibido:</span><span>${fmtMoney(seña.amountReceived)}</span></div><div class="row b"><span>Vuelto:</span><span>${fmtMoney(seña.changeGiven || 0)}</span></div>` : ''}
   <div class="row"><span>Saldo al retirar:</span><span class="b">${fmtMoney(seña.remaining)}</span></div>
 </div>
 ${seña.deadline ? `<div class="row"><span>Fecha límite de retiro:</span><span class="b">${seña.deadline}</span></div>` : ''}
@@ -96,7 +98,10 @@ const EMPTY_FORM = {
   clientName: '', clientPhone: '', clientId: null,
   productName: '', productId: null, size: '', color: '',
   totalPrice: '', advanceAmount: '', deadline: '', notes: '',
+  paymentMethod: 'Efectivo', amountReceived: '',
 }
+
+const SENA_PAYMENT_METHODS = ['Efectivo', 'Transferencia', 'Débito', 'Crédito', 'Mercado Pago QR']
 
 export default function Senas() {
   const [senas, setSenas] = useState({ senas: [], total: 0, pages: 1 })
@@ -171,6 +176,12 @@ export default function Senas() {
     if (!form.productName.trim()) return toast.error('Buscá y seleccioná un producto')
     if (!form.size) return toast.error('Seleccioná el talle')
     if (!form.advanceAmount || Number(form.advanceAmount) <= 0) return toast.error('Ingresá el monto de la seña')
+    if (!form.paymentMethod) return toast.error('Elegí el medio de pago de la seña')
+    const adv = Number(form.advanceAmount) || 0
+    const isCash = form.paymentMethod === 'Efectivo'
+    const received = isCash ? (Number(form.amountReceived) || 0) : 0
+    if (isCash && received > 0 && received < adv) return toast.error('El monto recibido no puede ser menor a la seña')
+    const change = isCash && received > adv ? received - adv : 0
     setSaving(true)
     try {
       const res = await api.senas.create({
@@ -182,9 +193,12 @@ export default function Senas() {
         size: form.size,
         color: form.color,
         totalPrice: Number(form.totalPrice) || 0,
-        advanceAmount: Number(form.advanceAmount) || 0,
+        advanceAmount: adv,
         deadline: form.deadline,
         notes: form.notes,
+        paymentMethod: form.paymentMethod,
+        amountReceived: received,
+        changeGiven: change,
       })
       if (!res.ok) throw new Error(res.error || 'Error al guardar')
       toast.success(`Seña ${res.senaNumber} registrada ✓`)
@@ -254,10 +268,10 @@ export default function Senas() {
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"
-          style={{ gridTemplateColumns: '60px 1fr 1.2fr 120px 90px 90px 100px auto' }}>
+          style={{ gridTemplateColumns: '60px 1fr 1.2fr 120px 90px 90px 110px 100px auto' }}>
           <span>#</span><span>Cliente</span><span>Producto</span>
           <span>Vencimiento</span><span className="text-right">Seña</span>
-          <span className="text-right">Saldo</span><span>Estado</span><span />
+          <span className="text-right">Saldo</span><span>Cobrada con</span><span>Estado</span><span />
         </div>
 
         <div className="divide-y divide-border">
@@ -268,7 +282,7 @@ export default function Senas() {
              const isOverdue = s.status === 'vencida'
              return (
                <div key={s.id} className="row-alt grid items-center px-4 py-3 text-sm gap-2"
-                 style={{ gridTemplateColumns: '60px 1fr 1.2fr 120px 90px 90px 100px auto' }}>
+                 style={{ gridTemplateColumns: '60px 1fr 1.2fr 120px 90px 90px 110px 100px auto' }}>
                  <span className="text-zinc-600 font-mono">#{s.id}</span>
                  <div>
                    <p className="text-white font-medium">{s.client_name}</p>
@@ -283,6 +297,7 @@ export default function Senas() {
                  </span>
                  <span className="text-right tabular-nums text-zinc-300">{formatCurrency(s.advance_amount)}</span>
                  <span className="text-right tabular-nums text-accent font-medium">{formatCurrency(s.remaining)}</span>
+                 <span className="text-xs text-zinc-400">{s.payment_method || 'Efectivo'}</span>
                  <span className={cn('inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border', sc.bg, sc.color)}>
                    <sc.Icon size={10} />{sc.label}
                  </span>
@@ -403,6 +418,33 @@ export default function Senas() {
               </div>
             </div>
           </div>
+
+          <div>
+            <label className={labelCls}>Medio de pago de la seña *</label>
+            <div className="grid grid-cols-3 gap-2 mt-1">
+              {SENA_PAYMENT_METHODS.map(m => (
+                <button key={m} type="button" onClick={() => f('paymentMethod', m)}
+                  className={`px-2 py-2 rounded-lg border text-xs font-medium transition-colors no-drag ${form.paymentMethod === m ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-400 hover:text-white'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.paymentMethod === 'Efectivo' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Monto recibido $</label>
+                <input type="number" min="0" step="0.01" className={inputCls} value={form.amountReceived} onChange={e => f('amountReceived', e.target.value)} placeholder="0" />
+              </div>
+              <div>
+                <label className={labelCls}>Vuelto $</label>
+                <div className={`${inputCls} text-green-400 font-semibold`}>
+                  {formatCurrency(Math.max(0, (Number(form.amountReceived) || 0) - (Number(form.advanceAmount) || 0)))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

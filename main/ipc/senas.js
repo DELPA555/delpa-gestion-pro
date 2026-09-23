@@ -24,12 +24,16 @@ ipcMain.handle('senas:create', (_, data) => {
     clientId, clientName, clientPhone,
     productId, productName, size, color,
     totalPrice, advanceAmount, deadline, notes, sellerName,
+    paymentMethod, amountReceived, changeGiven,
   } = data
 
   if ((advanceAmount || 0) > (totalPrice || 0)) {
     return { ok: false, error: 'La seña no puede superar el precio total' }
   }
   const remaining = (totalPrice || 0) - (advanceAmount || 0)
+  const metodo = paymentMethod || 'Efectivo'
+  const recibido = metodo === 'Efectivo' ? (Number(amountReceived) || 0) : 0
+  const vuelto = metodo === 'Efectivo' ? (Number(changeGiven) || 0) : 0
 
   const run = db.transaction(() => {
     // Reserve stock
@@ -50,23 +54,26 @@ ipcMain.handle('senas:create', (_, data) => {
     const { lastInsertRowid } = db.prepare(`
       INSERT INTO senas
         (client_id,client_name,client_phone,product_id,product_name,size,color,
-         total_price,advance_amount,remaining,deadline,notes,seller_name)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+         total_price,advance_amount,remaining,deadline,notes,seller_name,
+         payment_method,amount_received,change_given)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       clientId || null, clientName, clientPhone || '',
       productId || null, productName, size || '', color || '',
       totalPrice || 0, advanceAmount || 0, remaining,
-      deadline || '', notes || '', sellerName || ''
+      deadline || '', notes || '', sellerName || '',
+      metodo, recibido, vuelto
     )
 
-    // Register cashbox movement for the advance received
+    // Register cashbox movement for the advance received — con el medio de pago REAL
+    // (antes se insertaba siempre 'Efectivo' → una seña por transferencia descuadraba la caja).
     if (advanceAmount > 0) {
       const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
       if (cashbox) {
         db.prepare(`
           INSERT INTO cashbox_movements (cashbox_id, type, concept, amount, payment_method)
-          VALUES (?, 'ingreso', ?, ?, 'Efectivo')
-        `).run(cashbox.id, `${senaNumber} — ${productName}${size ? ` T.${size}` : ''}`, advanceAmount)
+          VALUES (?, 'ingreso', ?, ?, ?)
+        `).run(cashbox.id, `${senaNumber} — ${productName}${size ? ` T.${size}` : ''}`, advanceAmount, metodo)
       }
     }
 
@@ -86,6 +93,9 @@ ipcMain.handle('senas:create', (_, data) => {
       remaining,
       deadline: deadline || '',
       notes: notes || '',
+      paymentMethod: metodo,
+      amountReceived: recibido,
+      changeGiven: vuelto,
     }
   })
 

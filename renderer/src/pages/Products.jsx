@@ -506,6 +506,8 @@ function BulkLabelModal({ open, onClose, products: preSelected }) {
           <div className="flex items-center gap-2">
             <Tag size={16} className="text-accent" />
             <h3 className="font-semibold text-white text-sm">Etiquetas — Paso 1: Seleccionar productos</h3>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('tour:start', { detail: { module: 'etiquetas' } }))}
+              title="Ayuda de Etiquetas" className="ml-1 text-xs text-zinc-500 hover:text-white no-drag">❓</button>
           </div>
           <button onClick={onClose} className="text-zinc-500 hover:text-white no-drag"><X size={16} /></button>
         </div>

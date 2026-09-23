@@ -12,6 +12,7 @@ import { PhoneLink, EmailLink } from '@/components/shared/ContactLinks'
 import Modal from '@/components/shared/Modal'
 import Pagination from '@/components/shared/Pagination'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 
@@ -178,21 +179,24 @@ export default function Clients() {
       <PageHeader
         title="Clientes"
         subtitle={`${data.total} clientes registrados`}
-        actions={isAdmin && (
+        actions={
           <div className="flex gap-2">
-            <button onClick={handleImport} disabled={importing}
-              className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
-              <Upload size={14} /> {importing ? 'Importando...' : 'Importar CSV'}
-            </button>
-            <button onClick={openCreate} className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
-              <Plus size={15} /> Nuevo cliente
-            </button>
+            <HelpButton module="clientes" label="Clientes" />
+            {isAdmin && (<>
+              <button onClick={handleImport} disabled={importing}
+                className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                <Upload size={14} /> {importing ? 'Importando...' : 'Importar CSV'}
+              </button>
+              <button data-tour="clientes-nueva" onClick={openCreate} className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
+                <Plus size={15} /> Nuevo cliente
+              </button>
+            </>)}
           </div>
-        )}
+        }
       />
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-border">
+      <div data-tour="clientes-lista" className="flex gap-1 mb-5 border-b border-border">
         {TABS.map(({ id, label, Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={cn('flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',

@@ -8,6 +8,7 @@ import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import Modal from '@/components/shared/Modal'
 import Pagination from '@/components/shared/Pagination'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 
@@ -154,7 +155,7 @@ export default function Invoices() {
       className="p-6"
     >
       <PageHeader title="Facturación" subtitle="Comprobantes tipo A/B/C y remitos (uso interno)"
-        actions={<button onClick={() => { setModal(true); setCaeError(''); setUseAfip(true); setAfipDocTipo(99); setAfipDocNro(''); setForm({ saleId: '', type: 'B', clientName: '', clientDni: '', clientAddress: '', total: '', itemsJson: '[]' }) }} className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg"><Plus size={15} /> Nuevo comprobante</button>} />
+        actions={<><HelpButton module="fiscal" label="Facturación" /><button onClick={() => { setModal(true); setCaeError(''); setUseAfip(true); setAfipDocTipo(99); setAfipDocNro(''); setForm({ saleId: '', type: 'B', clientName: '', clientDni: '', clientAddress: '', total: '', itemsJson: '[]' }) }} className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg"><Plus size={15} /> Nuevo comprobante</button></>} />
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"

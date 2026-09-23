@@ -10,6 +10,7 @@ import {
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import Modal from '@/components/shared/Modal'
 
 // ── Audio helpers ──────────────────────────────────────────────────────────────
@@ -348,11 +349,12 @@ export default function Inventory() {
           subtitle="Conteo por escaneo de código de barras"
           actions={
             <div className="flex gap-2">
+              <HelpButton module="inventario" label="Inventario" />
               <button onClick={openSupplierView}
                 className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
                 <Truck size={15} /> Stock por proveedor
               </button>
-              <button onClick={() => setStartModal(true)}
+              <button data-tour="inventario-escanear" onClick={() => setStartModal(true)}
                 className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
                 <Plus size={15} /> Nuevo inventario
               </button>

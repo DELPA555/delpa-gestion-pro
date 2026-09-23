@@ -8,6 +8,7 @@ import {
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import Modal from '@/components/shared/Modal'
 
 const inputCls = 'w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-accent outline-none transition-colors no-drag'
@@ -256,10 +257,13 @@ function HistorialView({ onNew }) {
           title="Egresos de Mercadería"
           subtitle="Devoluciones a proveedor"
           actions={
-            <button onClick={onNew}
-              className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
-              <Plus size={15} /> Nuevo egreso
-            </button>
+            <div className="flex gap-2">
+              <HelpButton module="egresos" label="Egresos" />
+              <button data-tour="egresos-nuevo" onClick={onNew}
+                className="btn-primary no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg">
+                <Plus size={15} /> Nuevo egreso
+              </button>
+            </div>
           }
         />
 

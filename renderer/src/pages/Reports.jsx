@@ -9,6 +9,7 @@ import { BarChart3, RefreshCw, Download, Package, Users, Printer, TrendingDown, 
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import EmptyState from '@/components/shared/EmptyState'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 
@@ -644,7 +645,7 @@ export default function Reports() {
       exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }}
       className="p-6 space-y-6"
     >
-      <PageHeader title="Reportes" subtitle="Análisis de ventas y rentabilidad" />
+      <PageHeader title="Reportes" subtitle="Análisis de ventas y rentabilidad" actions={<HelpButton module="reportes" label="Reportes" />} />
 
       {/* Tabs */}
       <div className="flex border-b border-border overflow-x-auto">

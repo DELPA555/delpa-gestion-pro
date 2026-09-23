@@ -8,6 +8,7 @@ import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import Modal from '@/components/shared/Modal'
 import Pagination from '@/components/shared/Pagination'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 
@@ -344,6 +345,7 @@ export default function CashBox() {
         }
         actions={
           <div className="flex gap-2">
+            <HelpButton module="caja" label="Caja" />
             {cashbox && (
               <button onClick={() => setMovementModal(true)} className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
                 <Plus size={14} /> Movimiento
@@ -354,7 +356,7 @@ export default function CashBox() {
                 <Lock size={15} /> Cerrar {cashbox.shift ? `turno ${cashbox.shift}` : 'caja'}
               </button>
             )}
-            <button
+            <button data-tour="caja-abrir"
               onClick={() => { setOpenCash(''); setOpenModal(true) }}
               className={cn('no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-colors',
                 cashboxes.length === 0 ? 'btn-primary' : 'border border-border text-zinc-400 hover:text-white hover:border-zinc-500'

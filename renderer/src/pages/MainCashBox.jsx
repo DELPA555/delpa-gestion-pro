@@ -10,6 +10,7 @@ import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import Modal from '@/components/shared/Modal'
 import PageHeader from '@/components/shared/PageHeader'
+import HelpButton from '@/components/HelpButton'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
 import EmptyState from '@/components/shared/EmptyState'
 
@@ -251,7 +252,8 @@ export default function MainCashBox() {
         subtitle="Caja central acumulada del local"
         actions={
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => openMovModal('ingreso')} className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-green-600/90 hover:bg-green-500 text-white font-medium transition-colors">
+            <HelpButton module="cajaGrande" label="Caja Grande" />
+            <button data-tour="cajagrande-mov" onClick={() => openMovModal('ingreso')} className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-green-600/90 hover:bg-green-500 text-white font-medium transition-colors">
               <ArrowUpCircle size={15} /> Nuevo ingreso
             </button>
             <button onClick={() => openMovModal('egreso')} className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-red-600/90 hover:bg-red-500 text-white font-medium transition-colors">
