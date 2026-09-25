@@ -409,6 +409,11 @@ export const api = {
     sale:   (d)  => inv('training:sale', d),
     clear:  ()   => inv('training:clear'),
   },
+  reset: {
+    info:     ()    => inv('reset:info'),
+    execute:  (items) => inv('reset:execute', { items }),
+    relaunch: ()    => inv('reset:relaunch'),
+  },
   tn: {
     connect:        ()    => inv('tn:connect'),
     status:         ()    => inv('tn:status'),

@@ -101,6 +101,7 @@ const CHANNELS = [
   'informes:generate', 'informes:send', 'informes:latest', 'informes:list', 'informes:get', 'informes:delete',
   'pausedsales:list', 'pausedsales:create', 'pausedsales:delete',
   'training:status', 'training:toggle', 'training:sale', 'training:clear',
+  'reset:info', 'reset:execute', 'reset:relaunch',
 ]
 
 contextBridge.exposeInMainWorld('electron', {

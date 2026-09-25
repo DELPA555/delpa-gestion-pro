@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AlertTriangle, X, MessageCircle, GraduationCap } from 'lucide-react'
 import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
@@ -15,6 +15,7 @@ function TourHost() {
   const [steps, setSteps] = useState(null)
   const [isMain, setIsMain] = useState(false)
   const [askModal, setAskModal] = useState(false)
+  const activeRef = useRef(false)   // ¿hay un tour abierto ya? (evita abrir dos)
 
   useEffect(() => {
     // Auto-inicio: solo si nunca vio ni saltó el tour principal.
@@ -22,15 +23,17 @@ function TourHost() {
       .then(([done, skipped]) => { if (done !== '1' && skipped !== '1') setAskModal(true) })
       .catch(() => {})
     const onStart = (e) => {
+      // Guard: si ya hay un tour activo, no abrimos otro encima.
+      if (activeRef.current) { console.log('[Tour] ya hay un tour activo — se ignora tour:start'); return }
       const mod = e.detail?.module
-      if (mod && MODULE_TOURS[mod]) { setIsMain(false); setSteps(MODULE_TOURS[mod]) }
-      else { setIsMain(true); setSteps(MAIN_TOUR) }
+      if (mod && MODULE_TOURS[mod]) { activeRef.current = true; setIsMain(false); setSteps(MODULE_TOURS[mod]) }
+      else { activeRef.current = true; setIsMain(true); setSteps(MAIN_TOUR) }
     }
     window.addEventListener('tour:start', onStart)
     return () => window.removeEventListener('tour:start', onStart)
   }, [])
 
-  const startMain = () => { setAskModal(false); setIsMain(true); setSteps(MAIN_TOUR) }
+  const startMain = () => { setAskModal(false); activeRef.current = true; setIsMain(true); setSteps(MAIN_TOUR) }
   const laterMain = () => { setAskModal(false); api.settings.set('tour_skipped', '1').catch(() => {}) }
 
   const close = (reason) => {
@@ -38,6 +41,7 @@ function TourHost() {
       api.settings.set('tour_completed', '1').catch(() => {})
       if (reason === 'skip') api.settings.set('tour_skipped', '1').catch(() => {})
     }
+    activeRef.current = false
     setSteps(null)
   }
 

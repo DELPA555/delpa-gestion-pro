@@ -3,11 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const ACCENT = '#e91e8c'
-const CARD_W = 360
-const PAD = 8
+const PAD = 6
 
-// Motor de tour guiado con overlay + spotlight. Navega entre módulos y espera a
-// que aparezca el elemento (data-tour="..."); si no aparece, muestra el paso al centro.
+// Motor de tour guiado ROBUSTO. La card SIEMPRE va centrada en pantalla (nunca
+// anclada al elemento), así que jamás queda fuera de vista ni "pantalla negra".
+// Si el elemento data-tour existe y es visible, dibujamos un recuadro brillante a
+// su alrededor y scrolleamos hasta él; si no existe (otro módulo, tarda en montar,
+// o tiene tamaño 0), simplemente mostramos la card centrada sin spotlight.
 export default function Tour({ open, steps = [], onClose }) {
   const [i, setI] = useState(0)
   const [rect, setRect] = useState(null)
@@ -16,112 +18,134 @@ export default function Tour({ open, steps = [], onClose }) {
 
   useEffect(() => { if (open) { setI(0); setRect(null) } }, [open])
 
-  const posicionar = useCallback(() => {
-    const step = steps[i]
-    if (!step) return
-    if (step.center || !step.sel) { setRect(null); return }
-    const el = document.querySelector(step.sel)
-    if (el) {
-      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }) } catch {}
-      const r = el.getBoundingClientRect()
+  const step = steps[i]
+
+  // Ubica el elemento resaltado del paso actual (o null si no aplica/no existe).
+  const locate = useCallback(() => {
+    const s = steps[i]
+    if (!s || s.center || !s.sel) { setRect(null); return }
+    const el = document.querySelector(s.sel)
+    if (!el) { setRect(null); return }
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' }) } catch {}
+    const r = el.getBoundingClientRect()
+    // Guard clave: un elemento con tamaño 0 (oculto / aún no pintado) devuelve
+    // {0,0,0,0} → NO dibujamos spotlight, card centrada. Evita el spotlight roto.
+    if (r.width > 0 && r.height > 0) {
       setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+    } else {
+      setRect(null)
     }
   }, [i, steps])
 
   // Al cambiar de paso: navegar si hace falta y buscar el elemento (con reintentos).
   useEffect(() => {
-    if (!open) return
-    const step = steps[i]
-    if (!step) return
+    if (!open || !step) return
+    console.log(`[Tour] paso ${i + 1}/${steps.length}: "${step.title}" · sel=${step.sel || '(centrado)'} · route=${step.route || '-'}`)
     if (step.route && location.pathname !== step.route) { navigate(step.route); return }
     if (step.center || !step.sel) { setRect(null); return }
     let tries = 0, timer
-    const buscar = () => {
+    const find = () => {
       const el = document.querySelector(step.sel)
-      if (el) { posicionar(); return }
-      if (tries++ < 12) timer = setTimeout(buscar, 150)
-      else setRect(null) // fallback: centrado
+      if (el) { locate(); return }
+      if (tries++ < 12) { timer = setTimeout(find, 150) }
+      else { console.log(`[Tour] elemento no encontrado (${step.sel}) → card centrada, sin spotlight`); setRect(null) }
     }
-    buscar()
+    find()
     return () => clearTimeout(timer)
-  }, [open, i, location.pathname, steps, navigate, posicionar])
+  }, [open, i, location.pathname, step, steps.length, navigate, locate])
 
+  // Mantener el recuadro alineado al hacer resize o scroll.
   useEffect(() => {
     if (!open) return
-    const onR = () => posicionar()
-    window.addEventListener('resize', onR)
-    return () => window.removeEventListener('resize', onR)
-  }, [open, posicionar])
+    const onMove = () => locate()
+    window.addEventListener('resize', onMove)
+    window.addEventListener('scroll', onMove, true)
+    return () => { window.removeEventListener('resize', onMove); window.removeEventListener('scroll', onMove, true) }
+  }, [open, locate])
 
-  if (!open || steps.length === 0) return null
+  // Escape cierra; flechas navegan.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose?.('skip') }
+      else if (e.key === 'ArrowRight') setI((n) => Math.min(n + 1, steps.length - 1))
+      else if (e.key === 'ArrowLeft') setI((n) => Math.max(n - 1, 0))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, steps.length, onClose])
 
-  const step = steps[i]
+  if (!open || steps.length === 0 || !step) return null
+
   const ultimo = i === steps.length - 1
   const skip = () => onClose?.('skip')
   const finish = () => onClose?.('done')
 
-  let cardStyle
-  if (rect) {
-    const vw = window.innerWidth, vh = window.innerHeight
-    let left = rect.left + rect.width + 16
-    if (left + CARD_W > vw - 12) left = rect.left - CARD_W - 16
-    if (left < 12) left = Math.min(Math.max(12, rect.left), vw - CARD_W - 12)
-    let top = Math.min(Math.max(12, rect.top), vh - 260)
-    cardStyle = { position: 'fixed', left, top, width: CARD_W, zIndex: 100000 }
-  } else {
-    cardStyle = { position: 'fixed', left: '50%', top: '50%', width: CARD_W, transform: 'translate(-50%, -50%)', zIndex: 100000 }
-  }
-
   return (
-    <div className="fixed inset-0" style={{ zIndex: 99990 }}>
-      {/* Bloquea clics sobre la app durante el tour */}
-      <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
+    <>
+      {/* Backdrop plano — NO intercepta clics (la app sigue usable por debajo) */}
+      <div className="fixed inset-0" style={{ zIndex: 9000, background: 'rgba(0,0,0,0.75)', pointerEvents: 'none' }} />
 
-      {/* Spotlight con box-shadow gigante, o backdrop plano si es paso centrado */}
-      {rect ? (
-        <div className="absolute rounded-xl" style={{
-          top: rect.top - PAD, left: rect.left - PAD,
-          width: rect.width + PAD * 2, height: rect.height + PAD * 2,
-          boxShadow: `0 0 0 9999px rgba(0,0,0,0.75)`, border: `2px solid ${ACCENT}`,
-          transition: 'all .2s ease', pointerEvents: 'none',
-        }} />
-      ) : (
-        <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.75)' }} />
+      {/* Recuadro brillante alrededor del elemento (solo si existe y es visible) */}
+      {rect && (
+        <div
+          className="fixed rounded-xl"
+          style={{
+            zIndex: 9000,
+            top: rect.top - PAD, left: rect.left - PAD,
+            width: rect.width + PAD * 2, height: rect.height + PAD * 2,
+            outline: `3px solid ${ACCENT}`,
+            boxShadow: '0 0 0 3px rgba(233,30,140,0.35), 0 0 26px 8px rgba(233,30,140,0.55)',
+            background: 'rgba(255,255,255,0.06)',
+            transition: 'all .2s ease',
+            pointerEvents: 'none',
+          }}
+        />
       )}
 
-      {/* Card del paso */}
-      <div style={{ ...cardStyle, background: '#181818', border: `1px solid ${ACCENT}` }} className="rounded-2xl p-5 shadow-2xl">
-        <div className="mb-1 flex items-center justify-between">
+      {/* Card SIEMPRE centrada — clickeable */}
+      <div
+        style={{
+          position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
+          width: '90%', maxWidth: 480, zIndex: 9001,
+          background: '#181818', border: `1px solid ${ACCENT}`, pointerEvents: 'auto',
+        }}
+        className="rounded-2xl p-8 shadow-2xl"
+      >
+        <div className="mb-2 flex items-start justify-between gap-4">
           <span className="text-xs font-semibold" style={{ color: ACCENT }}>Paso {i + 1} de {steps.length}</span>
-          <button onClick={skip} title="Cerrar" className="rounded p-1 text-zinc-500 hover:bg-white/10 hover:text-white"><X size={16} /></button>
+          <button onClick={skip} title="Saltar tour (Esc)"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-white/10 hover:text-white">
+            <X size={14} /> Saltar tour
+          </button>
         </div>
-        <h3 className="text-lg font-bold text-white">{step.title}</h3>
-        <p className="mt-1 whitespace-pre-line text-sm text-zinc-300">{step.body}</p>
 
-        <div className="mt-4 flex items-center gap-1.5">
+        <h3 className="text-xl font-bold text-white leading-snug">{step.title}</h3>
+        <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-zinc-300">{step.body}</p>
+
+        <div className="mt-5 flex items-center gap-1.5">
           {steps.map((_, k) => (
             <span key={k} className="h-1.5 rounded-full transition-all" style={{ width: k === i ? 20 : 6, background: k === i ? ACCENT : '#3f3f46' }} />
           ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
-          <button onClick={skip} className="text-xs font-medium text-zinc-500 hover:text-zinc-300">Saltar tour</button>
-          <div className="flex gap-2">
-            {i > 0 && (
-              <button onClick={() => setI((n) => n - 1)} className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-transparent px-3 py-1.5 text-sm font-semibold text-zinc-200 hover:bg-white/5">
-                <ChevronLeft size={15} /> Anterior
-              </button>
-            )}
-            {ultimo ? (
-              <button onClick={finish} className="rounded-lg px-4 py-1.5 text-sm font-bold text-white" style={{ background: ACCENT }}>{step.finish || 'Finalizar'}</button>
-            ) : (
-              <button onClick={() => setI((n) => n + 1)} className="inline-flex items-center gap-1 rounded-lg px-4 py-1.5 text-sm font-semibold text-white" style={{ background: ACCENT }}>
-                Siguiente <ChevronRight size={15} />
-              </button>
-            )}
-          </div>
+        <div className="mt-6 flex items-center justify-between gap-2">
+          <button
+            onClick={() => setI((n) => n - 1)}
+            disabled={i === 0}
+            className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={15} /> Anterior
+          </button>
+          {ultimo ? (
+            <button onClick={finish} className="rounded-lg px-5 py-2 text-sm font-bold text-white" style={{ background: ACCENT }}>{step.finish || 'Finalizar'}</button>
+          ) : (
+            <button onClick={() => setI((n) => n + 1)} className="inline-flex items-center gap-1 rounded-lg px-5 py-2 text-sm font-semibold text-white" style={{ background: ACCENT }}>
+              Siguiente <ChevronRight size={15} />
+            </button>
+          )}
         </div>
       </div>
-    </div>
+    </>
   )
 }

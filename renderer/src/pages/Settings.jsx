@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
 import HelpButton from '@/components/HelpButton'
+import GuideModal from '@/components/GuideModal'
+import { EMAIL_GUIDE, AFIP_GUIDE } from '@/lib/guideSteps'
 import { useAuth } from '@/context/AuthContext'
 
 const TAB_GROUPS = [
@@ -46,6 +48,7 @@ const TAB_GROUPS = [
       { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
       { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
       { id: 'ayuda',             label: 'Tutorial y ayuda', Icon: HelpCircle },
+      { id: 'reseteo',           label: 'Datos y reseteo', Icon: Trash2, adminOnly: true },
     ],
   },
 ]
@@ -274,6 +277,7 @@ export default function Settings() {
   // Fidelización
   const [pointsForm, setPointsForm] = useState({ points_enabled: '0', points_per_pesos: '1000', point_value: '100', points_min_redeem: '5', points_expiry_days: '180', change_ticket_days: '30' })
   const { user: sessionUser, logout: sessionLogout } = useAuth()
+  const [guide, setGuide] = useState(null)   // guía paso a paso abierta (EMAIL_GUIDE | AFIP_GUIDE)
   const [sessionForm, setSessionForm] = useState({ keep_session_active: '1', session_timeout_minutes: '480' })
   const [sessionSaving, setSessionSaving] = useState(false)
   const [pointsSaving, setPointsSaving] = useState(false)
@@ -648,7 +652,7 @@ export default function Settings() {
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(({ id, label, Icon }) => (
+                {group.items.filter(it => !it.adminOnly || sessionUser?.role === 'admin').map(({ id, label, Icon }) => (
                   <button
                     key={id}
                     onClick={() => setTab(id)}
@@ -967,6 +971,12 @@ export default function Settings() {
               <li>Generá una nueva para "DELPA" → copiá las 16 letras que te da Google</li>
               <li>Pegá esas 16 letras en el campo "Contraseña de aplicación" de abajo</li>
             </ol>
+            <button
+              onClick={() => setGuide(EMAIL_GUIDE)}
+              className="no-drag mt-1 inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/25 transition-colors"
+            >
+              📧 ¿Cómo configuro el email? — Guía paso a paso
+            </button>
           </div>
 
           {/* Destinatario */}
@@ -1157,6 +1167,14 @@ export default function Settings() {
               {afipStatus?.env === 'production' ? 'Producción' : 'Testing'}
             </span>
           </div>
+
+          {/* Guía paso a paso */}
+          <button
+            onClick={() => setGuide(AFIP_GUIDE)}
+            className="no-drag inline-flex items-center gap-1.5 rounded-lg bg-accent/15 border border-accent/30 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/25 transition-colors"
+          >
+            🧾 ¿Cómo configuro AFIP? — Guía paso a paso
+          </button>
 
           {/* Ambiente */}
           <div>
@@ -2315,8 +2333,22 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
       {/* ── Tab: Tutorial y ayuda ── */}
       {tab === 'ayuda' && <TabAyuda />}
 
+      {/* ── Tab: Datos y reseteo (solo admin) ── */}
+      {tab === 'reseteo' && sessionUser?.role === 'admin' && <TabReseteo />}
+
         </div>{/* end content */}
       </div>{/* end flex layout */}
+
+      {/* Guías paso a paso (Email / AFIP) */}
+      <GuideModal
+        open={!!guide}
+        onClose={() => setGuide(null)}
+        headerIcon={guide?.headerIcon}
+        title={guide?.title}
+        subtitle={guide?.subtitle}
+        steps={guide?.steps || []}
+        finishLabel={guide?.finishLabel || '✅ Entendido'}
+      />
     </motion.div>
   )
 }
@@ -2325,7 +2357,9 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
 
 function SupportAndAbout() {
   const [version, setVersion] = useState('')
+  const [resetInfo, setResetInfo] = useState(null)
   useEffect(() => { api.updater.getCurrentVersion().then(v => setVersion(v)).catch(() => {}) }, [])
+  useEffect(() => { api.reset.info().then(setResetInfo).catch(() => {}) }, [])
   return (
     <>
       {/* Soporte y ventas */}
@@ -2355,6 +2389,12 @@ function SupportAndAbout() {
         <p className="text-white font-semibold">Acerca de DELPA</p>
         <p className="text-zinc-400">Versión {version || '—'}</p>
         <p className="text-zinc-500">Desarrollado por DELPA Gestión PRO</p>
+        {resetInfo?.resetCount > 0 && (
+          <>
+            <p className="text-zinc-500">Último reseteo: {resetInfo.lastResetAt ? new Date(resetInfo.lastResetAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+            <p className="text-zinc-500">Resets realizados: {resetInfo.resetCount}</p>
+          </>
+        )}
         <p className="text-zinc-500 flex items-center gap-1.5"><MessageCircle size={12} /> Soporte: {SUPPORT.phoneDisplay}</p>
         <p className="text-zinc-500 flex items-center gap-1.5"><Mail size={12} /> {SUPPORT.email}</p>
         <button onClick={() => openExternal(SUPPORT.webUrl)}
@@ -2439,6 +2479,271 @@ function TabAyuda() {
           <RefreshCw size={15} /> Reiniciar tutorial
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Tab Datos y reseteo (Zona de peligro) ────────────────────────────────────────
+
+function TabReseteo() {
+  const [info, setInfo] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [step, setStep] = useState(1)            // 1 checklist · 2 texto · 3 confirmar · 4 borrando · 5 éxito
+  const [selected, setSelected] = useState({})
+  const [confirmText, setConfirmText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [progressIdx, setProgressIdx] = useState(0)
+  const [error, setError] = useState('')
+  const [doneLabels, setDoneLabels] = useState([])
+  const [countdown, setCountdown] = useState(3)
+
+  const load = () => api.reset.info().then(setInfo).catch(() => {})
+  useEffect(() => { load() }, [])
+
+  const items = info?.items || []
+  const selectedKeys = items.filter(it => selected[it.key]).map(it => it.key)
+  const selectedLabels = items.filter(it => selected[it.key]).map(it => it.label)
+
+  const openModal = () => {
+    const all = {}
+    for (const it of items) all[it.key] = true
+    setSelected(all); setConfirmText(''); setError(''); setStep(1); setOpen(true)
+  }
+  const close = () => { if (!busy) { setOpen(false); setStep(1) } }
+
+  const setAll = (val) => {
+    const next = {}
+    for (const it of items) next[it.key] = val
+    setSelected(next)
+  }
+
+  // Mensajes de progreso (paso 4)
+  const progressMsgs = [
+    ...(info?.driveConnected ? ['📦 Guardando backup en Drive antes de borrar...'] : []),
+    ...selectedLabels.map(l => `🗑️ Borrando ${l.toLowerCase()}...`),
+  ]
+
+  const execute = async () => {
+    setBusy(true); setError(''); setProgressIdx(0); setStep(4)
+    // Animación de progreso mientras corre la transacción (que es atómica)
+    let i = 0
+    const timer = setInterval(() => {
+      i = Math.min(i + 1, Math.max(0, progressMsgs.length - 1))
+      setProgressIdx(i)
+    }, 450)
+    try {
+      const res = await api.reset.execute(selectedKeys)
+      clearInterval(timer)
+      if (!res?.ok) {
+        setBusy(false)
+        setError(res?.error || 'No se pudo completar el reseteo')
+        setStep(1)
+        toast.error(res?.error || 'No se pudo completar el reseteo')
+        return
+      }
+      setDoneLabels(res.deleted || selectedLabels)
+      setBusy(false)
+      setStep(5)
+    } catch (e) {
+      clearInterval(timer)
+      setBusy(false)
+      setError(e.message || 'Error inesperado')
+      setStep(1)
+      toast.error(e.message || 'Error inesperado')
+    }
+  }
+
+  // Countdown de reinicio en el paso de éxito
+  useEffect(() => {
+    if (step !== 5) return
+    setCountdown(3)
+    const iv = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(iv)
+          api.reset.relaunch().catch(() => {})
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(iv)
+  }, [step])
+
+  return (
+    <div className="max-w-xl space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-white flex items-center gap-2"><AlertCircle size={18} className="text-red-400" /> Datos y reseteo</h2>
+        <p className="text-sm text-zinc-500 mt-0.5">Borrá los datos de prueba y dejá el sistema limpio para empezar a trabajar.</p>
+      </div>
+
+      {/* Zona de peligro */}
+      <div className="rounded-xl border border-red-500/30 bg-red-500/[0.04] p-5 space-y-3">
+        <p className="text-sm font-semibold text-red-300 flex items-center gap-2">
+          <AlertCircle size={15} /> ZONA DE PELIGRO
+        </p>
+        <div>
+          <p className="text-sm text-white font-medium flex items-center gap-2"><Trash2 size={15} className="text-red-400" /> Resetear sistema</p>
+          <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+            Borra los datos que selecciones (productos, ventas, clientes, caja, etc).
+            La configuración (email, AFIP, Mercado Pago, Drive, licencia, nombre del negocio y usuarios) <span className="text-zinc-300">nunca se toca</span>.
+          </p>
+        </div>
+        {info?.resetCount > 0 && (
+          <p className="text-xs text-zinc-500">
+            Último reseteo: {info.lastResetAt ? new Date(info.lastResetAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'} · Resets realizados: {info.resetCount}
+          </p>
+        )}
+        <div className="flex justify-end">
+          <button onClick={openModal}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-500/90 hover:bg-red-500 px-4 py-2 text-sm font-semibold text-white no-drag">
+            <Trash2 size={15} /> Resetear →
+          </button>
+        </div>
+      </div>
+
+      {/* ── Modal de 3 pasos ── */}
+      {open && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onClick={close}>
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-[#0f0f0f] shadow-2xl" onClick={e => e.stopPropagation()}>
+
+            {/* PASO 1 — Checklist */}
+            {step === 1 && (
+              <div className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2"><Trash2 size={17} className="text-red-400" /> ¿Qué querés borrar?</h3>
+                  <button onClick={close} className="text-zinc-500 hover:text-white no-drag"><X size={18} /></button>
+                </div>
+
+                <div className="flex gap-2">
+                  <button onClick={() => setAll(true)} className="text-xs px-2.5 py-1 rounded-md border border-border text-zinc-300 hover:text-white hover:border-zinc-500 no-drag flex items-center gap-1"><CheckCircle size={12} /> Seleccionar todo</button>
+                  <button onClick={() => setAll(false)} className="text-xs px-2.5 py-1 rounded-md border border-border text-zinc-300 hover:text-white hover:border-zinc-500 no-drag flex items-center gap-1"><X size={12} /> Deseleccionar todo</button>
+                </div>
+
+                <div className="max-h-[46vh] overflow-y-auto space-y-1 pr-1">
+                  {items.map(it => (
+                    <label key={it.key} className="flex items-center gap-2.5 rounded-lg px-3 py-2 cursor-pointer hover:bg-white/[0.03] no-drag">
+                      <input type="checkbox" checked={!!selected[it.key]}
+                        onChange={e => setSelected(s => ({ ...s, [it.key]: e.target.checked }))}
+                        className="accent-red-500 w-4 h-4" />
+                      <span className="text-sm text-zinc-200">{it.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="rounded-lg bg-white/[0.03] border border-border p-3 text-xs text-zinc-400 leading-relaxed">
+                  ⚙️ La configuración del sistema nunca se borra (email, AFIP, Mercado Pago, Drive, licencia, nombre del negocio y usuarios).
+                  {info?.driveConnected && <span className="block mt-1 text-emerald-400/90">📦 Google Drive conectado: se hará un backup automático antes de borrar.</span>}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={close} className="px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white no-drag">Cancelar</button>
+                  <button onClick={() => { setConfirmText(''); setStep(2) }} disabled={selectedKeys.length === 0}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-500/90 hover:bg-red-500 text-white disabled:opacity-40 disabled:cursor-not-allowed no-drag">
+                    Continuar →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* PASO 2 — Escribir BORRAR */}
+            {step === 2 && (
+              <div className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2"><AlertCircle size={17} className="text-red-400" /> Confirmá lo que se va a borrar</h3>
+                  <button onClick={close} className="text-zinc-500 hover:text-white no-drag"><X size={18} /></button>
+                </div>
+
+                <div className="rounded-lg border border-red-500/30 bg-red-500/[0.04] p-3 max-h-[38vh] overflow-y-auto">
+                  <ul className="text-sm text-zinc-200 space-y-1">
+                    {selectedLabels.map(l => (
+                      <li key={l} className="flex items-center gap-2"><Trash2 size={12} className="text-red-400 shrink-0" /> {l}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <p className="text-sm text-zinc-300 mb-1.5">Para confirmar, escribí la palabra <span className="font-bold text-red-400 tracking-wider">BORRAR</span> en el campo:</p>
+                  <input autoFocus value={confirmText} onChange={e => setConfirmText(e.target.value)}
+                    placeholder="BORRAR"
+                    className={`${inputCls} tracking-widest`} />
+                </div>
+
+                <div className="flex justify-between gap-2 pt-1">
+                  <button onClick={() => setStep(1)} className="px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white no-drag">← Volver</button>
+                  <div className="flex gap-2">
+                    <button onClick={close} className="px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white no-drag">Cancelar</button>
+                    <button onClick={() => setStep(3)} disabled={confirmText !== 'BORRAR'}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-500/90 hover:bg-red-500 text-white disabled:opacity-40 disabled:cursor-not-allowed no-drag">
+                      Confirmar borrado
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PASO 3 — Última confirmación */}
+            {step === 3 && (
+              <div className="p-6 space-y-5 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center">
+                  <AlertCircle size={26} className="text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">¿Estás absolutamente segura?</h3>
+                  <p className="text-sm text-zinc-400 mt-1">Esta acción es <span className="text-red-400 font-semibold">IRREVERSIBLE</span>. Se borrarán {selectedKeys.length} {selectedKeys.length === 1 ? 'categoría de datos' : 'categorías de datos'}.</p>
+                </div>
+                <div className="flex justify-center gap-2">
+                  <button onClick={close} className="px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white no-drag">No, cancelar</button>
+                  <button onClick={execute} className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-500 text-white no-drag">Sí, borrar definitivamente</button>
+                </div>
+              </div>
+            )}
+
+            {/* PASO 4 — Borrando */}
+            {step === 4 && (
+              <div className="p-6 space-y-4">
+                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                  <RefreshCw size={16} className="text-red-400 animate-spin" /> Reseteando el sistema...
+                </h3>
+                <div className="space-y-1.5">
+                  {progressMsgs.map((m, i) => (
+                    <div key={i} className={cn('flex items-center gap-2 text-sm transition-colors',
+                      i < progressIdx ? 'text-emerald-400' : i === progressIdx ? 'text-white' : 'text-zinc-600')}>
+                      {i < progressIdx
+                        ? <CheckCircle size={13} className="shrink-0" />
+                        : i === progressIdx
+                          ? <RefreshCw size={13} className="shrink-0 animate-spin" />
+                          : <span className="w-[13px] shrink-0" />}
+                      {m}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500">No cierres la aplicación.</p>
+              </div>
+            )}
+
+            {/* PASO 5 — Éxito + countdown */}
+            {step === 5 && (
+              <div className="p-6 space-y-4 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                  <CheckCircle size={26} className="text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">Reseteo completado</h3>
+                <div className="rounded-lg border border-border bg-white/[0.03] p-3 text-left max-h-[32vh] overflow-y-auto">
+                  <p className="text-xs text-zinc-500 mb-1.5">Se borraron:</p>
+                  <ul className="text-sm text-zinc-200 space-y-1">
+                    {doneLabels.map(l => (
+                      <li key={l} className="flex items-center gap-2"><CheckCircle size={12} className="text-emerald-400 shrink-0" /> {l}</li>
+                    ))}
+                  </ul>
+                </div>
+                <p className="text-sm text-zinc-400">La aplicación se va a reiniciar en <span className="text-white font-semibold">{countdown}</span>...</p>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }
