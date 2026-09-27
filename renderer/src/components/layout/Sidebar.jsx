@@ -69,7 +69,8 @@ export default function Sidebar() {
       const status = await api.tn.status()
       if (!status?.connected) { setTnOrderCount(0); return }
       const res = await api.tn.getOrders({ status: 'open' })
-      setTnOrderCount((res?.orders || []).length)
+      // Solo pendientes de importar: las ya importadas no cuentan para el badge.
+      setTnOrderCount(res?.pending ?? (res?.orders || []).filter(o => !o.imported).length)
     } catch { setTnOrderCount(0) }
   }, [])
 
@@ -80,8 +81,10 @@ export default function Sidebar() {
     api.waitlist.pending().then(n => setWaitlistPending(n || 0)).catch(() => {})
     const unsubSettings = window.electron.on('settings:changed', loadBiz)
     const unsubTn = window.electron.on('tn:status', () => checkTnOrders())
+    // autoSync emite tn:orders con { count } = pendientes de importar
+    const unsubTnOrders = window.electron.on('tn:orders', d => setTnOrderCount(d?.count || 0))
     const unsubWaitlist = window.electron.on('waitlist:count', n => setWaitlistPending(n || 0))
-    return () => { unsubSettings(); unsubTn(); unsubWaitlist() }
+    return () => { unsubSettings(); unsubTn(); unsubTnOrders(); unsubWaitlist() }
   }, [loadBiz, checkTnOrders])
 
   return (
@@ -119,7 +122,9 @@ export default function Sidebar() {
                 />
                 {label}
                 {to === '/ventas' && tnOrderCount > 0 && (
-                  <span className="ml-auto text-[10px] bg-accent text-black font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0">
+                  <span
+                    title={`${tnOrderCount} ${tnOrderCount === 1 ? 'orden pendiente' : 'órdenes pendientes'} de importar de Tienda Nube`}
+                    className="ml-auto text-[10px] bg-red-500 text-white font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0">
                     {tnOrderCount > 9 ? '9+' : tnOrderCount}
                   </span>
                 )}

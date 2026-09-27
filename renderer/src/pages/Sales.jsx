@@ -371,6 +371,7 @@ export default function Sales() {
   const [tnOrders, setTnOrders] = useState([])
   const [tnLoading, setTnLoading] = useState(false)
   const [tnImporting, setTnImporting] = useState(null)
+  const [tnFilter, setTnFilter] = useState('all') // 'all' | 'pending' | 'imported'
 
   // Detail modal
   const [detailModal, setDetailModal] = useState(null)
@@ -1312,13 +1313,24 @@ export default function Sales() {
       const res = await api.tn.importOrder(tnOrderId)
       if (res.ok) {
         toast.success(`Pedido #${tnOrderId} importado · stock descontado`)
+        if (res.lowStock?.length) {
+          toast.warning(`Importado con advertencias — sin stock suficiente: ${res.lowStock.join(', ')}`, { duration: 7000 })
+        }
         if (res.notFound?.length) {
           toast.warning(`Stock no descontado para: ${res.notFound.join(', ')} — producto no encontrado en DELPA`, { duration: 6000 })
         }
         loadTnOrders()
+      } else if (res.alreadyImported) {
+        toast.error(`Esta orden ya fue importada el ${formatDateTime(res.importedAt)}. El stock ya fue descontado.`, { duration: 6000 })
+        loadTnOrders()
       } else toast.error(res.error || 'Error al importar')
     } catch (e) { toast.error(e.message || 'Error') }
     finally { setTnImporting(null) }
+  }
+
+  // Abre el pedido importado en el módulo Pedidos de DELPA
+  const viewInDelpa = (localOrderId) => {
+    navigate('/pedidos', { state: { focusOrderId: localOrderId } })
   }
 
   const openVoidModal = (s) => {
@@ -2398,29 +2410,82 @@ export default function Sales() {
       )}
 
       {/* Pedidos web (Tienda Nube) */}
-      {tab === 'pedidos-web' && (
+      {tab === 'pedidos-web' && (() => {
+        const pendingCount  = tnOrders.filter(o => !o.imported).length
+        const importedCount = tnOrders.length - pendingCount
+        const filteredOrders = tnFilter === 'pending'  ? tnOrders.filter(o => !o.imported)
+                             : tnFilter === 'imported' ? tnOrders.filter(o => o.imported)
+                             : tnOrders
+        const chips = [
+          { id: 'all',      label: 'Todas',                   count: tnOrders.length },
+          { id: 'pending',  label: '⏳ Pendientes de importar', count: pendingCount },
+          { id: 'imported', label: '✅ Ya importadas',          count: importedCount },
+        ]
+        return (
         <div className="flex-1 overflow-hidden flex flex-col p-6">
-          <div className="flex items-center justify-between mb-4 shrink-0">
-            <p className="text-sm text-zinc-400">Pedidos abiertos en Tienda Nube — importalos como pedidos locales</p>
+          <div className="flex items-center justify-between mb-3 shrink-0">
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-zinc-400">Pedidos abiertos en Tienda Nube — importalos como pedidos locales</p>
+              {pendingCount > 0 && (
+                <span className="text-xs font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded-full px-2.5 py-0.5">
+                  {pendingCount} {pendingCount === 1 ? 'orden pendiente' : 'órdenes pendientes'} de importar
+                </span>
+              )}
+            </div>
             <button onClick={loadTnOrders} disabled={tnLoading}
               className="flex items-center gap-2 px-3 py-1.5 text-sm border border-border rounded-lg text-zinc-400 hover:text-white transition-colors">
               <RefreshCw size={13} className={tnLoading ? 'animate-spin' : ''} /> Actualizar
             </button>
           </div>
+
+          {/* Chips de filtro rápido */}
+          <div className="flex items-center gap-1.5 mb-3 shrink-0">
+            {chips.map(c => (
+              <button key={c.id} onClick={() => setTnFilter(c.id)}
+                className={cn('px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
+                  tnFilter === c.id
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border text-zinc-400 hover:text-white hover:border-zinc-500')}>
+                {c.label} <span className="opacity-60">({c.count})</span>
+              </button>
+            ))}
+          </div>
+
           <div className="flex-1 overflow-y-auto bg-card border border-border rounded-xl divide-y divide-border">
             {tnLoading ? (
               <div className="flex items-center justify-center py-16 text-zinc-600 text-sm">Cargando pedidos...</div>
-            ) : tnOrders.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
                 <Store size={32} className="mb-3 opacity-40" />
-                <p className="text-sm">Sin pedidos abiertos en Tienda Nube</p>
+                <p className="text-sm">
+                  {tnFilter === 'pending'  ? 'No hay órdenes pendientes de importar'
+                 : tnFilter === 'imported' ? 'Todavía no importaste ninguna orden'
+                 : 'Sin pedidos abiertos en Tienda Nube'}
+                </p>
               </div>
-            ) : tnOrders.map(order => (
+            ) : filteredOrders.map(order => (
               <div key={order.id} className="row-alt flex items-center px-4 py-3 gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm text-white font-medium">Pedido #{order.number}</span>
                     <span className="text-xs text-zinc-500">{order.customer?.name} {order.customer?.surname}</span>
+                    {/* Badge estado en DELPA */}
+                    {!order.imported ? (
+                      <span title="Esta orden todavía no fue procesada en DELPA. Hacé click en Importar."
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded-full px-2 py-0.5">
+                        <Clock size={11} /> Sin importar
+                      </span>
+                    ) : order.importStatus === 'warning' ? (
+                      <span title="Algunos productos no tenían stock suficiente al importar"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-400 bg-orange-400/10 border border-orange-400/30 rounded-full px-2 py-0.5">
+                        <AlertTriangle size={11} /> Importada con advertencias
+                      </span>
+                    ) : (
+                      <span title={`Stock descontado automáticamente el ${formatDateTime(order.importedAt)}`}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-400 bg-green-400/10 border border-green-400/30 rounded-full px-2 py-0.5">
+                        <CheckCircle size={11} /> Importada el {formatDateTime(order.importedAt)}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-zinc-500 mt-0.5">
                     {(order.products || []).map(p => `${p.name} ×${p.quantity}`).join(', ').substring(0, 80)}
@@ -2429,18 +2494,28 @@ export default function Sales() {
                 <span className="text-sm font-bold text-white tabular-nums shrink-0">
                   ${Number(order.total || 0).toLocaleString('es-AR')}
                 </span>
-                <button
-                  onClick={() => importTnOrder(order.id)}
-                  disabled={tnImporting === order.id}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent/10 border border-accent/30 rounded-lg text-accent hover:bg-accent/20 transition-colors disabled:opacity-50 shrink-0">
-                  <Download size={12} />
-                  {tnImporting === order.id ? 'Importando...' : 'Importar'}
-                </button>
+                {/* Botón según estado: nunca mostrar Importar en órdenes ya procesadas */}
+                {order.imported ? (
+                  <button
+                    onClick={() => viewInDelpa(order.localOrderId)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 hover:bg-green-500/20 transition-colors shrink-0">
+                    <Eye size={12} /> Ver en DELPA
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => importTnOrder(order.id)}
+                    disabled={tnImporting === order.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent/10 border border-accent/30 rounded-lg text-accent hover:bg-accent/20 transition-colors disabled:opacity-50 shrink-0">
+                    <Download size={12} />
+                    {tnImporting === order.id ? 'Importando...' : 'Importar a DELPA'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Modal: Ventas pausadas */}
       <Modal open={pauseModal} onClose={() => setPauseModal(false)} title="Ventas pausadas" width="max-w-lg">

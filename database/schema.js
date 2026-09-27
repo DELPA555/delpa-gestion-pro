@@ -914,6 +914,20 @@ function createTables(db) {
   addColumnIfMissing(db, 'sale_items', 'net_price', 'REAL DEFAULT NULL')
   addColumnIfMissing(db, 'sale_items', 'profit',    'REAL DEFAULT NULL')
 
+  // Tienda Nube: trazabilidad de órdenes importadas para evitar doble importación
+  // y doble descuento de stock. tn_order_id = id único de la orden en TN.
+  // tn_import_status: 'ok' | 'warning' (faltó stock de algún producto al importar).
+  addColumnIfMissing(db, 'orders', 'tn_order_id',      'TEXT DEFAULT NULL')
+  addColumnIfMissing(db, 'orders', 'tn_imported_at',   'DATETIME DEFAULT NULL')
+  addColumnIfMissing(db, 'orders', 'tn_import_status', "TEXT DEFAULT 'ok'")
+  // Índice único parcial: garantiza que una misma orden de TN no se pueda importar
+  // dos veces aunque haya condiciones de carrera entre sync automática y manual.
+  try {
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_tn_order_id ON orders(tn_order_id) WHERE tn_order_id IS NOT NULL')
+  } catch (e) {
+    console.error('[DB Migration] No se pudo crear idx_orders_tn_order_id:', e.message)
+  }
+
   // Backfill idempotente de net_price/profit: distribuye el descuento global de cada venta
   // (sales.discount) entre sus items en proporción al importe bruto de cada línea. Se ejecuta
   // solo sobre filas con net_price NULL, así se auto-repara si aparece una fila sin calcular.

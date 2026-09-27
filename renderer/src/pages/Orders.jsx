@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   ClipboardList, Plus, X, Edit2, Trash2, Phone, CheckCircle,
-  Clock, Package, XCircle, ListTodo, Bell, Check, Hourglass,
+  Clock, Package, XCircle, ListTodo, Bell, Check, Hourglass, Store, AlertTriangle,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime, cn } from '@/lib/utils'
@@ -114,7 +115,7 @@ function OrdersTab() {
   useEffect(() => { load() }, [load])
 
   const openNew = () => { setEditing(null); setForm(EMPTY_FORM); setModal(true) }
-  const openEdit = (o) => {
+  const openEdit = useCallback((o) => {
     setEditing(o)
     setForm({
       client_name: o.client_name,
@@ -127,7 +128,17 @@ function OrdersTab() {
       delivery_date: o.delivery_date || '',
     })
     setModal(true)
-  }
+  }, [])
+
+  // Deep-link desde "Ver en DELPA" (Ventas → Pedidos web): abre el detalle del pedido.
+  const location = useLocation()
+  useEffect(() => {
+    const focusId = location.state?.focusOrderId
+    if (!focusId) return
+    api.orders.get(focusId).then(o => { if (o) openEdit(o) }).catch(() => {})
+    // Limpia el state para no reabrir el modal al volver a montar
+    window.history.replaceState({}, '')
+  }, [location.state, openEdit])
 
   const handleSave = async () => {
     if (!form.client_name.trim()) return toast.error('Ingresá el nombre del cliente')
@@ -261,6 +272,29 @@ function OrdersTab() {
 
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? `Editar pedido #${editing.id}` : 'Nuevo pedido'} width="max-w-lg">
         <div className="space-y-4">
+          {editing?.tn_order_id && (
+            <div className={cn('flex items-start gap-2 rounded-lg border px-3 py-2 text-xs',
+              editing.tn_import_status === 'warning'
+                ? 'bg-orange-400/10 border-orange-400/30 text-orange-300'
+                : 'bg-green-500/10 border-green-500/30 text-green-300')}>
+              {editing.tn_import_status === 'warning'
+                ? <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                : <Store size={14} className="mt-0.5 shrink-0" />}
+              <div>
+                <p className="font-semibold">
+                  {editing.tn_import_status === 'warning'
+                    ? 'Importada de Tienda Nube con advertencias'
+                    : 'Importada de Tienda Nube'}
+                </p>
+                {editing.tn_imported_at && (
+                  <p className="opacity-80">Stock descontado el {formatDateTime(editing.tn_imported_at)}</p>
+                )}
+                {editing.tn_import_status === 'warning' && (
+                  <p className="opacity-80">Algunos productos no tenían stock suficiente al importar.</p>
+                )}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Nombre del cliente *</label>

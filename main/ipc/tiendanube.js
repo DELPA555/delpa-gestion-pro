@@ -418,12 +418,37 @@ function syncStockAfterSale(items) {
 
 // ─── Orders ─────────────────────────────────────────────────────────────────
 
+// Enriquece cada orden de TN con su estado de importación en DELPA.
+// Agrega: imported (bool), importedAt (ISO/datetime), importStatus ('ok'|'warning'),
+// localOrderId (id del pedido en la tabla orders de DELPA).
+function annotateOrdersWithImportStatus(db, orders) {
+  if (!Array.isArray(orders) || orders.length === 0) return orders || []
+  const ids = orders.map(o => String(o.id))
+  const placeholders = ids.map(() => '?').join(',')
+  const rows = db.prepare(
+    `SELECT id, tn_order_id, tn_imported_at, tn_import_status FROM orders WHERE tn_order_id IN (${placeholders})`
+  ).all(...ids)
+  const byTnId = new Map(rows.map(r => [String(r.tn_order_id), r]))
+  return orders.map(o => {
+    const row = byTnId.get(String(o.id))
+    return {
+      ...o,
+      imported: !!row,
+      importedAt: row?.tn_imported_at || null,
+      importStatus: row?.tn_import_status || null,
+      localOrderId: row?.id || null,
+    }
+  })
+}
+
 ipcMain.handle('tn:getOrders', async (_, { status = 'open', page = 1 } = {}) => {
   try {
     const orders = await tnFetch(`/orders?status=${status}&per_page=50&page=${page}&fields=id,number,status,total,created_at,customer,products`)
-    return { ok: true, orders: Array.isArray(orders) ? orders : [] }
+    const annotated = annotateOrdersWithImportStatus(getDB(), Array.isArray(orders) ? orders : [])
+    const pending = annotated.filter(o => !o.imported).length
+    return { ok: true, orders: annotated, pending }
   } catch (e) {
-    return { ok: false, error: e.message, orders: [] }
+    return { ok: false, error: e.message, orders: [], pending: 0 }
   }
 })
 
@@ -503,12 +528,30 @@ ipcMain.handle('tn:syncCustomers', async (_, { onProgress } = {}) => {
 ipcMain.handle('tn:importOrder', async (_, tnOrderId) => {
   const db = getDB()
   try {
-    const order = await tnFetch(`/orders/${tnOrderId}`)
+    const tnId = String(tnOrderId)
+
+    // ── Guard anti-duplicado (chequeo previo, antes de golpear la API) ─────────
+    // Si la orden ya fue importada, no hacemos nada: ni descuento de stock, ni
+    // inserción. Devolvemos la fecha de importación para avisar al usuario.
+    const already = db.prepare(
+      'SELECT id, tn_imported_at FROM orders WHERE tn_order_id=?'
+    ).get(tnId)
+    if (already) {
+      console.log(`[TN importOrder] Orden #${tnId} ya importada (${already.tn_imported_at}), saltando`)
+      return {
+        ok: false,
+        alreadyImported: true,
+        importedAt: already.tn_imported_at,
+        localOrderId: already.id,
+      }
+    }
+
+    const order = await tnFetch(`/orders/${tnId}`)
     const clientName = order.customer ? `${order.customer.name || ''} ${order.customer.surname || ''}`.trim() : 'Cliente TN'
     const clientPhone = order.customer?.phone || ''
 
     // Auto-create or update client in DELPA
-    const clientId = upsertClientFromTN(db, order.customer)
+    upsertClientFromTN(db, order.customer)
     const itemsJson = (order.products || []).map(p => ({
       name: p.name,
       quantity: p.quantity,
@@ -516,17 +559,20 @@ ipcMain.handle('tn:importOrder', async (_, tnOrderId) => {
       size: p.variant_values?.join(' / ') || 'N/A',
     }))
     const total = Number(order.total) || 0
-    const { lastInsertRowid } = db.prepare(`
-      INSERT INTO orders (client_name,client_phone,items_json,total,status,notes)
-      VALUES (?,?,?,?,'pendiente',?)
-    `).run(clientName, clientPhone, JSON.stringify(itemsJson), total, `Importado de Tienda Nube #${order.number}`)
-    void clientId // used for auto-create above
+    const importedAt = new Date().toISOString()
 
-    // Deduct stock for each product in the TN order
-    const stockSyncItems = []
-    const notFound = []
-    for (const p of order.products || []) {
-      try {
+    // ── Importación transaccional ──────────────────────────────────────────────
+    // Todo (inserción de la orden + descuento de stock) ocurre dentro de una única
+    // transacción SQLite síncrona. Si algo tira una excepción, better-sqlite3 hace
+    // ROLLBACK automático y no queda ni la orden ni el stock descontado.
+    // Faltante de stock NO aborta: es una orden web ya pagada → se importa igual y
+    // se marca con estado 'warning' (indicador naranja en la UI).
+    const doImport = db.transaction(() => {
+      const stockSyncItems = []
+      const notFound = []   // productos que no se pudieron mapear a DELPA
+      const lowStock = []   // productos mapeados sin stock suficiente al descontar
+
+      for (const p of order.products || []) {
         const pName = String(p.name || '').trim()
         const size  = p.variant_values?.join(' / ') || 'N/A'
         const qty   = Number(p.quantity) || 1
@@ -569,26 +615,44 @@ ipcMain.handle('tn:importOrder', async (_, tnOrderId) => {
           if (!sizeRow) {
             console.log(`[TN importOrder] Talle ${size} no existe en "${localProduct.name}", se omite descuento`)
           } else {
+            if (sizeRow.stock < qty) {
+              console.log(`[TN importOrder] ⚠️ Stock insuficiente en "${localProduct.name}" T.${size}: hay ${sizeRow.stock}, se piden ${qty}`)
+              lowStock.push(`${localProduct.name} (T.${size})`)
+            }
             console.log(`[TN importOrder] Stock antes: ${sizeRow.stock} → descontando ${qty}`)
-            db.prepare('UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?').run(qty, localProduct.id, size)
+            db.prepare('UPDATE product_sizes SET stock=MAX(0,stock-?), stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?').run(qty, localProduct.id, size)
             const after = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(localProduct.id, size)
             console.log(`[TN importOrder] Stock después: ${after?.stock}`)
             stockSyncItems.push({ productId: localProduct.id, size })
           }
         }
-      } catch (e) {
-        console.error(`[TN importOrder] Error al procesar "${p.name}":`, e.message)
       }
-    }
-    // Fire-and-forget TN stock sync for affected items
-    if (stockSyncItems.length > 0) syncStockItems(stockSyncItems).catch(() => {})
+
+      const importStatus = lowStock.length > 0 ? 'warning' : 'ok'
+      const { lastInsertRowid } = db.prepare(`
+        INSERT INTO orders (client_name,client_phone,items_json,total,status,notes,tn_order_id,tn_imported_at,tn_import_status)
+        VALUES (?,?,?,?,'pendiente',?,?,?,?)
+      `).run(clientName, clientPhone, JSON.stringify(itemsJson), total,
+             `Importado de Tienda Nube #${order.number}`, tnId, importedAt, importStatus)
+
+      return { orderId: lastInsertRowid, stockSyncItems, notFound, lowStock, importStatus }
+    })
+
+    const result = doImport()
+
+    // Fire-and-forget TN stock sync for affected items (fuera de la transacción)
+    if (result.stockSyncItems.length > 0) syncStockItems(result.stockSyncItems).catch(() => {})
 
     return {
       ok: true,
-      orderId: lastInsertRowid,
-      notFound: notFound.length > 0 ? notFound : undefined,
+      orderId: result.orderId,
+      importedAt,
+      importStatus: result.importStatus,
+      notFound: result.notFound.length > 0 ? result.notFound : undefined,
+      lowStock: result.lowStock.length > 0 ? result.lowStock : undefined,
     }
   } catch (e) {
+    console.error('[TN importOrder] Error, se hizo ROLLBACK:', e.message)
     return { ok: false, error: e.message }
   }
 })
@@ -724,10 +788,16 @@ async function autoSync() {
   console.log('[TN autoSync] Iniciando sync automática:', new Date().toLocaleString('es-AR'))
   try {
     const db = getDB()
-    // Pull new TN orders and notify renderer
+    // Pull new TN orders and notify renderer. El contador refleja SOLO las órdenes
+    // que todavía no fueron importadas a DELPA (las ya importadas se filtran por
+    // tn_order_id), así el badge del sidebar muestra pendientes de importar.
     try {
       const orders = await tnFetch('/orders?status=open&per_page=50&fields=id,number,status,total,created_at,customer,products')
-      if (Array.isArray(orders)) sendToRenderer('tn:orders', { count: orders.length })
+      if (Array.isArray(orders)) {
+        const annotated = annotateOrdersWithImportStatus(db, orders)
+        const pending = annotated.filter(o => !o.imported).length
+        sendToRenderer('tn:orders', { count: pending, total: annotated.length })
+      }
     } catch (e) {
       console.error('[TN autoSync] Error al obtener pedidos:', e.message)
     }

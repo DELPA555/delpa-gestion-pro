@@ -1,4 +1,20 @@
 {
+  "v1.32.0": {
+    "fecha": "2026-09-27",
+    "titulo": "Tienda Nube: sin importaciones duplicadas + estado de cada orden",
+    "mejoras": [
+      "Protección anti-duplicado: cada orden de Tienda Nube se importa una sola vez. Si intentás importar una orden ya procesada, DELPA avisa la fecha en que se importó y no vuelve a descontar stock.",
+      "La importación de una orden es transaccional: si algo falla, no queda la orden a medias ni el stock descontado.",
+      "En Ventas → Pedidos web, cada orden muestra su estado en DELPA: 🟡 Sin importar, 🟢 Importada (con fecha y hora) o 🟠 Importada con advertencias (faltó stock de algún producto).",
+      "En las órdenes ya importadas desaparece el botón Importar y aparece 👁 Ver en DELPA, que abre el pedido correspondiente.",
+      "Filtros rápidos [Todas] [Pendientes] [Importadas] y contador de órdenes pendientes de importar en el encabezado.",
+      "Badge rojo en el menú de Ventas con la cantidad de órdenes de Tienda Nube pendientes de importar.",
+      "El pedido importado muestra en su detalle un cartel “Importada de Tienda Nube” con la fecha en que se descontó el stock."
+    ],
+    "correcciones": [
+      "La sincronización automática ya no vuelve a contar como nuevas las órdenes que ya fueron importadas."
+    ]
+  },
   "v1.29.0": {
     "fecha": "2026-09-23",
     "titulo": "Ayuda en todos los módulos + medio de pago en señas",
