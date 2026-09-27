@@ -40,7 +40,7 @@ const CHANNELS = [
   'shell:openPath',
   'tn:connect', 'tn:status', 'tn:disconnect',
   'tn:syncProducts', 'tn:syncStock', 'tn:syncAll',
-  'tn:getOrders', 'tn:importOrder',
+  'tn:getOrders', 'tn:importOrder', 'tn:unmarkImported',
   'tn:syncProduct', 'tn:syncCustomers', 'tn:importCustomer',
   'tn:salesToday', 'tn:salesPeriod',
   'auth:login', 'auth:logout', 'auth:session', 'auth:lastUser', 'auth:touch',

@@ -1,4 +1,27 @@
 {
+  "v1.34.0": {
+    "fecha": "2026-09-27",
+    "titulo": "Dashboard: ventas del día con desglose Local + Tienda Nube",
+    "mejoras": [
+      "La tarjeta “Ventas del día” ahora muestra el total combinado y el desglose por canal: 🏪 Local y 🛍️ Tienda Nube, cuando la tienda está conectada.",
+      "Las ventas de Tienda Nube se leen en vivo desde la API de Tienda Nube (no afectan la caja ni el cierre, que siguen siendo solo del local físico)."
+    ],
+    "correcciones": [
+      "Si Tienda Nube no está conectada o no responde, la tarjeta muestra solo el local (como antes) e indica “TN sin conexión” sin romper el número."
+    ]
+  },
+  "v1.33.0": {
+    "fecha": "2026-09-27",
+    "titulo": "Tienda Nube: órdenes viejas dejan de figurar como pendientes",
+    "mejoras": [
+      "Migración automática: las órdenes que ya habías importado antes de la actualización dejan de aparecer como “pendientes”. Se reconocen por su número de orden y se marcan como ya importadas (el stock de esas órdenes ya había sido descontado en su momento).",
+      "Las órdenes migradas muestran el badge verde “✅ Importada (historial)” para distinguirlas de las importadas con el sistema nuevo (que muestran fecha y hora exactas).",
+      "En órdenes migradas aparece el botón “⚠️ Marcar como NO importada”, por si sabés que alguna en realidad nunca se procesó y querés importarla de nuevo (pide confirmación antes de volver a descontar stock)."
+    ],
+    "correcciones": [
+      "El contador de pendientes y el badge del menú ya no cuentan las órdenes que fueron importadas antes de la actualización."
+    ]
+  },
   "v1.32.0": {
     "fecha": "2026-09-27",
     "titulo": "Tienda Nube: sin importaciones duplicadas + estado de cada orden",

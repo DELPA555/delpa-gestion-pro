@@ -920,12 +920,47 @@ function createTables(db) {
   addColumnIfMissing(db, 'orders', 'tn_order_id',      'TEXT DEFAULT NULL')
   addColumnIfMissing(db, 'orders', 'tn_imported_at',   'DATETIME DEFAULT NULL')
   addColumnIfMissing(db, 'orders', 'tn_import_status', "TEXT DEFAULT 'ok'")
+  // tn_migration=1 marca órdenes importadas ANTES de v1.32.0 (backfill). tn_order_number
+  // guarda el número de orden de TN (lo único que quedó registrado en notes en las viejas),
+  // para poder reconocerlas contra la API por número aunque no tengan el id real.
+  addColumnIfMissing(db, 'orders', 'tn_migration',     'INTEGER DEFAULT 0')
+  addColumnIfMissing(db, 'orders', 'tn_order_number',  'TEXT DEFAULT NULL')
   // Índice único parcial: garantiza que una misma orden de TN no se pueda importar
   // dos veces aunque haya condiciones de carrera entre sync automática y manual.
   try {
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_tn_order_id ON orders(tn_order_id) WHERE tn_order_id IS NOT NULL')
   } catch (e) {
     console.error('[DB Migration] No se pudo crear idx_orders_tn_order_id:', e.message)
+  }
+
+  // Backfill único: órdenes de Tienda Nube importadas antes de v1.32.0 no tienen tn_order_id,
+  // así que aparecían como "pendientes" aunque el stock ya se había descontado. No hay columna
+  // source/canal: las identificamos por el texto de notes ("Importado de Tienda Nube #<número>").
+  // Se marcan como migradas (tn_migration=1) con la fecha de creación como fecha de importación.
+  try {
+    const migDone = db.prepare("SELECT value FROM settings WHERE key='tn_migration_done'").get()
+    if (!migDone || migDone.value !== '1') {
+      const legacy = db.prepare(
+        "SELECT id, created_at, notes FROM orders WHERE (tn_order_id IS NULL OR tn_order_id='') AND notes LIKE 'Importado de Tienda Nube #%'"
+      ).all()
+      const upd = db.prepare(
+        "UPDATE orders SET tn_order_id=?, tn_order_number=?, tn_imported_at=?, tn_import_status='ok', tn_migration=1 WHERE id=?"
+      )
+      const runBackfill = db.transaction(() => {
+        for (const o of legacy) {
+          const m = String(o.notes || '').match(/#(\d+)/)
+          const number = m ? m[1] : null
+          // tn_order_id 'LEGACY-<id>' evita el NULL y respeta el índice único; el matcheo
+          // real de estas órdenes contra la API se hace por tn_order_number.
+          upd.run(`LEGACY-${o.id}`, number, o.created_at, o.id)
+        }
+        db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('tn_migration_done','1')").run()
+      })
+      runBackfill()
+      if (legacy.length) console.log(`[DB Migration] TN backfill: ${legacy.length} órdenes marcadas como migradas`)
+    }
+  } catch (e) {
+    console.error('[DB Migration] Error en backfill de órdenes TN legacy:', e.message)
   }
 
   // Backfill idempotente de net_price/profit: distribuye el descuento global de cada venta

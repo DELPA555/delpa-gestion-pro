@@ -424,6 +424,7 @@ export const api = {
     syncAll:        ()    => inv('tn:syncAll'),
     getOrders:      (p)   => inv('tn:getOrders', p),
     importOrder:    (id)  => inv('tn:importOrder', id),
+    unmarkImported: (id)  => inv('tn:unmarkImported', id),
     syncCustomers:  ()    => inv('tn:syncCustomers'),
     importCustomer: (id)  => inv('tn:importCustomer', id),
     salesToday:     ()    => inv('tn:salesToday'),

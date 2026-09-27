@@ -424,22 +424,50 @@ function syncStockAfterSale(items) {
 function annotateOrdersWithImportStatus(db, orders) {
   if (!Array.isArray(orders) || orders.length === 0) return orders || []
   const ids = orders.map(o => String(o.id))
-  const placeholders = ids.map(() => '?').join(',')
+  const numbers = orders.map(o => String(o.number))
+  const idPh  = ids.map(() => '?').join(',')
+  const numPh = numbers.map(() => '?').join(',')
+  // Dos vías de matcheo:
+  //  - por tn_order_id: órdenes importadas con el sistema nuevo (id real de TN).
+  //  - por tn_order_number (solo migradas): órdenes viejas sin id, reconocidas por número.
   const rows = db.prepare(
-    `SELECT id, tn_order_id, tn_imported_at, tn_import_status FROM orders WHERE tn_order_id IN (${placeholders})`
-  ).all(...ids)
-  const byTnId = new Map(rows.map(r => [String(r.tn_order_id), r]))
+    `SELECT id, tn_order_id, tn_order_number, tn_imported_at, tn_import_status, tn_migration
+     FROM orders
+     WHERE tn_order_id IN (${idPh}) OR (tn_migration=1 AND tn_order_number IN (${numPh}))`
+  ).all(...ids, ...numbers)
+  const byTnId = new Map()
+  const byNumber = new Map()
+  for (const r of rows) {
+    if (r.tn_order_id) byTnId.set(String(r.tn_order_id), r)
+    if (r.tn_migration && r.tn_order_number) byNumber.set(String(r.tn_order_number), r)
+  }
   return orders.map(o => {
-    const row = byTnId.get(String(o.id))
+    const row = byTnId.get(String(o.id)) || byNumber.get(String(o.number))
     return {
       ...o,
       imported: !!row,
       importedAt: row?.tn_imported_at || null,
       importStatus: row?.tn_import_status || null,
+      migration: row ? !!row.tn_migration : false,
       localOrderId: row?.id || null,
     }
   })
 }
+
+// Revierte el estado de importación de un pedido (usado por "Marcar como NO importada"
+// en órdenes migradas del historial, por si en realidad nunca se procesaron). Deja el
+// pedido local intacto pero sin trazas de TN, para que la orden vuelva a figurar como
+// pendiente y se pueda re-importar.
+ipcMain.handle('tn:unmarkImported', (_, localOrderId) => {
+  try {
+    getDB().prepare(
+      "UPDATE orders SET tn_order_id=NULL, tn_order_number=NULL, tn_imported_at=NULL, tn_import_status='ok', tn_migration=0 WHERE id=?"
+    ).run(localOrderId)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
 
 ipcMain.handle('tn:getOrders', async (_, { status = 'open', page = 1 } = {}) => {
   try {

@@ -371,6 +371,7 @@ export default function Sales() {
   const [tnOrders, setTnOrders] = useState([])
   const [tnLoading, setTnLoading] = useState(false)
   const [tnImporting, setTnImporting] = useState(null)
+  const [tnUnmarking, setTnUnmarking] = useState(null)
   const [tnFilter, setTnFilter] = useState('all') // 'all' | 'pending' | 'imported'
 
   // Detail modal
@@ -1331,6 +1332,19 @@ export default function Sales() {
   // Abre el pedido importado en el módulo Pedidos de DELPA
   const viewInDelpa = (localOrderId) => {
     navigate('/pedidos', { state: { focusOrderId: localOrderId } })
+  }
+
+  // Órdenes migradas del historial: por si el dueño sabe que en realidad no se procesó,
+  // la desmarca para poder importarla de nuevo (con la advertencia correspondiente).
+  const unmarkTnOrder = async (order) => {
+    if (!window.confirm(`¿Estás segura? Esto va a permitir importar la orden #${order.number} de nuevo e intentará descontar el stock otra vez.`)) return
+    setTnUnmarking(order.id)
+    try {
+      const res = await api.tn.unmarkImported(order.localOrderId)
+      if (res.ok) { toast.success(`Orden #${order.number} marcada como NO importada`); loadTnOrders() }
+      else toast.error(res.error || 'Error')
+    } catch (e) { toast.error(e.message || 'Error') }
+    finally { setTnUnmarking(null) }
   }
 
   const openVoidModal = (s) => {
@@ -2475,6 +2489,11 @@ export default function Sales() {
                         className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded-full px-2 py-0.5">
                         <Clock size={11} /> Sin importar
                       </span>
+                    ) : order.migration ? (
+                      <span title="Esta orden fue importada antes de la actualización. El stock ya fue procesado."
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-400 bg-green-400/10 border border-green-400/30 rounded-full px-2 py-0.5">
+                        <CheckCircle size={11} /> Importada (historial)
+                      </span>
                     ) : order.importStatus === 'warning' ? (
                       <span title="Algunos productos no tenían stock suficiente al importar"
                         className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-400 bg-orange-400/10 border border-orange-400/30 rounded-full px-2 py-0.5">
@@ -2496,11 +2515,22 @@ export default function Sales() {
                 </span>
                 {/* Botón según estado: nunca mostrar Importar en órdenes ya procesadas */}
                 {order.imported ? (
-                  <button
-                    onClick={() => viewInDelpa(order.localOrderId)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 hover:bg-green-500/20 transition-colors shrink-0">
-                    <Eye size={12} /> Ver en DELPA
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => viewInDelpa(order.localOrderId)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 hover:bg-green-500/20 transition-colors">
+                      <Eye size={12} /> Ver en DELPA
+                    </button>
+                    {order.migration && (
+                      <button
+                        onClick={() => unmarkTnOrder(order)}
+                        disabled={tnUnmarking === order.id}
+                        title="Marcar como NO importada — solo si sabés que esta orden en realidad no fue procesada"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-amber-500/30 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors disabled:opacity-50">
+                        <AlertTriangle size={12} /> {tnUnmarking === order.id ? '...' : 'Marcar como NO importada'}
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button
                     onClick={() => importTnOrder(order.id)}

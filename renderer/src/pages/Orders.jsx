@@ -282,14 +282,18 @@ function OrdersTab() {
                 : <Store size={14} className="mt-0.5 shrink-0" />}
               <div>
                 <p className="font-semibold">
-                  {editing.tn_import_status === 'warning'
-                    ? 'Importada de Tienda Nube con advertencias'
-                    : 'Importada de Tienda Nube'}
+                  {editing.tn_migration
+                    ? 'Importada de Tienda Nube (historial)'
+                    : editing.tn_import_status === 'warning'
+                      ? 'Importada de Tienda Nube con advertencias'
+                      : 'Importada de Tienda Nube'}
                 </p>
-                {editing.tn_imported_at && (
+                {editing.tn_migration ? (
+                  <p className="opacity-80">Importada antes de la actualización. El stock ya fue procesado.</p>
+                ) : editing.tn_imported_at && (
                   <p className="opacity-80">Stock descontado el {formatDateTime(editing.tn_imported_at)}</p>
                 )}
-                {editing.tn_import_status === 'warning' && (
+                {editing.tn_import_status === 'warning' && !editing.tn_migration && (
                   <p className="opacity-80">Algunos productos no tenían stock suficiente al importar.</p>
                 )}
               </div>

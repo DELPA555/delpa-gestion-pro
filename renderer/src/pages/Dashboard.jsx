@@ -219,6 +219,7 @@ export default function Dashboard() {
   const [topClients, setTopClients] = useState([])
   const [overdue, setOverdue] = useState([])
   const [conn, setConn] = useState({ tn: null, drive: null, afip: null })
+  const [tnToday, setTnToday] = useState(null) // ventas de Tienda Nube de hoy (API en vivo)
 
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -243,6 +244,7 @@ export default function Dashboard() {
       api.cashbox.todaySummary(),
       api.mainCashbox.balance(),
       api.cashbox.current(),
+      api.tn.salesToday(),
     ])
     const v = (i) => (res[i].status === 'fulfilled' ? res[i].value : undefined)
     if (v(0) !== undefined) setStats(v(0))
@@ -253,6 +255,7 @@ export default function Dashboard() {
     if (v(5) !== undefined) setTodayCash(v(5))
     if (v(6) !== undefined) setMainCash(v(6))
     if (v(7) !== undefined) setCashOpen(!!v(7))
+    if (v(8) !== undefined) setTnToday(v(8))
     setLastUpdated(Date.now())
   }, [])
 
@@ -442,15 +445,49 @@ export default function Dashboard() {
 
       {/* ══ SECCIÓN 2 — KPIs PRINCIPALES ══ */}
       <div data-tour="dash-ventas" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {/* Card 1 — Ventas del día */}
+        {/* Card 1 — Ventas del día (local + Tienda Nube si está conectada) */}
         <KpiCard icon={ShoppingCart} title="Ventas del día" accent>
-          <p className="text-2xl font-bold text-white tabular-nums leading-tight">{formatCurrency(stats?.ventas || 0)}</p>
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <span>{stats?.cantidadVentas || 0} ventas</span>
-            <Delta pct={stats?.pctVsAyer} />
-          </div>
+          {(() => {
+            const local = stats?.ventas || 0
+            const tnConnected = !!tnToday?.connected
+            const tnError = !!tnToday?.error
+            const tnTotal = tnToday?.total || 0
+            const combined = local + (tnConnected && !tnError ? tnTotal : 0)
+            if (!tnConnected) {
+              // Sin Tienda Nube: comportamiento clásico (solo local)
+              return (
+                <>
+                  <p className="text-2xl font-bold text-white tabular-nums leading-tight">{formatCurrency(local)}</p>
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <span>{stats?.cantidadVentas || 0} ventas</span>
+                    <Delta pct={stats?.pctVsAyer} />
+                  </div>
+                </>
+              )
+            }
+            // Con Tienda Nube: total combinado + desglose por canal
+            return (
+              <>
+                <p className="text-2xl font-bold text-white tabular-nums leading-tight">{formatCurrency(combined)}</p>
+                <div className="mt-1 space-y-0.5 text-[11px] text-zinc-500">
+                  <div className="flex justify-between">
+                    <span>🏪 Local</span>
+                    <span className="text-zinc-300 tabular-nums">{formatCurrency(local)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>🛍️ Tienda Nube</span>
+                    <span className="text-zinc-300 tabular-nums">{tnError ? 's/d' : formatCurrency(tnTotal)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-zinc-500 mt-0.5">
+                  <span>{(stats?.cantidadVentas || 0) + (tnError ? 0 : (tnToday?.count || 0))} ventas</span>
+                  {tnError && <span className="text-amber-400" title={tnToday.error}>TN sin conexión</span>}
+                </div>
+              </>
+            )
+          })()}
           <div className="mt-1"><Sparkline data={sparkData} /></div>
-          <p className="text-[10px] text-zinc-600">últimas horas</p>
+          <p className="text-[10px] text-zinc-600">local · últimas horas</p>
         </KpiCard>
 
         {/* Card 2 — Ganancia neta */}
