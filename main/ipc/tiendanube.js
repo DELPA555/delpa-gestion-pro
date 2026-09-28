@@ -166,63 +166,64 @@ ipcMain.handle('tn:status', async () => {
 
 // ─── Sales today (web orders from TN) ────────────────────────────────────────
 
-ipcMain.handle('tn:salesToday', async () => {
-  const token = getSetting('tn_access_token')
-  const storeId = getSetting('tn_store_id')
-  if (!token || !storeId) return { connected: false, total: 0, count: 0 }
-  try {
-    // Build today's start in Argentina timezone (UTC-3)
-    const now = new Date()
-    const arMs = now.getTime() - (now.getTimezoneOffset() + 180) * 60000
-    const arDate = new Date(arMs)
-    const y = arDate.getUTCFullYear()
-    const m = String(arDate.getUTCMonth() + 1).padStart(2, '0')
-    const d = String(arDate.getUTCDate()).padStart(2, '0')
-    const todayAr = `${y}-${m}-${d}T00:00:00-0300`
-    const orders = await tnFetch(`/orders?created_at_min=${encodeURIComponent(todayAr)}&payment_status=paid&per_page=200`)
-    const arr = Array.isArray(orders) ? orders : []
-    const total = arr.reduce((s, o) => s + parseFloat(o.total || '0'), 0)
-    return { connected: true, total, count: arr.length }
-  } catch (e) {
-    return { connected: true, total: 0, count: 0, error: e.message }
-  }
-})
+// ─── Ventas TN por rango (reutilizable: dashboard, breakeven, informes/emails) ──
+// Suma el total de órdenes PAGADAS entre dos fechas ISO (con offset AR -0300).
+// Cachea en memoria con TTL para no golpear la API en cada carga del dashboard
+// ni en cada informe. maxIso es opcional (null = hasta ahora).
+const _tnSalesCache = new Map() // key `${minIso}|${maxIso}` → { at, value }
+const TN_SALES_TTL = 5 * 60 * 1000
 
-// ─── Ventas TN por período (day/week/month) ──────────────────────────────────
-ipcMain.handle('tn:salesPeriod', async (_, period = 'day') => {
+async function getTnSalesRange(minIso, maxIso = null) {
   const token = getSetting('tn_access_token')
   const storeId = getSetting('tn_store_id')
   if (!token || !storeId) return { connected: false, total: 0, count: 0 }
+  const key = `${minIso}|${maxIso || ''}`
+  const hit = _tnSalesCache.get(key)
+  if (hit && Date.now() - hit.at < TN_SALES_TTL) return hit.value
   try {
-    const now = new Date()
-    const arMs = now.getTime() - (now.getTimezoneOffset() + 180) * 60000
-    const arDate = new Date(arMs)
-    const y = arDate.getUTCFullYear()
-    const m = String(arDate.getUTCMonth() + 1).padStart(2, '0')
-    const d = String(arDate.getUTCDate()).padStart(2, '0')
-    let minIso
-    if (period === 'month') {
-      minIso = `${y}-${m}-01T00:00:00-0300`
-    } else if (period === 'week') {
-      const wk = new Date(arDate.getTime() - 7 * 86400000)
-      minIso = `${wk.getUTCFullYear()}-${String(wk.getUTCMonth() + 1).padStart(2, '0')}-${String(wk.getUTCDate()).padStart(2, '0')}T00:00:00-0300`
-    } else {
-      minIso = `${y}-${m}-${d}T00:00:00-0300`
-    }
+    const maxParam = maxIso ? `&created_at_max=${encodeURIComponent(maxIso)}` : ''
     let page = 1, total = 0, count = 0
-    while (page <= 20) {
-      const orders = await tnFetch(`/orders?created_at_min=${encodeURIComponent(minIso)}&payment_status=paid&per_page=200&page=${page}`)
+    while (page <= 40) {
+      const orders = await tnFetch(`/orders?created_at_min=${encodeURIComponent(minIso)}${maxParam}&payment_status=paid&per_page=200&page=${page}`)
       const arr = Array.isArray(orders) ? orders : []
       total += arr.reduce((s, o) => s + parseFloat(o.total || '0'), 0)
       count += arr.length
       if (arr.length < 200) break
       page++
     }
-    return { connected: true, total, count }
+    const value = { connected: true, total, count }
+    _tnSalesCache.set(key, { at: Date.now(), value })
+    return value
   } catch (e) {
     return { connected: true, total: 0, count: 0, error: e.message }
   }
-})
+}
+
+// Fecha ISO (AR -0300) de inicio del período relativo a hoy
+function arPeriodMinIso(period) {
+  const now = new Date()
+  const arMs = now.getTime() - (now.getTimezoneOffset() + 180) * 60000
+  const arDate = new Date(arMs)
+  const y = arDate.getUTCFullYear()
+  const m = String(arDate.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(arDate.getUTCDate()).padStart(2, '0')
+  if (period === 'month') return `${y}-${m}-01T00:00:00-0300`
+  if (period === 'week') {
+    const wk = new Date(arDate.getTime() - 7 * 86400000)
+    return `${wk.getUTCFullYear()}-${String(wk.getUTCMonth() + 1).padStart(2, '0')}-${String(wk.getUTCDate()).padStart(2, '0')}T00:00:00-0300`
+  }
+  return `${y}-${m}-${d}T00:00:00-0300`
+}
+
+// Ventas TN del período relativo (day/week/month) terminando ahora
+async function getTnSalesForPeriod(period = 'day') {
+  return getTnSalesRange(arPeriodMinIso(period), null)
+}
+
+ipcMain.handle('tn:salesToday', async () => getTnSalesForPeriod('day'))
+
+// ─── Ventas TN por período (day/week/month) ──────────────────────────────────
+ipcMain.handle('tn:salesPeriod', async (_, period = 'day') => getTnSalesForPeriod(period))
 
 // ─── Disconnect ──────────────────────────────────────────────────────────────
 
@@ -868,4 +869,4 @@ async function autoSync() {
   }
 }
 
-module.exports = { syncStockAfterSale, autoSync }
+module.exports = { syncStockAfterSale, autoSync, getTnSalesRange, getTnSalesForPeriod }

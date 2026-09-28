@@ -366,7 +366,7 @@ ipcMain.handle('dashboard:heatmap', () =>
   `).all()
 )
 
-ipcMain.handle('dashboard:monthlyProfit', () => {
+ipcMain.handle('dashboard:monthlyProfit', async () => {
   const db = getDB()
   const monthlySales = db.prepare(`
     SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count
@@ -406,11 +406,21 @@ ipcMain.handle('dashboard:monthlyProfit', () => {
   const monthlyGoal = parseFloat(monthlyGoalSetting?.value || '0')
   // Ganancia neta = ganancia bruta − gastos variables − gastos fijos del mes.
   const realProfit = grossProfit.total - monthlyExpenses.total - fixedCostsTotal.total
-  // Margen % = ganancia neta / ventas totales × 100.
+  // Margen % = ganancia neta / ventas totales × 100. (sobre local: TN no tiene costo)
   const margin = monthlySales.total > 0 ? (realProfit / monthlySales.total) * 100 : 0
+  // Ventas de Tienda Nube del mes (API en vivo, aditivo). Se suman al total de ventas
+  // pero NO a la ganancia/margen (no tenemos costo de las ventas web).
+  let tnMonthlySales = 0
+  try {
+    const { getTnSalesForPeriod } = require('./tiendanube')
+    const tn = await getTnSalesForPeriod('month')
+    if (tn?.connected && !tn.error) tnMonthlySales = tn.total || 0
+  } catch {}
   return {
     monthlySales: monthlySales.total,
     monthlyCount: monthlySales.count,
+    tnMonthlySales,
+    combinedMonthlySales: monthlySales.total + tnMonthlySales,
     grossProfit: grossProfit.total,
     monthlyExpenses: monthlyExpenses.total,
     fixedCostsTotal: fixedCostsTotal.total,

@@ -1,19 +1,28 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 
-ipcMain.handle('breakeven:data', () => {
+ipcMain.handle('breakeven:data', async () => {
   const db = getDB()
 
   // Fixed costs
   let fixedCosts = 0
   try { fixedCosts = db.prepare(`SELECT COALESCE(SUM(amount),0) as total FROM fixed_costs WHERE active=1`).get()?.total || 0 } catch {}
 
-  // This month's sales + costs
+  // This month's sales + costs (local físico)
   const monthStart = new Date().toISOString().slice(0, 7) + '-01'
-  const monthlySales = db.prepare(`
+  const monthlySalesLocal = db.prepare(`
     SELECT COALESCE(SUM(total),0) as total FROM sales
     WHERE voided=0 AND date(created_at,'localtime') >= ?
   `).get(monthStart)?.total || 0
+
+  // Ventas de Tienda Nube del mes (API en vivo, aditivo) para el avance al breakeven.
+  let tnSales = 0
+  try {
+    const { getTnSalesForPeriod } = require('./tiendanube')
+    const tn = await getTnSalesForPeriod('month')
+    if (tn?.connected && !tn.error) tnSales = tn.total || 0
+  } catch {}
+  const monthlySales = monthlySalesLocal + tnSales
 
   // Variable expenses this month
   const varExpenses = db.prepare(`
@@ -48,6 +57,8 @@ ipcMain.handle('breakeven:data', () => {
     marginRate,
     breakeven,
     monthlySales,
+    monthlySalesLocal,
+    tnSales,
     pct,
     achieved,
     remaining: Math.max(0, breakeven - monthlySales),

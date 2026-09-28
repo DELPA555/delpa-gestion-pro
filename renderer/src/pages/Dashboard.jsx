@@ -721,6 +721,9 @@ export default function Dashboard() {
                   <div className="text-right text-[11px] text-zinc-500 space-y-0.5">
                     <div>Gastos fijos: <span className="text-amber-400 tabular-nums">{formatCurrency(breakeven.fixedCosts)}</span></div>
                     <div>Vendido: <span className="text-white tabular-nums">{formatCurrency(breakeven.monthlySales)}</span></div>
+                    {breakeven.tnSales > 0 && (
+                      <div className="text-zinc-600">incluye 🛍️ TN <span className="tabular-nums">{formatCurrency(breakeven.tnSales)}</span></div>
+                    )}
                   </div>
                 </div>
                 <ProgressBar pct={pct} color={color} className="h-3" />
@@ -799,7 +802,12 @@ export default function Dashboard() {
           <SectionTitle icon={DollarSign}>Rentabilidad del mes</SectionTitle>
           {!monthlyProfit ? <EmptyMini>Sin datos</EmptyMini> : (
             <div className="space-y-1.5 text-sm">
-              <Row label="Total ventas" value={monthlyProfit.monthlySales} />
+              <Row label="Total ventas" value={monthlyProfit.combinedMonthlySales ?? monthlyProfit.monthlySales} />
+              {monthlyProfit.tnMonthlySales > 0 && (
+                <div className="flex items-center justify-between text-[11px] text-zinc-600 -mt-1">
+                  <span className="pl-2">🏪 Local {formatCurrency(monthlyProfit.monthlySales)} · 🛍️ TN {formatCurrency(monthlyProfit.tnMonthlySales)}</span>
+                </div>
+              )}
               <Row label="Ganancia bruta" value={monthlyProfit.grossProfit} valueClass="text-green-400" />
               <Row label="Gastos variables" value={-monthlyProfit.monthlyExpenses} valueClass="text-red-400" />
               <Row label="Gastos fijos" value={-monthlyProfit.fixedCostsTotal} valueClass="text-amber-400" />

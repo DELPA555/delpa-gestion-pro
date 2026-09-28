@@ -150,7 +150,7 @@ function metricsFor(db, from, to) {
   }
 }
 
-function gatherData(kind, mode) {
+async function gatherData(kind, mode) {
   const db = getDB()
   const period = computePeriod(kind, mode)
   const { from, to, baseFrom, baseTo } = period
@@ -305,12 +305,24 @@ function gatherData(kind, mode) {
     alerta: pctAnio >= 95 ? 'roja' : pctAnio >= 80 ? 'amarilla' : 'ok',
   }
 
+  // Ventas de Tienda Nube del período (API en vivo, aditivo). No entra en ganancia,
+  // margen ni fiscal (no tenemos costo ni CAE de las ventas web): solo suma al total
+  // de ventas para mostrar el combinado por canal. Si TN no responde, queda en local.
+  let tn = { connected: false, total: 0, count: 0 }
+  try {
+    const { getTnSalesRange } = require('./tiendanube')
+    tn = await getTnSalesRange(`${from}T00:00:00-0300`, `${to}T23:59:59-0300`)
+  } catch (e) { tn = { connected: false, total: 0, count: 0, error: e.message } }
+  const tnActive = !!tn.connected && !tn.error
+  const combinedRevenue = cur.revenue + (tnActive ? tn.total : 0)
+
   const data = {
     kind, period, generatedAt: new Date().toISOString(),
     revenue: cur.revenue, count: cur.count, units: cur.units, discount: cur.discount,
     grossProfit: cur.grossProfit, expenses: cur.expenses, fixedShare, netProfit, ticketAvg,
     margin: cur.revenue > 0 ? (netProfit / cur.revenue * 100) : 0,
     pctVar, baseRevenue: base.revenue,
+    tn, tnActive, combinedRevenue,
     bars, bestDay, worstDay,
     topProducts, topClients, newClients, churn,
     byPayment, expensesByCat, stockCritical, deadStock, mainCash, fiscal,
@@ -478,6 +490,16 @@ function buildHTML(data, bizName) {
       </tr>
     </table>
     <div style="margin-top:12px;font-size:12.5px;color:${varColor};font-weight:600">${varTxt}</div>
+    ${data.tnActive ? `
+    <div style="margin-top:12px;background:#161616;border-radius:10px;padding:12px 14px">
+      <div style="font-size:10px;color:#7a7a7a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Ventas por canal</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12.5px;color:#e5e5e5">
+        <tr><td style="padding:4px 0">🏪 Local</td><td style="padding:4px 0;text-align:right;color:#fff">${fmtARS(data.revenue)}</td></tr>
+        <tr><td style="padding:4px 0">🛍️ Tienda Nube${data.tn.count ? ` <span style="color:#8a8a8a">(${data.tn.count})</span>` : ''}</td><td style="padding:4px 0;text-align:right;color:#fff">${fmtARS(data.tn.total)}</td></tr>
+        <tr><td style="padding:6px 0 0;border-top:1px solid #262626;font-weight:700;color:${ACCENT}">📊 Combinado</td><td style="padding:6px 0 0;border-top:1px solid #262626;text-align:right;font-weight:700;color:${ACCENT}">${fmtARS(data.combinedRevenue)}</td></tr>
+      </table>
+      <div style="margin-top:8px;font-size:10.5px;color:#6a6a6a">Ganancia, margen y datos fiscales corresponden solo al local físico.</div>
+    </div>` : ''}
     <div style="margin-top:6px;display:flex;gap:16px;font-size:11.5px;color:#9a9a9a">
       ${data.bestDay && data.bestDay.total > 0 ? `<span>🟢 Mejor día: <b style="color:#e5e5e5">${labelDate(data.bestDay.day)}</b> (${fmtARS(data.bestDay.total)})</span>` : ''}
       ${data.worstDay && data.worstDay.total > 0 && data.worstDay.day !== data.bestDay?.day ? `<span>🔻 Día más flojo: <b style="color:#e5e5e5">${labelDate(data.worstDay.day)}</b> (${fmtARS(data.worstDay.total)})</span>` : ''}
@@ -692,7 +714,7 @@ async function sendReportEmail(kind, reportId, html, label) {
 async function generateAndMaybeSend(kind, { mode = 'current', send = false } = {}) {
   const cfg = getEmailConfig()
   const bizName = cfg.business_name || 'DELPA'
-  const data = gatherData(kind, mode)
+  const data = await gatherData(kind, mode)
   const html = buildHTML(data, bizName)
   const id = saveReport(data, html, bizName)
   let sendResult = null

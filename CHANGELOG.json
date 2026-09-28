@@ -1,4 +1,17 @@
 {
+  "v1.35.0": {
+    "fecha": "2026-09-27",
+    "titulo": "Tienda Nube sumada a informes, punto de equilibrio y rentabilidad",
+    "mejoras": [
+      "Los informes semanal y mensual por email ahora incluyen un bloque “Ventas por canal”: 🏪 Local, 🛍️ Tienda Nube y 📊 Combinado.",
+      "El punto de equilibrio del mes ahora cuenta las ventas de Tienda Nube además del local para el avance hacia cubrir los gastos fijos.",
+      "La rentabilidad del mes muestra el total de ventas combinado (Local + Tienda Nube) con el desglose por canal.",
+      "Las ventas de Tienda Nube se leen en vivo de la API con caché de 5 minutos para no demorar el Dashboard."
+    ],
+    "correcciones": [
+      "La ganancia, el margen y los datos fiscales siguen calculándose solo sobre el local físico (las ventas web no tienen costo ni CAE cargados); los informes lo aclaran explícitamente."
+    ]
+  },
   "v1.34.0": {
     "fecha": "2026-09-27",
     "titulo": "Dashboard: ventas del día con desglose Local + Tienda Nube",
