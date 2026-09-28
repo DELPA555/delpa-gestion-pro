@@ -1,4 +1,17 @@
 {
+  "v1.36.0": {
+    "fecha": "2026-09-28",
+    "titulo": "Apariencia y accesibilidad: tamaño de texto y tipo de letra",
+    "mejoras": [
+      "Nueva sección Configuración → Apariencia: elegí el tamaño de texto (Pequeño, Normal, Grande, Muy grande) y el tipo de letra (Inter, Arial, Georgia o OpenDyslexic para dislexia), con vista previa en tiempo real.",
+      "Botón rápido “Aa” en la barra superior para agrandar o achicar el texto al instante, sin entrar a Configuración.",
+      "Cada vendedora tiene su propia preferencia en esa computadora: se aplica automáticamente al iniciar sesión.",
+      "OpenDyslexic se descarga automáticamente al elegirla (si no hay internet, usa una fuente alternativa)."
+    ],
+    "correcciones": [
+      "El tamaño “Normal” mantiene exactamente el tamaño actual de la app: quien no toque nada no ve ningún cambio."
+    ]
+  },
   "v1.35.0": {
     "fecha": "2026-09-27",
     "titulo": "Tienda Nube sumada a informes, punto de equilibrio y rentabilidad",

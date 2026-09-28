@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { api } from '@/lib/api'
+import { applyAppearance, readAppearance } from '@/lib/appearance'
 
 const AuthContext = createContext(null)
 
@@ -23,6 +24,13 @@ export function AuthProvider({ children }) {
     await api.auth.logout()
     setUser(null)
   }
+
+  // Al conocer/cambiar el usuario logueado, aplica sus preferencias de apariencia
+  // (tamaño de texto + tipo de letra). Sin usuario, vuelve a las últimas usadas.
+  useEffect(() => {
+    if (user === undefined) return // aún cargando la sesión
+    applyAppearance(readAppearance(user?.username))
+  }, [user?.username])
 
   // Timer de inactividad: solo si "Mantener sesión activa" está apagado.
   // Cualquier actividad del usuario reinicia el reloj; al vencer, cierra sesión.

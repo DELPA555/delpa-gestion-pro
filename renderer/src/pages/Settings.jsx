@@ -11,6 +11,7 @@ import HelpButton from '@/components/HelpButton'
 import GuideModal from '@/components/GuideModal'
 import { EMAIL_GUIDE, AFIP_GUIDE } from '@/lib/guideSteps'
 import { useAuth } from '@/context/AuthContext'
+import { FONT_SIZES, FONT_FAMILIES, DEFAULT_APPEARANCE, applyAppearance, readAppearance, saveAppearance } from '@/lib/appearance'
 
 const TAB_GROUPS = [
   {
@@ -22,6 +23,7 @@ const TAB_GROUPS = [
       { id: 'sellers',      label: 'Vendedoras',    Icon: Users },
       { id: 'usuarios',     label: 'Usuarios',      Icon: UserCog },
       { id: 'seguridad',    label: 'Seguridad',     Icon: ShieldCheck },
+      { id: 'apariencia',   label: 'Apariencia',    Icon: Eye },
     ],
   },
   {
@@ -2333,6 +2335,8 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
       {/* ── Tab: Tutorial y ayuda ── */}
       {tab === 'ayuda' && <TabAyuda />}
 
+      {tab === 'apariencia' && <TabApariencia username={sessionUser?.username} />}
+
       {/* ── Tab: Datos y reseteo (solo admin) ── */}
       {tab === 'reseteo' && sessionUser?.role === 'admin' && <TabReseteo />}
 
@@ -2407,6 +2411,116 @@ function SupportAndAbout() {
         </button>
       </div>
     </>
+  )
+}
+
+// ── Tab Apariencia y accesibilidad ─────────────────────────────────────────────
+
+function TabApariencia({ username }) {
+  const savedRef = useRef(readAppearance(username))
+  const [size, setSize] = useState(savedRef.current.size)
+  const [family, setFamily] = useState(savedRef.current.family)
+
+  // Vista previa en tiempo real (aplica sin guardar todavía)
+  useEffect(() => { applyAppearance({ size, family }) }, [size, family])
+  // Si sale sin guardar, revierte a lo guardado
+  useEffect(() => () => { applyAppearance(savedRef.current) }, [])
+
+  const changed = size !== savedRef.current.size || family !== savedRef.current.family
+
+  const handleSave = () => {
+    saveAppearance(username, { size, family })
+    savedRef.current = { size, family }
+    toast.success('Apariencia guardada')
+  }
+  const handleCancel = () => {
+    setSize(savedRef.current.size)
+    setFamily(savedRef.current.family)
+    applyAppearance(savedRef.current)
+  }
+  const handleReset = () => {
+    setSize(DEFAULT_APPEARANCE.size)
+    setFamily(DEFAULT_APPEARANCE.family)
+  }
+
+  return (
+    <div className="max-w-xl space-y-6">
+      <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+        <Eye size={18} className="text-accent" /> Apariencia y accesibilidad
+      </h2>
+      <p className="text-sm text-zinc-400 -mt-3">
+        Ajustá cómo se ve el texto del sistema. Se guarda para tu usuario en esta computadora.
+      </p>
+
+      {/* Tamaño de texto */}
+      <div className="space-y-2">
+        <label className="text-xs text-zinc-500 uppercase tracking-wider">Tamaño de texto</label>
+        <div className="grid grid-cols-4 gap-2">
+          {Object.entries(FONT_SIZES).map(([key, { label }]) => (
+            <button key={key} onClick={() => setSize(key)}
+              className={cn('px-3 py-2 rounded-lg border text-sm transition-colors no-drag',
+                size === key ? 'border-accent bg-accent/10 text-accent font-semibold'
+                             : 'border-border text-zinc-400 hover:text-white hover:border-zinc-500')}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tipo de letra */}
+      <div className="space-y-2">
+        <label className="text-xs text-zinc-500 uppercase tracking-wider">Tipo de letra</label>
+        <div className="space-y-2">
+          {Object.entries(FONT_FAMILIES).map(([key, { label, stack }]) => (
+            <button key={key} onClick={() => setFamily(key)}
+              className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors no-drag',
+                family === key ? 'border-accent bg-accent/10' : 'border-border hover:border-zinc-500')}>
+              <span className={cn('w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+                family === key ? 'border-accent' : 'border-zinc-600')}>
+                {family === key && <span className="w-2 h-2 rounded-full bg-accent" />}
+              </span>
+              <span className={cn('text-sm', family === key ? 'text-white' : 'text-zinc-300')} style={{ fontFamily: stack }}>
+                {label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Vista previa */}
+      <div className="space-y-2">
+        <label className="text-xs text-zinc-500 uppercase tracking-wider">Vista previa</label>
+        <div className="rounded-xl border border-border bg-[#0a0a0a] p-4 space-y-1"
+          style={{ fontFamily: FONT_FAMILIES[family]?.stack, fontSize: FONT_SIZES[size]?.px }}>
+          <p className="text-white font-semibold">Jean Clásico T.38 — $45.000</p>
+          <p className="text-zinc-400">Stock disponible: 5 unidades</p>
+          <p className="text-green-400">Venta registrada correctamente</p>
+        </div>
+        <p className="text-[11px] text-zinc-600">
+          El cambio de tamaño se aplica a toda la app en el momento. Algunos textos muy chicos (etiquetas mínimas) pueden no escalar.
+        </p>
+      </div>
+
+      {/* Acciones */}
+      <div className="flex items-center justify-between pt-1">
+        <button onClick={handleReset}
+          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors no-drag">
+          <RefreshCw size={13} /> Restablecer valores predeterminados
+        </button>
+        <div className="flex items-center gap-2">
+          {changed && (
+            <button onClick={handleCancel}
+              className="px-4 py-2 rounded-lg border border-border text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors no-drag">
+              Cancelar
+            </button>
+          )}
+          <button onClick={handleSave} disabled={!changed}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-accent hover:bg-accent-hover text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors no-drag">
+            <CheckCircle size={14} /> Guardar
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

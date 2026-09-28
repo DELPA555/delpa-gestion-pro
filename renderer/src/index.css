@@ -17,10 +17,24 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* OpenDyslexic (accesibilidad) — se carga del CDN al elegirla; si no hay internet
+   cae en la familia siguiente del stack. */
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/open-dyslexic-regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Tamaño de texto configurable (Apariencia). Tailwind usa rem → toda la UI escala.
+   16px = tamaño actual por defecto ("Normal"). */
+html { font-size: var(--app-font-size, 16px); }
+
 body {
   background-color: #070707;
   color: #f0f0f0;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Inter', sans-serif;
+  font-family: var(--app-font-family, ui-sans-serif, system-ui, -apple-system, 'Inter', sans-serif);
   overflow: hidden;
   user-select: none;
 }

@@ -1,8 +1,67 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Minus, Square, X, Maximize2, Cloud, CloudOff, Sun, Moon, ShieldAlert, ArrowUpCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import HelpMenu from '@/components/HelpMenu'
+import { useAuth } from '@/context/AuthContext'
+import { FONT_SIZES, readAppearance, saveAppearance } from '@/lib/appearance'
+
+// Botón rápido de tamaño de texto (Aa) — 4 pasos, guarda por usuario al instante
+function AppearanceQuick() {
+  const { user } = useAuth()
+  const username = user?.username
+  const [open, setOpen] = useState(false)
+  const [size, setSize] = useState(() => readAppearance(username).size)
+  const ref = useRef(null)
+
+  useEffect(() => { setSize(readAppearance(username).size) }, [username])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const pick = (key) => {
+    setSize(key)
+    saveAppearance(username, { ...readAppearance(username), size: key })
+  }
+
+  const steps = [
+    { key: 'small',  label: 'A', cls: 'text-[11px]' },
+    { key: 'normal', label: 'A', cls: 'text-[13px]' },
+    { key: 'large',  label: 'A', cls: 'text-[15px]' },
+    { key: 'xlarge', label: 'A', cls: 'text-[18px]' },
+  ]
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Tamaño de texto"
+        className="w-10 h-9 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/5 transition-colors"
+      >
+        <span className="font-semibold leading-none">A<span className="text-[10px]">a</span></span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-xl shadow-2xl p-2">
+          <div className="text-[10px] text-zinc-500 uppercase tracking-wider px-1 pb-1.5 whitespace-nowrap">Tamaño de texto</div>
+          <div className="flex items-center gap-1">
+            {steps.map(s => (
+              <button key={s.key} onClick={() => pick(s.key)}
+                title={FONT_SIZES[s.key].label}
+                className={cn('w-9 h-9 rounded-lg border flex items-center justify-center transition-colors',
+                  size === s.key ? 'border-accent bg-accent/10 text-accent' : 'border-border text-zinc-400 hover:text-white hover:border-zinc-500')}>
+                <span className={cn('font-semibold leading-none', s.cls)}>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function formatClock() {
   const now = new Date()
@@ -124,6 +183,7 @@ export default function TitleBar() {
 
       {/* Right: help + sync icon + window controls */}
       <div className="no-drag flex items-center h-full gap-1 pr-1">
+        <AppearanceQuick />
         <HelpMenu />
         {/* License badge */}
         {licenseInfo?.status === 'active' && licenseInfo.daysRemaining !== null && licenseInfo.daysRemaining <= 30 && (
