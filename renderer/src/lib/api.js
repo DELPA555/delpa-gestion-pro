@@ -123,6 +123,11 @@ export const api = {
     transfers: () => inv('sucursales:transfers'),
     salesBySucursal: (p) => inv('sucursales:salesBySucursal', p),
   },
+  network: {
+    status: () => inv('network:status'),
+    syncNow: () => inv('network:syncNow'),
+    getStock: () => inv('network:getStock'),
+  },
   expenses: {
     list: (p) => inv('expenses:list', p),
     create: (d) => inv('expenses:create', d),

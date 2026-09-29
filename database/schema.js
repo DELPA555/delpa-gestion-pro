@@ -863,6 +863,11 @@ function createTables(db) {
     ['share_stock_online',    '0'],
     ['stock_access_pin',      ''],
     ['stock_public_file_id',  ''],
+    // Red de locales (multi-nodo por CUIT) — Fase 1
+    ['branch_type',          ''],      // 'sucursal' | 'deposito' | 'ambos'
+    ['branch_name',          ''],      // nombre de este nodo (fallback: business_name)
+    ['branch_share_stock',   '1'],     // '1' = sube su stock a la red
+    ['network_last_sync',    ''],      // ISO de la última subida de stock a la red
     ['surcharges_json',  JSON.stringify({
       'Tarjeta Débito': 0,
       'Tarjeta Crédito 1 cuota': 0,

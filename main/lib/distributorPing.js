@@ -28,6 +28,40 @@ function getLicenseData(db) {
   return { licenseStatus: 'trial', daysLeft: 14 }
 }
 
+function getSetting(db, key) {
+  return db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value || ''
+}
+
+// Snapshot compacto del stock para compartir con la red del mismo CUIT.
+// Formato compacto (payload chico): [{ b:barcode, n:name, c:color, cat:category, s:[[talle,stock],...] }]
+// Solo incluye productos activos con stock total > 0 (los ausentes en un nodo se leen como 0 en la grilla).
+function buildStockSnapshot(db) {
+  try {
+    const rows = db.prepare(`
+      SELECT p.id AS pid, p.barcode AS b, p.name AS n, p.color AS c, p.category AS cat,
+             ps.size AS size, ps.stock AS stock
+      FROM products p
+      JOIN product_sizes ps ON ps.product_id = p.id
+      WHERE p.active = 1
+      ORDER BY p.id
+    `).all()
+    const byProduct = new Map()
+    for (const r of rows) {
+      let it = byProduct.get(r.pid)
+      if (!it) { it = { b: r.b || '', n: r.n || '', c: r.c || '', cat: r.cat || '', s: [], _total: 0 }; byProduct.set(r.pid, it) }
+      const qty = Number(r.stock) || 0
+      it.s.push([r.size, qty])
+      it._total += qty
+    }
+    const out = []
+    for (const it of byProduct.values()) {
+      if (it._total <= 0) continue
+      out.push({ b: it.b, n: it.n, c: it.c, cat: it.cat, s: it.s })
+    }
+    return out
+  } catch { return [] }
+}
+
 function pingDistributor() {
   try {
     const db = require('../../database/db').getDB()
@@ -46,6 +80,12 @@ function pingDistributor() {
     const { licenseStatus, daysLeft } = getLicenseData(db)
     const pkg = require('../../package.json')
 
+    // ── Red de locales (multi-nodo por CUIT) ──
+    const cuit = getSetting(db, 'business_cuit').trim()
+    const branchType = getSetting(db, 'branch_type').trim()          // sucursal | deposito | ambos
+    const branchName = getSetting(db, 'branch_name').trim() || businessName
+    const shareStock = getSetting(db, 'branch_share_stock') !== '0'
+
     const payload = {
       hardwareId,
       businessName,
@@ -54,6 +94,19 @@ function pingDistributor() {
       daysLeft,
       version: pkg.version || '1.0.0',
       lastSale: lastSale ? lastSale.created_at : null,
+      // Campos de red — el Apps Script los ignora si no están definidos
+      cuit,
+      branchName,
+      branchType,
+    }
+
+    // Solo subimos stock si hay CUIT y el nodo tiene compartir habilitado
+    if (cuit && shareStock) {
+      payload.stockSnapshot = buildStockSnapshot(db)
+      try {
+        db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('network_last_sync',?)")
+          .run(new Date().toISOString())
+      } catch {}
     }
 
     const https = require('https')
@@ -71,4 +124,4 @@ function pingDistributor() {
   } catch {}
 }
 
-module.exports = { pingDistributor }
+module.exports = { pingDistributor, buildStockSnapshot, PING_URL }

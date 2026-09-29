@@ -1,4 +1,17 @@
 {
+  "v1.37.0": {
+    "fecha": "2026-09-29",
+    "titulo": "Red de locales y depósito: stock unificado de todas tus sucursales",
+    "mejoras": [
+      "Nueva sección Configuración → Red de locales: definí si esta instalación es una Sucursal, un Depósito o ambos, ponele un nombre y compartí tu stock con el resto de tus locales (identificados por el mismo CUIT).",
+      "Nuevo tab Sucursales → Stock de red: mirá en una sola pantalla el stock de todos tus locales y el depósito, por producto y por talle, con el total sumado de toda la red.",
+      "Cada local sube su stock automáticamente cada 15 minutos; también podés forzarlo al instante con el botón “Subir mi stock ahora”.",
+      "Buscador y filtro por categoría, estado de conexión de cada local (🟢 online / 🟡 hace un rato / 🔴 sin conexión) y colores por celda (verde/ámbar/rojo) para ver de un vistazo dónde falta stock."
+    ],
+    "correcciones": [
+      "Cada instalación mantiene su propia base de datos independiente: la red comparte únicamente el stock a través del CUIT, sin mezclar la información de cada local."
+    ]
+  },
   "v1.36.0": {
     "fecha": "2026-09-28",
     "titulo": "Apariencia y accesibilidad: tamaño de texto y tipo de letra",

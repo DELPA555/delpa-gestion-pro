@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import QRCodeLib from 'qrcode'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap } from 'lucide-react'
+import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap, Network, Warehouse, Boxes } from 'lucide-react'
 import { api } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
 import HelpButton from '@/components/HelpButton'
@@ -32,6 +32,7 @@ const TAB_GROUPS = [
       { id: 'surcharges',   label: 'Recargos',      Icon: Percent },
       { id: 'fidelizacion', label: 'Fidelización',  Icon: Gift },
       { id: 'gastosfijos',  label: 'Gastos Fijos',  Icon: DollarSign },
+      { id: 'red',          label: 'Red de locales', Icon: Network },
     ],
   },
   {
@@ -242,6 +243,12 @@ export default function Settings() {
   const [afipSaving, setAfipSaving] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // Red de locales (multi-nodo por CUIT)
+  const [netCfg, setNetCfg] = useState({ branch_type: '', branch_name: '', branch_share_stock: '1' })
+  const [netInfo, setNetInfo] = useState(null)   // { hardwareId, cuit, lastSyncAt }
+  const [netSaving, setNetSaving] = useState(false)
+  const [netSyncing, setNetSyncing] = useState(false)
+
   // Mercado Pago
   const [mpToken, setMpToken] = useState('')
   const [mpSandbox, setMpSandbox] = useState(false)
@@ -337,6 +344,12 @@ export default function Settings() {
         keep_session_active: all.keep_session_active ?? '1',
         session_timeout_minutes: all.session_timeout_minutes || '480',
       })
+      setNetCfg({
+        branch_type:        all.branch_type        || '',
+        branch_name:        all.branch_name         || '',
+        branch_share_stock: all.branch_share_stock ?? '1',
+      })
+      api.network.status().then(setNetInfo).catch(() => {})
       setEmailForm({
         email_smtp: all.email_smtp || 'smtp.gmail.com',
         email_port: all.email_port || '587',
@@ -482,6 +495,26 @@ export default function Settings() {
       toast.success('Configuración de sesión guardada')
     } catch { toast.error('Error al guardar') }
     finally { setSessionSaving(false) }
+  }
+
+  const saveNet = async () => {
+    setNetSaving(true)
+    try {
+      await Promise.all(Object.entries(netCfg).map(([k, v]) => api.settings.set(k, v)))
+      toast.success('Configuración de red guardada')
+      api.network.status().then(setNetInfo).catch(() => {})
+    } catch { toast.error('Error al guardar') }
+    finally { setNetSaving(false) }
+  }
+
+  const netSyncNow = async () => {
+    setNetSyncing(true)
+    try {
+      await api.network.syncNow()
+      toast.success('Stock enviado a la red')
+      setTimeout(() => api.network.status().then(setNetInfo).catch(() => {}), 2500)
+    } catch (e) { toast.error(e.message || 'Error al sincronizar') }
+    finally { setNetSyncing(false) }
   }
 
   const handleLicenseActivate = async () => {
@@ -2126,6 +2159,91 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
           <button onClick={savePoints} disabled={pointsSaving} className="btn-primary no-drag px-5 py-2 rounded-lg text-sm">
             {pointsSaving ? 'Guardando...' : 'Guardar configuración'}
           </button>
+        </div>
+      )}
+
+      {/* ── Tab: Red de locales ── */}
+      {tab === 'red' && (
+        <div className="max-w-2xl space-y-6">
+          <div>
+            <h3 className="text-white font-medium flex items-center gap-2"><Network size={16} className="text-accent" /> Red de locales</h3>
+            <p className="text-sm text-zinc-500 mt-1">
+              Conectá esta instalación con tus otras sucursales y depósito. Cada local tiene su propia base de datos;
+              se comparten el stock a través del CUIT. Configurá qué tipo de nodo es este local.
+            </p>
+          </div>
+
+          {/* CUIT (identificador de la red) */}
+          {netInfo && !netInfo.cuit ? (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-sm text-amber-300 flex items-start gap-3">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-200">Falta el CUIT del negocio</p>
+                <p className="mt-1 text-amber-300/80">La red identifica a tus locales por el CUIT. Cargalo en <span className="font-medium">Configuración → Negocio</span> (el mismo CUIT en todas las sucursales).</p>
+              </div>
+            </div>
+          ) : netInfo && (
+            <div className="flex items-center gap-2 text-sm text-zinc-400 bg-card border border-border rounded-lg px-4 py-2.5">
+              <ShieldCheck size={14} className="text-emerald-400" />
+              CUIT de la red: <span className="text-white font-mono">{netInfo.cuit}</span>
+            </div>
+          )}
+
+          {/* Tipo de nodo */}
+          <div>
+            <label className={labelCls}>Tipo de este nodo</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
+              {[
+                { v: 'sucursal', label: 'Sucursal', desc: 'Vende al público', Icon: Store },
+                { v: 'deposito', label: 'Depósito', desc: 'Distribuye a sucursales', Icon: Warehouse },
+                { v: 'ambos',    label: 'Sucursal + depósito', desc: 'Ambas funciones', Icon: Boxes },
+              ].map(({ v, label, desc, Icon }) => (
+                <button key={v} type="button" onClick={() => setNetCfg(p => ({ ...p, branch_type: v }))}
+                  className={cn('no-drag text-left p-4 rounded-xl border transition-colors',
+                    netCfg.branch_type === v ? 'border-accent bg-accent/[0.08]' : 'border-border bg-card hover:border-zinc-600')}>
+                  <Icon size={18} className={netCfg.branch_type === v ? 'text-accent' : 'text-zinc-400'} />
+                  <p className="text-white font-medium mt-2">{label}</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Nombre del nodo */}
+          <div>
+            <label className={labelCls}>Nombre de este local</label>
+            <input className={inputCls} value={netCfg.branch_name}
+              onChange={e => setNetCfg(p => ({ ...p, branch_name: e.target.value }))}
+              placeholder={form.business_name || 'Ej: Local Centro'} />
+            <p className="text-xs text-zinc-600 mt-1">Con este nombre aparece este local en el stock unificado de la red. Si lo dejás vacío se usa el nombre del negocio.</p>
+          </div>
+
+          {/* Compartir stock */}
+          <label className="flex items-center justify-between gap-4 bg-card border border-border rounded-xl px-4 py-3 cursor-pointer no-drag">
+            <div>
+              <p className="text-white text-sm font-medium">Compartir mi stock con la red</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Sube tu inventario cada 15 minutos para que las demás sucursales lo vean.</p>
+            </div>
+            <input type="checkbox" checked={netCfg.branch_share_stock !== '0'}
+              onChange={e => setNetCfg(p => ({ ...p, branch_share_stock: e.target.checked ? '1' : '0' }))}
+              className="w-5 h-5 accent-[var(--accent,#6366f1)]" />
+          </label>
+
+          {/* Info técnica */}
+          <div className="text-xs text-zinc-500 space-y-1 border-t border-border pt-4">
+            {netInfo?.hardwareId && <p>ID de este equipo: <span className="font-mono text-zinc-400">{netInfo.hardwareId.slice(0, 12)}</span></p>}
+            {netInfo?.lastSyncAt && <p>Último envío de stock: <span className="text-zinc-400">{formatDateTime(netInfo.lastSyncAt)}</span></p>}
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={saveNet} disabled={netSaving} className="btn-primary no-drag px-5 py-2 text-sm rounded-lg disabled:opacity-50">
+              {netSaving ? 'Guardando...' : 'Guardar configuración'}
+            </button>
+            <button onClick={netSyncNow} disabled={netSyncing || (netInfo && !netInfo.cuit)}
+              className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-300 hover:text-white hover:bg-white/[0.05] disabled:opacity-50">
+              <RefreshCw size={14} className={netSyncing ? 'animate-spin' : ''} /> {netSyncing ? 'Enviando...' : 'Subir mi stock ahora'}
+            </button>
+          </div>
         </div>
       )}
 
