@@ -53,8 +53,10 @@ ipcMain.handle('backup:create', async (_, { password }) => {
     const output = Buffer.concat([MAGIC, salt, iv, encrypted])
     fs.writeFileSync(filePath, output)
 
+    try { require('./techLogs').logTech('info', 'backup', `Backup creado (${(output.length / 1048576).toFixed(2)} MB)`) } catch {}
     return { ok: true, filePath, size: output.length }
   } catch (e) {
+    try { require('./techLogs').logTech('error', 'backup', 'Error al crear backup: ' + e.message, e.stack) } catch {}
     throw new Error('Error al crear backup: ' + e.message)
   }
 })

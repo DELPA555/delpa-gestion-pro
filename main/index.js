@@ -41,6 +41,15 @@ app.whenReady().then(() => {
   const { initDB } = require('../database/db')
   initDB()
 
+  // Logs técnicos: capturar errores no atrapados de todo el proceso principal
+  try {
+    const { logTech } = require('./ipc/techLogs')
+    process.on('uncaughtException', (e) => { try { logTech('error', 'app', 'uncaughtException: ' + (e?.message || e), e?.stack) } catch {} })
+    process.on('unhandledRejection', (e) => { try { logTech('error', 'app', 'unhandledRejection: ' + (e?.message || e), e?.stack) } catch {} })
+    const pkg = require('../package.json')
+    logTech('info', 'app', `App iniciada v${pkg.version} (${isDev ? 'dev' : 'prod'})`)
+  } catch {}
+
   require('./ipc/dashboard')
   require('./ipc/products')
   require('./ipc/sales')
@@ -58,6 +67,7 @@ app.whenReady().then(() => {
   require('./ipc/orders')
   require('./ipc/sucursales')
   require('./ipc/network')
+  require('./ipc/techLogs')
   require('./ipc/email')
   require('./ipc/afip')
   require('./ipc/inventory')

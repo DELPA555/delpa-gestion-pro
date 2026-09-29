@@ -224,12 +224,22 @@ ${expenses && expenses.length > 0 ? `
 }
 
 function buildSummaryEmailHtml(data, biz) {
-  const { byMethod, totalSales, totalExpenses, expectedCash, cashbox: cb, cashBreakdown } = data
+  const { byMethod, totalSales, totalExpenses, expectedCash, cashbox: cb, cashBreakdown, tnSales } = data
   const fmt = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(v || 0)
   const gananciaNet = totalSales - totalExpenses
   const bizName = biz.business_name || 'DELPA'
   const cbDiff = cb.difference || 0
   const cbk = cashBreakdown || {}
+
+  // Resumen del día: local + Tienda Nube (TN no afecta el efectivo de caja)
+  const tnBlock = tnSales ? `
+    <h3 style="color:#555;font-size:12px;margin:0 0 8px">Ventas del día — resumen completo</h3>
+    <div style="background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:14px;font-size:13px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">🏪 Ventas local</span><span style="font-weight:bold">${fmt(totalSales)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">🛍️ Ventas Tienda Nube <span style="color:#999">(${tnSales.count} ${tnSales.count === 1 ? 'orden' : 'órdenes'})</span></span><span style="font-weight:bold">${fmt(tnSales.total)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid #6366f1;margin-top:4px;font-weight:bold;font-size:15px;color:#4338ca"><span>📊 Total del día</span><span>${fmt((totalSales || 0) + (tnSales.total || 0))}</span></div>
+      <p style="color:#999;font-size:11px;margin:8px 0 0">Las ventas de Tienda Nube no forman parte del efectivo de la caja (solo del resumen del día).</p>
+    </div>` : ''
 
   const rows = byMethod.map(m => `
     <tr>
@@ -259,6 +269,7 @@ function buildSummaryEmailHtml(data, biz) {
     </div>
 
     <hr style="border:1px solid #eee;margin-bottom:12px">
+    ${tnBlock}
     <h3 style="color:#555;font-size:12px;margin:0 0 8px">Desglose por medio de pago</h3>
     <table style="border-collapse:collapse;font-size:13px;width:100%;margin-bottom:16px">
       <thead>
@@ -347,10 +358,18 @@ async function sendCashboxReport(cashboxId) {
     business_logo:    db.prepare("SELECT value FROM settings WHERE key='business_logo'").get()?.value || '',
   }
 
+  // Ventas de Tienda Nube del día (no afectan el efectivo; solo para el resumen del día)
+  let tnSales = null
+  try {
+    const { getTnSalesForPeriod } = require('./tiendanube')
+    const tn = await getTnSalesForPeriod('day')
+    if (tn && tn.connected && !tn.error) tnSales = { total: tn.total || 0, count: tn.count || 0 }
+  } catch { /* TN no conectada o sin respuesta: se omite */ }
+
   const reportData = {
     cashbox, byMethod, allSales, voidedSales, expenses, manualMovements,
     totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos,
-    expectedCash, paymentCounts,
+    expectedCash, paymentCounts, tnSales,
     // Desglose del efectivo del cierre (para el bloque claro del email/PDF)
     cashBreakdown: {
       openingCash: cashbox.opening_cash || 0,

@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import QRCodeLib from 'qrcode'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap, Network, Warehouse, Boxes } from 'lucide-react'
+import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap, Network, Warehouse, Boxes, ScrollText } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn, formatDateTime } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
+import Modal from '@/components/shared/Modal'
 import HelpButton from '@/components/HelpButton'
 import GuideModal from '@/components/GuideModal'
 import { EMAIL_GUIDE, AFIP_GUIDE } from '@/lib/guideSteps'
@@ -50,6 +51,7 @@ const TAB_GROUPS = [
     items: [
       { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
       { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
+      { id: 'logstecnicos',      label: 'Logs técnicos',   Icon: ScrollText, adminOnly: true },
       { id: 'ayuda',             label: 'Tutorial y ayuda', Icon: HelpCircle },
       { id: 'reseteo',           label: 'Datos y reseteo', Icon: Trash2, adminOnly: true },
     ],
@@ -248,6 +250,16 @@ export default function Settings() {
   const [netInfo, setNetInfo] = useState(null)   // { hardwareId, cuit, lastSyncAt }
   const [netSaving, setNetSaving] = useState(false)
   const [netSyncing, setNetSyncing] = useState(false)
+
+  // Logs técnicos
+  const [techLogs, setTechLogs] = useState([])
+  const [techModules, setTechModules] = useState([])
+  const [techLevel, setTechLevel] = useState('')
+  const [techModule, setTechModule] = useState('')
+  const [techLoading, setTechLoading] = useState(false)
+  const [techExpanded, setTechExpanded] = useState(null)
+  const [techUnseen, setTechUnseen] = useState(0)
+  const [techClearConfirm, setTechClearConfirm] = useState(false)
 
   // Mercado Pago
   const [mpToken, setMpToken] = useState('')
@@ -517,6 +529,50 @@ export default function Settings() {
     finally { setNetSyncing(false) }
   }
 
+  const loadTechLogs = useCallback(async () => {
+    setTechLoading(true)
+    try {
+      const [logs, mods] = await Promise.all([
+        api.techLogs.getAll({ level: techLevel || undefined, module: techModule || undefined }),
+        api.techLogs.modules(),
+      ])
+      setTechLogs(logs); setTechModules(mods)
+    } catch { /* noop */ }
+    finally { setTechLoading(false) }
+  }, [techLevel, techModule])
+
+  // Badge de errores nuevos (solo admin)
+  useEffect(() => {
+    if (sessionUser?.role === 'admin') api.techLogs.unseenCount().then(setTechUnseen).catch(() => {})
+  }, [sessionUser])
+
+  // Al entrar al tab: cargar y marcar como visto (limpia el badge)
+  useEffect(() => {
+    if (tab === 'logstecnicos') {
+      loadTechLogs()
+      api.techLogs.markSeen().then(() => setTechUnseen(0)).catch(() => {})
+    }
+  }, [tab, loadTechLogs])
+
+  const exportTechLogs = async () => {
+    try {
+      const txt = await api.techLogs.export()
+      const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `DELPA-logs-tecnicos-${new Date().toISOString().slice(0, 10)}.txt`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast.success('Logs exportados')
+    } catch (e) { toast.error('No se pudieron exportar los logs') }
+  }
+
+  const clearTechLogs = async () => {
+    try { await api.techLogs.clear(); setTechLogs([]); setTechClearConfirm(false); toast.success('Logs limpiados') }
+    catch { toast.error('Error al limpiar') }
+  }
+
   const handleLicenseActivate = async () => {
     if (!licenseCode.trim()) return toast.error('Ingresá el código de licencia')
     setLicenseActivating(true)
@@ -699,7 +755,12 @@ export default function Settings() {
                     )}
                   >
                     <Icon size={13} strokeWidth={tab === id ? 2.2 : 1.8} />
-                    {label}
+                    <span className="flex-1">{label}</span>
+                    {id === 'logstecnicos' && techUnseen > 0 && (
+                      <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                        {techUnseen > 99 ? '99+' : techUnseen}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -2159,6 +2220,103 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
           <button onClick={savePoints} disabled={pointsSaving} className="btn-primary no-drag px-5 py-2 rounded-lg text-sm">
             {pointsSaving ? 'Guardando...' : 'Guardar configuración'}
           </button>
+        </div>
+      )}
+
+      {/* ── Tab: Logs técnicos ── */}
+      {tab === 'logstecnicos' && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-white font-medium flex items-center gap-2"><ScrollText size={16} className="text-accent" /> Logs técnicos</h3>
+            <p className="text-sm text-zinc-500 mt-1">
+              Registro técnico para diagnóstico rápido: errores, queries lentas y operaciones críticas (caja, backup, sync). Se guardan los últimos 1000. Para enviar a soporte, usá “Exportar”.
+            </p>
+          </div>
+
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1 bg-[#0a0a0a] border border-border rounded-lg p-0.5">
+              {[
+                { v: '', label: 'Todos' },
+                { v: 'error', label: 'Errores' },
+                { v: 'warn', label: 'Warnings' },
+                { v: 'info', label: 'Info' },
+              ].map(o => (
+                <button key={o.v} onClick={() => setTechLevel(o.v)}
+                  className={cn('no-drag px-3 py-1.5 rounded-md text-xs transition-colors',
+                    techLevel === o.v ? 'bg-accent/15 text-accent font-medium' : 'text-zinc-500 hover:text-zinc-200')}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <select value={techModule} onChange={e => setTechModule(e.target.value)} className={`${inputCls} max-w-[170px]`}>
+              <option value="">Todos los módulos</option>
+              {techModules.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <button onClick={loadTechLogs} disabled={techLoading}
+              className="no-drag flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-border text-zinc-300 hover:text-white hover:bg-white/[0.05] disabled:opacity-50">
+              <RefreshCw size={14} className={techLoading ? 'animate-spin' : ''} /> Actualizar
+            </button>
+            <button onClick={exportTechLogs} disabled={techLogs.length === 0}
+              className="no-drag flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-border text-zinc-300 hover:text-white hover:bg-white/[0.05] disabled:opacity-50">
+              <Download size={14} /> Exportar
+            </button>
+            <button onClick={() => setTechClearConfirm(true)} disabled={techLogs.length === 0}
+              className="no-drag flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/[0.08] disabled:opacity-50">
+              <Trash2 size={14} /> Limpiar
+            </button>
+          </div>
+
+          {/* Tabla */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="grid text-[11px] text-zinc-500 uppercase px-4 py-2.5 border-b border-border bg-surface"
+              style={{ gridTemplateColumns: '150px 70px 100px 1fr' }}>
+              <span>Fecha</span><span>Nivel</span><span>Módulo</span><span>Mensaje</span>
+            </div>
+            {techLoading ? (
+              <div className="p-8 text-center text-sm text-zinc-500">Cargando…</div>
+            ) : techLogs.length === 0 ? (
+              <div className="p-8 text-center text-sm text-zinc-500">Sin registros{techLevel || techModule ? ' con esos filtros' : ' — todo tranquilo 👌'}.</div>
+            ) : (
+              <div className="divide-y divide-border max-h-[520px] overflow-y-auto">
+                {techLogs.map(log => {
+                  const open = techExpanded === log.id
+                  const tone = log.level === 'error' ? 'bg-red-500/15 text-red-400'
+                    : log.level === 'warn' ? 'bg-amber-500/15 text-amber-400'
+                    : 'bg-zinc-500/15 text-zinc-400'
+                  return (
+                    <div key={log.id}>
+                      <button onClick={() => setTechExpanded(open ? null : log.id)}
+                        className="no-drag w-full grid items-center px-4 py-2.5 text-sm text-left hover:bg-white/[0.03]"
+                        style={{ gridTemplateColumns: '150px 70px 100px 1fr' }}>
+                        <span className="text-zinc-500 text-xs">{formatDateTime(log.created_at)}</span>
+                        <span><span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold uppercase', tone)}>{log.level}</span></span>
+                        <span className="text-zinc-400 text-xs truncate">{log.module || '—'}</span>
+                        <span className="text-zinc-200 truncate">{log.message}</span>
+                      </button>
+                      {open && (
+                        <div className="px-4 pb-3 pt-1 bg-[#0a0a0a]" style={{ paddingLeft: '166px' }}>
+                          <p className="text-sm text-zinc-300 whitespace-pre-wrap break-words">{log.message}</p>
+                          {log.detail && <pre className="mt-2 text-[11px] text-zinc-500 whitespace-pre-wrap break-words font-mono bg-black/40 border border-border rounded-lg p-3 max-h-64 overflow-auto">{log.detail}</pre>}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          {techLogs.length > 0 && <p className="text-xs text-zinc-600">{techLogs.length} registro{techLogs.length !== 1 ? 's' : ''} (máx. 1000, se purgan los más viejos).</p>}
+
+          {techClearConfirm && (
+            <Modal open title="Limpiar logs técnicos" onClose={() => setTechClearConfirm(false)} width="max-w-sm">
+              <p className="text-sm text-zinc-400">¿Borrás todos los logs técnicos? Esta acción no se puede deshacer.</p>
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
+                <button onClick={() => setTechClearConfirm(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
+                <button onClick={clearTechLogs} className="no-drag px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg font-medium">Limpiar</button>
+              </div>
+            </Modal>
+          )}
         </div>
       )}
 

@@ -23,6 +23,8 @@ const CHANNELS = [
   'sucursales:list', 'sucursales:create', 'sucursales:update', 'sucursales:delete',
   'sucursales:transfer', 'sucursales:transfers', 'sucursales:salesBySucursal',
   'network:status', 'network:syncNow', 'network:getStock',
+  'techLogs:getAll', 'techLogs:modules', 'techLogs:unseenCount', 'techLogs:markSeen',
+  'techLogs:clear', 'techLogs:export', 'techLogs:log',
   'expenses:list', 'expenses:create', 'expenses:delete',
   'reports:salesByPeriod', 'reports:topProducts', 'reports:profitability',
   'reports:salesByCategory', 'reports:exportCSV',

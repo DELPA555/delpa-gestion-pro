@@ -65,7 +65,13 @@ ipcMain.handle('network:getStock', async () => {
   const cuit = getSetting('business_cuit').trim()
   if (!cuit) throw new Error('Configurá el CUIT del negocio en Configuración → Negocio para usar la red de locales.')
   const url = `${PING_URL}?action=getNetwork&cuit=${encodeURIComponent(cuit)}`
-  const res = await httpGetJson(url)
+  let res
+  try {
+    res = await httpGetJson(url)
+  } catch (e) {
+    try { require('./techLogs').logTech('error', 'red', 'Error al consultar stock de la red: ' + e.message) } catch {}
+    throw e
+  }
   if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo obtener el stock de la red.')
   const { getHardwareId } = require('../ipc/license')
   const thisHwid = String(getHardwareId() || '')

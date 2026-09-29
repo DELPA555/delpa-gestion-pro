@@ -128,6 +128,15 @@ export const api = {
     syncNow: () => inv('network:syncNow'),
     getStock: () => inv('network:getStock'),
   },
+  techLogs: {
+    getAll: (filters) => inv('techLogs:getAll', filters),
+    modules: () => inv('techLogs:modules'),
+    unseenCount: () => inv('techLogs:unseenCount'),
+    markSeen: () => inv('techLogs:markSeen'),
+    clear: () => inv('techLogs:clear'),
+    export: () => inv('techLogs:export'),
+    log: (d) => inv('techLogs:log', d),
+  },
   expenses: {
     list: (p) => inv('expenses:list', p),
     create: (d) => inv('expenses:create', d),

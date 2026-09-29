@@ -118,7 +118,9 @@ function pingDistributor() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
     })
-    req.on('error', () => {})
+    req.on('error', (e) => {
+      try { require('../ipc/techLogs').logTech('error', 'red', 'Error al enviar ping/stock a la red: ' + (e?.message || e)) } catch {}
+    })
     req.write(body)
     req.end()
   } catch {}

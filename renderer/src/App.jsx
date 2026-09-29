@@ -1,45 +1,59 @@
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { Toaster } from 'sonner'
-import { useEffect, useRef, useState, useCallback, Component } from 'react'
+import { useEffect, useRef, useState, useCallback, Component, lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/layout/Layout'
+// Login/Activación/SetupWizard van eager (parte del arranque, sin flash de spinner).
 import Login from './pages/Login'
 import ActivationScreen from './pages/ActivationScreen'
-import Dashboard from './pages/Dashboard'
-import Products from './pages/Products'
-import Sales from './pages/Sales'
-import Clients from './pages/Clients'
-import Accounts from './pages/Accounts'
-import Suppliers from './pages/Suppliers'
-import Purchases from './pages/Purchases'
-import CashBox from './pages/CashBox'
-import MainCashBox from './pages/MainCashBox'
-import Expenses from './pages/Expenses'
-import Reports from './pages/Reports'
-import Informes from './pages/Informes'
-import Invoices from './pages/Invoices'
-import Audit from './pages/Audit'
-import Settings from './pages/Settings'
-import Orders from './pages/Orders'
-import Sucursales from './pages/Sucursales'
-import Inventory from './pages/Inventory'
-import Senas from './pages/Senas'
-import StockEntry from './pages/StockEntry'
-import StockEgreso from './pages/StockEgreso'
-import Remitos from './pages/Remitos'
-import SupplierOrders from './pages/SupplierOrders'
-import Vouchers from './pages/Vouchers'
-import Consignment from './pages/Consignment'
 import SetupWizard from './pages/SetupWizard'
 import Onboarding from './components/Onboarding'
+// Páginas del router: lazy → se dividen en chunks y se cargan al navegar (bundle inicial más liviano).
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Products = lazy(() => import('./pages/Products'))
+const Sales = lazy(() => import('./pages/Sales'))
+const Clients = lazy(() => import('./pages/Clients'))
+const Accounts = lazy(() => import('./pages/Accounts'))
+const Suppliers = lazy(() => import('./pages/Suppliers'))
+const Purchases = lazy(() => import('./pages/Purchases'))
+const CashBox = lazy(() => import('./pages/CashBox'))
+const MainCashBox = lazy(() => import('./pages/MainCashBox'))
+const Expenses = lazy(() => import('./pages/Expenses'))
+const Reports = lazy(() => import('./pages/Reports'))
+const Informes = lazy(() => import('./pages/Informes'))
+const Invoices = lazy(() => import('./pages/Invoices'))
+const Audit = lazy(() => import('./pages/Audit'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Sucursales = lazy(() => import('./pages/Sucursales'))
+const Inventory = lazy(() => import('./pages/Inventory'))
+const Senas = lazy(() => import('./pages/Senas'))
+const StockEntry = lazy(() => import('./pages/StockEntry'))
+const StockEgreso = lazy(() => import('./pages/StockEgreso'))
+const Remitos = lazy(() => import('./pages/Remitos'))
+const SupplierOrders = lazy(() => import('./pages/SupplierOrders'))
+const Vouchers = lazy(() => import('./pages/Vouchers'))
+const Consignment = lazy(() => import('./pages/Consignment'))
 import { api } from './lib/api'
 import { toast } from 'sonner'
+
+// Fallback mientras carga el chunk de una página.
+function PageLoading() {
+  return (
+    <div className="flex items-center justify-center h-[60vh]">
+      <div className="w-6 h-6 border-2 border-zinc-700 border-t-accent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 class PageErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
   static getDerivedStateFromError(e) { return { error: e } }
-  componentDidCatch(e) { console.error('[PageErrorBoundary]', e) }
+  componentDidCatch(e) {
+    console.error('[PageErrorBoundary]', e)
+    try { api.techLogs.log({ level: 'error', module: 'ui', message: e?.message || String(e), detail: e?.stack || '' }) } catch {}
+  }
   render() {
     if (this.state.error) {
       return (
@@ -64,6 +78,7 @@ function AnimatedRoutes() {
 
   return (
     <AnimatePresence mode="wait">
+      <Suspense fallback={<PageLoading />}>
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Navigate to="/ventas" replace />} />
         <Route path="/ventas"       element={<PageErrorBoundary><Sales /></PageErrorBoundary>} />
@@ -95,6 +110,7 @@ function AnimatedRoutes() {
         </>}
         <Route path="*" element={<Navigate to="/ventas" replace />} />
       </Routes>
+      </Suspense>
     </AnimatePresence>
   )
 }

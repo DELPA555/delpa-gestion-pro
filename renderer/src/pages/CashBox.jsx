@@ -439,6 +439,27 @@ export default function CashBox() {
               ))}
             </div>
 
+            {summary.tnSales && (
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <p className="text-xs text-zinc-500 uppercase tracking-wider px-4 py-3 border-b border-border">Ventas del día — resumen completo</p>
+                <div className="divide-y divide-border">
+                  <div className="flex items-center justify-between px-4 py-3 text-sm">
+                    <span className="text-white">🏪 Ventas local</span>
+                    <span className="text-white font-medium tabular-nums">{formatCurrency(summary.totalSales)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div><span className="text-white">🛍️ Ventas Tienda Nube</span><span className="text-zinc-500 ml-2">{summary.tnSales.count} {summary.tnSales.count === 1 ? 'orden' : 'órdenes'}</span></div>
+                    <span className="text-white font-medium tabular-nums">{formatCurrency(summary.tnSales.total)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3 text-sm bg-white/[0.02]">
+                    <span className="text-accent font-semibold">📊 Total del día</span>
+                    <span className="text-accent font-bold tabular-nums">{formatCurrency((summary.totalSales || 0) + (summary.tnSales.total || 0))}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-zinc-600 px-4 py-2 border-t border-border">Las ventas de Tienda Nube no forman parte del efectivo de la caja (solo del resumen del día).</p>
+              </div>
+            )}
+
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <p className="text-xs text-zinc-500 uppercase tracking-wider px-4 py-3 border-b border-border">Ventas por medio de pago</p>
               <div className="divide-y divide-border">

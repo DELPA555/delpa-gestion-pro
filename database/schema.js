@@ -227,6 +227,17 @@ function createTables(db) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Logs TÉCNICOS (diagnóstico): errores, queries lentas, operaciones críticas.
+    -- Distinto de audit_log (auditoría de negocio). Auto-purga a 1000 registros.
+    CREATE TABLE IF NOT EXISTS tech_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      level TEXT NOT NULL DEFAULT 'info',   -- error | warn | info
+      module TEXT DEFAULT '',
+      message TEXT NOT NULL,
+      detail TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
     CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
@@ -241,6 +252,10 @@ function createTables(db) {
     CREATE INDEX IF NOT EXISTS idx_purchases_supplier_id ON purchases(supplier_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_module ON audit_log(module);
     CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+    CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name);
+    CREATE INDEX IF NOT EXISTS idx_tech_logs_created_at ON tech_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_tech_logs_level ON tech_logs(level);
 
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,

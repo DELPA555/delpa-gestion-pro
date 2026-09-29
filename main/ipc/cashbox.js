@@ -146,10 +146,11 @@ ipcMain.handle('cashbox:open', (_, { openingCash, notes, shift }) => {
   const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes,shift) VALUES (?,?,?)').run(openingCash || 0, notes || '', shiftVal)
   const shiftInfo = shiftVal ? ` (turno: ${shiftVal})` : ''
   db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('OPEN','cashbox',?,?)`).run(id, `Caja abierta con $${openingCash || 0}${shiftInfo}`)
+  try { require('./techLogs').logTech('info', 'caja', `Apertura de caja #${id}${shiftInfo} — fondo $${openingCash || 0}`) } catch {}
   return id
 })
 
-ipcMain.handle('cashbox:summary', (_, cashboxId) => {
+ipcMain.handle('cashbox:summary', async (_, cashboxId) => {
   const db = getDB()
   const cashbox = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   const byMethod = getSalesByMethod(db, cashboxId)
@@ -164,6 +165,13 @@ ipcMain.handle('cashbox:summary', (_, cashboxId) => {
   const manualOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso'").get(cashboxId).total
   const cashManualIn  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='ingreso' AND payment_method='Efectivo'").get(cashboxId).total
   const cashManualOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso' AND payment_method='Efectivo'").get(cashboxId).total
+  // Ventas de Tienda Nube del día (no afectan el efectivo; solo el resumen del día)
+  let tnSales = null
+  try {
+    const { getTnSalesForPeriod } = require('./tiendanube')
+    const tn = await getTnSalesForPeriod('day')
+    if (tn && tn.connected && !tn.error) tnSales = { total: tn.total || 0, count: tn.count || 0 }
+  } catch { /* TN no conectada */ }
   return {
     cashbox,
     byMethod,
@@ -172,6 +180,7 @@ ipcMain.handle('cashbox:summary', (_, cashboxId) => {
     manualIngresos: manualIn,
     manualEgresos:  manualOut,
     totalSales,
+    tnSales,
     // Efectivo esperado = apertura + ventas efectivo + ingresos manuales efectivo
     //                     - gastos EN EFECTIVO - egresos manuales efectivo
     expectedCash: (cashbox?.opening_cash || 0) + cashSales + cashManualIn - cashManualOut - cashExpenses,
@@ -208,11 +217,12 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
       transfer = { amount: effectiveRealCash, mainBalance: r.balanceAfter }
     }
   } catch (e) { console.error('[cashbox:close] transferencia automática a caja grande:', e.message) }
-  try { const { sendCashboxReport } = require('./email'); await sendCashboxReport(cashboxId) } catch {}
+  try { require('./techLogs').logTech(Math.abs(diff) > 0.5 ? 'warn' : 'info', 'caja', `Cierre de caja #${cashboxId} — esperado $${expected.toFixed(2)}, contado $${effectiveRealCash.toFixed(2)}, dif $${diff.toFixed(2)}`) } catch {}
+  try { const { sendCashboxReport } = require('./email'); await sendCashboxReport(cashboxId) } catch (e) { try { require('./techLogs').logTech('error', 'email', 'Fallo envío informe de cierre de caja: ' + e.message, e.stack) } catch {} }
   return { expectedCash: expected, difference: diff, transfer }
 })
 
-ipcMain.handle('cashbox:report', (_, cashboxId) => {
+ipcMain.handle('cashbox:report', async (_, cashboxId) => {
   const db = getDB()
   const cashbox = db.prepare('SELECT * FROM cashbox WHERE id=?').get(cashboxId)
   if (!cashbox) return null
@@ -252,7 +262,14 @@ ipcMain.handle('cashbox:report', (_, cashboxId) => {
   const expectedCash = cashbox.opening_cash + cashSales + cashManualIn - cashManualOut - cashExpenses
   let paymentCounts = {}
   try { paymentCounts = JSON.parse(cashbox.payment_counts_json || '{}') } catch {}
-  return { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts }
+  // Ventas de Tienda Nube del día (no afectan el efectivo; solo el resumen del día)
+  let tnSales = null
+  try {
+    const { getTnSalesForPeriod } = require('./tiendanube')
+    const tn = await getTnSalesForPeriod('day')
+    if (tn && tn.connected && !tn.error) tnSales = { total: tn.total || 0, count: tn.count || 0 }
+  } catch { /* TN no conectada */ }
+  return { cashbox, byMethod, allSales, voidedSales, expenses, manualMovements, totalSales, totalExpenses, cashExpenses, totalManualIngresos, totalManualEgresos, expectedCash, paymentCounts, tnSales }
 })
 
 ipcMain.handle('cashbox:history', (_, { page = 1, limit = 20 } = {}) => {

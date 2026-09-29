@@ -40,6 +40,7 @@ ipcMain.handle('auth:login', (_, { username, password }) => {
     db.prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('LOGIN','auth',?,?)")
       .run(user.id, `Inicio de sesión: ${user.username}`)
   } catch {}
+  try { require('./techLogs').logTech('info', 'auth', `Inicio de sesión: ${user.username} (${user.role})`) } catch {}
   return { ok: true, user: currentSession }
 })
 
@@ -51,6 +52,7 @@ ipcMain.handle('auth:logout', () => {
         .run(currentSession.id, `Cierre de sesión: ${currentSession.username}`)
     } catch {}
   }
+  try { require('./techLogs').logTech('info', 'auth', `Cierre de sesión: ${currentSession?.username || ''}`) } catch {}
   try { db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('active_session_user','')").run() } catch {}
   currentSession = null
   return { ok: true }

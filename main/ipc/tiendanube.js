@@ -864,8 +864,10 @@ async function autoSync() {
       lastSync,
     })
     console.log(`[TN autoSync] Completada: ${toSync.length} variantes sincronizadas`)
+    if (toSync.length > 0) { try { require('./techLogs').logTech('info', 'tiendanube', `Sync automática TN: ${toSync.length} variantes actualizadas`) } catch {} }
   } catch (e) {
     console.error('[TN autoSync] Error:', e.message)
+    try { require('./techLogs').logTech('error', 'tiendanube', 'Error en sync automática TN: ' + e.message, e.stack) } catch {}
   }
 }
 

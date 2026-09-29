@@ -1,4 +1,16 @@
 {
+  "v1.38.0": {
+    "fecha": "2026-09-29",
+    "titulo": "Logs técnicos, app más rápida y Tienda Nube en el cierre de caja",
+    "mejoras": [
+      "Nueva sección Configuración → Sistema → Logs técnicos (solo admin): registra errores, queries lentas y operaciones críticas (apertura/cierre de caja, backup, sincronizaciones) con filtros por nivel y módulo, botón para exportar un TXT para soporte y un aviso rojo cuando hay errores nuevos.",
+      "La app ahora arranca y navega más rápido: cada módulo se carga solo cuando se abre (antes se cargaba toda la app de una) y se agregaron índices en la base para acelerar las consultas más pesadas.",
+      "El informe de cierre de caja (pantalla y email) ahora muestra el resumen completo del día: 🏪 ventas locales, 🛍️ ventas de Tienda Nube y 📊 total combinado."
+    ],
+    "correcciones": [
+      "Las ventas de Tienda Nube se muestran aparte y NO afectan el efectivo de la caja: el arqueo de efectivo sigue siendo solo del local físico."
+    ]
+  },
   "v1.37.0": {
     "fecha": "2026-09-29",
     "titulo": "Red de locales y depósito: stock unificado de todas tus sucursales",
