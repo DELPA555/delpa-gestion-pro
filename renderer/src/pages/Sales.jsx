@@ -67,6 +67,7 @@ const DEFAULT_SURCHARGES = {
   'Tarjeta Crédito 12 cuotas': 30,
   'Tarjeta Crédito 18 cuotas': 45,
   'Tarjeta Crédito 24 cuotas': 60,
+  'Transferencia': 0,
 }
 
 function getSurchargeKey(paymentMethod, installments) {

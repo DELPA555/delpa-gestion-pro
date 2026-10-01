@@ -1,4 +1,12 @@
 {
+  "v1.39.1": {
+    "fecha": "2026-10-01",
+    "titulo": "Recargo configurable para Transferencia",
+    "mejoras": [
+      "Configuración → Recargos ahora incluye un porcentaje de recargo para Transferencia (debajo de los de Tarjeta, mismo estilo).",
+      "El recargo de Transferencia se aplica automáticamente al monto precargado en el cobro (modo simple), igual que el de Tarjeta."
+    ]
+  },
   "v1.39.0": {
     "fecha": "2026-10-01",
     "titulo": "Monto editable en Transferencia y Valorización de Stock",
