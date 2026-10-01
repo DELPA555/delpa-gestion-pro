@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, Users, CreditCard,
-  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes, Tag, PackageCheck, Vault, Newspaper,
+  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes, Tag, PackageCheck, Vault, Newspaper, Coins,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -28,6 +28,7 @@ const NAV_ADMIN = [
   { to: '/senas',        label: 'Señas',            Icon: HandCoins },
   { to: '/sucursales',   label: 'Sucursales',       Icon: Store },
   { to: '/inventario',   label: 'Inventario',       Icon: ClipboardCheck },
+  { to: '/valorizacion', label: 'Valorización',     Icon: Coins },
   { to: '/ingreso',      label: 'Ing. Mercadería',  Icon: PackagePlus },
   { to: '/egresos',      label: 'Egr. Mercadería',  Icon: PackageMinus },
   { to: '/remitos',      label: 'Remitos',          Icon: FileBox },

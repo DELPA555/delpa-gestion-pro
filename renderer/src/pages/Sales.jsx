@@ -328,6 +328,7 @@ export default function Sales() {
   const [discount, setDiscount] = useState(0)
   const [discountType, setDiscountType] = useState('amount') // 'amount' | 'percent'
   const [amountReceived, setAmountReceived] = useState('')   // efectivo: monto recibido
+  const [transferReceived, setTransferReceived] = useState('') // transferencia (modo simple): monto recibido
   const receivedRef = useRef(null)
   const [paymentMethod, setPay] = useState('Efectivo')
   const [installments, setInstallments] = useState(1)
@@ -804,6 +805,12 @@ export default function Sales() {
   const cashInsufficient = isCash && amountReceived !== '' && receivedAmt < total
   const changeAmt = isCash && receivedAmt >= total ? receivedAmt - total : 0
 
+  // Transferencia (medio único): monto recibido editable, igual que Efectivo.
+  const isTransfer = !splitPayment && paymentMethod === 'Transferencia'
+  const transferReceivedAmt = Number(transferReceived) || 0
+  const transferInsufficient = isTransfer && transferReceived !== '' && transferReceivedAmt < total
+  const transferDiff = isTransfer && transferReceivedAmt > total ? transferReceivedAmt - total : 0
+
   const updatePaymentRow = (i, field, value) =>
     setPaymentRows(rows => rows.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
 
@@ -822,7 +829,7 @@ export default function Sales() {
   }
 
   const clearCart = () => {
-    setCart([]); setDiscount(0); setDiscountType('amount'); setAmountReceived(''); setSelectedProduct(null); setSelectedSize(null); setQty(1)
+    setCart([]); setDiscount(0); setDiscountType('amount'); setAmountReceived(''); setTransferReceived(''); setSelectedProduct(null); setSelectedSize(null); setQty(1)
     setSelectedClient(null); setClientSearch(''); setQuery('')
     setSplitPayment(false); setPaymentRows([{ method: 'Efectivo', baseAmount: '', installments: 1 }])
     setRedeemPoints(false)
@@ -962,7 +969,7 @@ export default function Sales() {
       subtotal, discount: discountAmt, discount_type: discountType, discount_value: Number(discount) || 0,
       total, payment_method: splitPayment ? 'Múltiple' : paymentMethod,
       installments: splitPayment ? 1 : installments,
-      amount_received: isCash ? receivedAmt : 0, change_given: isCash ? changeAmt : 0,
+      amount_received: isCash ? receivedAmt : (isTransfer ? transferReceivedAmt : 0), change_given: isCash ? changeAmt : 0,
       is_training: 1,
     }
     try { await api.training.sale({ items, client_name: saleData.client_name, seller_name: seller, total, payment_method: saleData.payment_method }) } catch {}
@@ -1004,7 +1011,7 @@ export default function Sales() {
         discount: discountAmt,
         discountType,
         discountValue: Number(discount) || 0,
-        amountReceived: isCash ? receivedAmt : 0,
+        amountReceived: isCash ? receivedAmt : (isTransfer ? transferReceivedAmt : 0),
         changeGiven: isCash ? changeAmt : 0,
         pointsRedeemed: redeemPoints && canRedeem ? Math.ceil(pointsDiscount / (pointsCfg.value || 1)) : 0,
         paymentMethod: splitPayment ? 'Múltiple' : paymentMethod,
@@ -1377,6 +1384,14 @@ export default function Sales() {
       return () => clearTimeout(t)
     }
   }, [paymentMethod, splitPayment])
+
+  // Precargar el total en "Monto recibido" al pasar a Transferencia (editable luego).
+  useEffect(() => {
+    if (isTransfer && transferReceived === '') {
+      setTransferReceived(total > 0 ? String(Math.round(total * 100) / 100) : '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTransfer])
 
   useEffect(() => {
     const handler = (e) => {
@@ -2032,6 +2047,28 @@ export default function Sales() {
                             <span className="text-3xl font-extrabold text-green-400 tabular-nums">{formatCurrency(changeAmt)}</span>
                           </div>
                         )
+                    )}
+                  </div>
+                )}
+                {paymentMethod === 'Transferencia' && (
+                  <div>
+                    <label className={labelCls}>Monto recibido $</label>
+                    <input type="number" min="0" step="0.01"
+                      value={transferReceived}
+                      onChange={e => setTransferReceived(e.target.value)}
+                      placeholder="0,00"
+                      className={cn(inputCls, transferInsufficient ? 'border-red-500/60' : '')} />
+                    {transferReceived !== '' && (
+                      transferInsufficient
+                        ? <p className="text-sm text-red-400 mt-1.5 font-semibold">Falta {formatCurrency(total - transferReceivedAmt)}</p>
+                        : transferDiff > 0
+                          ? (
+                            <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                              <span className="text-xs text-amber-400 uppercase tracking-wider font-semibold">Diferencia a favor</span>
+                              <span className="text-3xl font-extrabold text-amber-400 tabular-nums">{formatCurrency(transferDiff)}</span>
+                            </div>
+                          )
+                          : <p className="text-sm text-green-400 mt-1.5 font-semibold">✓ Coincide con el total</p>
                     )}
                   </div>
                 )}

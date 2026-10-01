@@ -1,4 +1,13 @@
 {
+  "v1.39.0": {
+    "fecha": "2026-10-01",
+    "titulo": "Monto editable en Transferencia y Valorización de Stock",
+    "mejoras": [
+      "En el cobro de una venta (medio único), al elegir Transferencia ahora podés editar el monto recibido —precargado con el total—, igual que en Efectivo: te avisa si falta, si hay diferencia a favor o si coincide con el total.",
+      "Nueva sección Valorización de Stock (menú lateral, solo admin): tres tarjetas con la cantidad total de artículos en stock, el valor al costo y el valor al público, más un desglose por categoría ordenado por valor con fila de totales.",
+      "La Valorización de Stock se puede exportar a Excel (.xlsx) con un solo clic."
+    ]
+  },
   "v1.38.0": {
     "fecha": "2026-09-29",
     "titulo": "Logs técnicos, app más rápida y Tienda Nube en el cierre de caja",

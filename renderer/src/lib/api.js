@@ -382,6 +382,9 @@ export const api = {
     html:    (f) => inv('stockReport:html', f),
     email:   (f) => inv('stockReport:email', f),
   },
+  valuation: {
+    data: () => inv('valuation:data'),
+  },
   vouchers: {
     list:     (p)    => inv('voucher:list', p),
     create:   (d)    => inv('voucher:create', d),

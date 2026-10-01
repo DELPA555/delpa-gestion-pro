@@ -101,6 +101,7 @@ const CHANNELS = [
   'supplierStock:suppliers', 'supplierStock:report', 'supplierStock:consignment',
   'supplierStock:exportPDF', 'supplierStock:emailSupplier',
   'stockReport:options', 'stockReport:html', 'stockReport:email',
+  'valuation:data',
   'informes:generate', 'informes:send', 'informes:latest', 'informes:list', 'informes:get', 'informes:delete',
   'pausedsales:list', 'pausedsales:create', 'pausedsales:delete',
   'training:status', 'training:toggle', 'training:sale', 'training:clear',

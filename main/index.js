@@ -97,6 +97,7 @@ app.whenReady().then(() => {
   require('./ipc/supplieranalytics')
   require('./ipc/supplierStock')
   require('./ipc/stockReport')
+  require('./ipc/valuation')
   require('./ipc/informes')
   require('./ipc/onboarding')
   require('./ipc/changeTickets')
