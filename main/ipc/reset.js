@@ -195,6 +195,63 @@ ipcMain.handle('reset:execute', async (_, payload) => {
   }
 })
 
+// ── Borrado TOTAL (factory reset): deja la app como recién instalada ─────────────
+// Borra TODAS las tablas de la base (datos + settings + usuarios + AFIP + licencia
+// + red de locales + recargos + emails) y limpia electron-store. Al relanzar,
+// createTables (schema.js) regenera los valores por defecto (admin + business_name
+// 'DELPA' + caja), quedando idéntico a una instalación nueva. El renderer limpia
+// localStorage antes de relanzar.
+ipcMain.handle('reset:factory', async () => {
+  requireAdmin()
+  const db = getDB()
+
+  // 1. Backup en Drive ANTES de borrar (si está conectado). Si falla, abortamos.
+  let backup = null
+  if (driveConnected()) {
+    try {
+      const { performBackup } = require('./googledrive')
+      const r = await performBackup()
+      if (r && r.ok === false) {
+        return {
+          ok: false, stage: 'backup',
+          error: 'No se pudo guardar el backup en Google Drive (la sesión expiró). Reconectá Drive en Configuración → Pagos & Drive, o desconectalo para continuar sin backup. No se borró nada.',
+        }
+      }
+      backup = { ok: true }
+    } catch (e) {
+      return {
+        ok: false, stage: 'backup',
+        error: 'No se pudo guardar el backup en Google Drive antes de borrar: ' + (e.message || 'error desconocido') + '. No se borró nada.',
+      }
+    }
+  }
+
+  // 2. Borrado total de TODAS las tablas (descubiertas dinámicamente para no
+  //    dejar ninguna afuera) en una transacción, con FK desactivadas.
+  db.pragma('foreign_keys = OFF')
+  try {
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .all()
+      .map(r => r.name)
+    const run = db.transaction(() => {
+      for (const t of tables) db.prepare(`DELETE FROM "${t}"`).run()
+      try { db.prepare('DELETE FROM sqlite_sequence').run() } catch {}
+    })
+    run()
+  } catch (e) {
+    return { ok: false, stage: 'delete', error: 'Error durante el borrado total (no se aplicó ningún cambio): ' + (e.message || 'error desconocido') }
+  } finally {
+    db.pragma('foreign_keys = ON')
+  }
+
+  // 3. electron-store: tokens de Google Drive + store por defecto.
+  try { const Store = require('electron-store'); new Store({ name: 'gdrive-tokens' }).clear() } catch {}
+  try { const Store = require('electron-store'); new Store().clear() } catch {}
+
+  return { ok: true, backup, factory: true }
+})
+
 // ── Reiniciar la app (lo llama el front después del countdown) ───────────────────
 ipcMain.handle('reset:relaunch', () => {
   requireAdmin()

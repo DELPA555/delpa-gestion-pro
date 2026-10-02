@@ -429,6 +429,7 @@ export const api = {
   reset: {
     info:     ()    => inv('reset:info'),
     execute:  (items) => inv('reset:execute', { items }),
+    factory:  ()    => inv('reset:factory'),
     relaunch: ()    => inv('reset:relaunch'),
   },
   tn: {

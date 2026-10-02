@@ -1,4 +1,15 @@
 {
+  "v1.39.2": {
+    "fecha": "2026-10-01",
+    "titulo": "Borrar TODO: dejar la app como recién instalada",
+    "mejoras": [
+      "Configuración → Datos y reseteo ahora tiene la opción \"Borrar TODO\": elimina absolutamente todos los datos y toda la configuración (negocio, AFIP/ARCA, emails, medios de pago y recargos, red de locales, licencia y usuarios), dejando la app como recién instalada.",
+      "Requiere escribir \"BORRAR TODO\" para confirmar y, si Drive está conectado, guarda un backup antes de borrar."
+    ],
+    "correcciones": [
+      "El reseteo selectivo seguía sin tocar la configuración; ahora hay una opción aparte que borra realmente todo, sin dejar nada persistente."
+    ]
+  },
   "v1.39.1": {
     "fecha": "2026-10-01",
     "titulo": "Recargo configurable para Transferencia",

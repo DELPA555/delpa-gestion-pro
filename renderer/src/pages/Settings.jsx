@@ -2887,6 +2887,12 @@ function TabReseteo() {
   const [error, setError] = useState('')
   const [doneLabels, setDoneLabels] = useState([])
   const [countdown, setCountdown] = useState(3)
+  // Flujo "Borrar TODO" (factory reset)
+  const [facOpen, setFacOpen] = useState(false)
+  const [facText, setFacText] = useState('')
+  const [facBusy, setFacBusy] = useState(false)
+  const [facError, setFacError] = useState('')
+  const [facDone, setFacDone] = useState(false)
 
   const load = () => api.reset.info().then(setInfo).catch(() => {})
   useEffect(() => { load() }, [])
@@ -2944,6 +2950,34 @@ function TabReseteo() {
     }
   }
 
+  // ── Borrar TODO (factory reset) ──
+  const FAC_PHRASE = 'BORRAR TODO'
+  const runFactory = async () => {
+    if (facText.trim().toUpperCase() !== FAC_PHRASE) {
+      setFacError(`Escribí "${FAC_PHRASE}" para confirmar`)
+      return
+    }
+    setFacBusy(true); setFacError('')
+    try {
+      const res = await api.reset.factory()
+      if (!res?.ok) {
+        setFacBusy(false)
+        setFacError(res?.error || 'No se pudo completar el borrado total')
+        toast.error(res?.error || 'No se pudo completar el borrado total')
+        return
+      }
+      // Limpiar preferencias locales de esta PC (tema, tamaño de texto, carrito).
+      try { localStorage.clear() } catch {}
+      setFacDone(true)
+      // Reinicio: la app vuelve como recién instalada.
+      setTimeout(() => { api.reset.relaunch().catch(() => {}) }, 2500)
+    } catch (e) {
+      setFacBusy(false)
+      setFacError(e.message || 'Error inesperado')
+      toast.error(e.message || 'Error inesperado')
+    }
+  }
+
   // Countdown de reinicio en el paso de éxito
   useEffect(() => {
     if (step !== 5) return
@@ -2992,6 +3026,64 @@ function TabReseteo() {
           </button>
         </div>
       </div>
+
+      {/* Borrar TODO (factory reset) */}
+      <div className="rounded-xl border border-red-500/40 bg-red-500/[0.06] p-5 space-y-3">
+        <div>
+          <p className="text-sm text-white font-medium flex items-center gap-2"><Trash2 size={15} className="text-red-400" /> Borrar TODO (dejar como recién instalada)</p>
+          <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+            Borra <span className="text-red-300 font-semibold">absolutamente todo</span>: datos, configuración del negocio, AFIP/ARCA,
+            emails, medios de pago y recargos, red de locales, licencia y usuarios. La app vuelve al estado de instalación nueva.
+            Esta acción <span className="text-zinc-300">no se puede deshacer</span>{info?.driveConnected ? ' (se guarda un backup en Drive antes de borrar)' : ''}.
+          </p>
+        </div>
+        <div className="flex justify-end">
+          <button onClick={() => { setFacOpen(true); setFacText(''); setFacError(''); setFacDone(false) }}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-500 bg-transparent hover:bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 no-drag">
+            <Trash2 size={15} /> Borrar todo →
+          </button>
+        </div>
+      </div>
+
+      {/* ── Modal Borrar TODO ── */}
+      {facOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onClick={() => { if (!facBusy && !facDone) setFacOpen(false) }}>
+          <div className="w-full max-w-lg rounded-2xl border border-red-500/40 bg-[#0f0f0f] shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            {facDone ? (
+              <div className="text-center py-4 space-y-2">
+                <p className="text-lg font-semibold text-white">Borrado completo ✅</p>
+                <p className="text-sm text-zinc-400">La app se reinicia y queda como recién instalada…</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <p className="text-base font-semibold text-red-300 flex items-center gap-2"><AlertCircle size={18} /> Borrar TODO</p>
+                  <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
+                    Se van a eliminar <span className="text-white font-medium">todos los datos y toda la configuración</span>:
+                    ventas, productos, clientes, caja, gastos, señas, proveedores, informes, <span className="text-white">nombre y datos del negocio, AFIP/ARCA, emails, medios de pago y recargos, red de locales, licencia y usuarios</span>.
+                    La app vuelve al estado de instalación nueva y tendrás que configurarla de cero.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-500">Escribí <span className="text-red-300 font-semibold">BORRAR TODO</span> para confirmar</label>
+                  <input value={facText} onChange={e => setFacText(e.target.value)} disabled={facBusy}
+                    placeholder="BORRAR TODO"
+                    className="mt-1 w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white no-drag" />
+                </div>
+                {facError && <p className="text-sm text-red-400">{facError}</p>}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setFacOpen(false)} disabled={facBusy}
+                    className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg no-drag disabled:opacity-50">Cancelar</button>
+                  <button onClick={runFactory} disabled={facBusy || facText.trim().toUpperCase() !== FAC_PHRASE}
+                    className="inline-flex items-center gap-2 rounded-lg bg-red-500/90 hover:bg-red-500 px-4 py-2 text-sm font-semibold text-white no-drag disabled:opacity-40">
+                    <Trash2 size={15} /> {facBusy ? 'Borrando todo…' : 'Borrar todo'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Modal de 3 pasos ── */}
       {open && (
