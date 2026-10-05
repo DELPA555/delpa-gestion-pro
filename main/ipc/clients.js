@@ -53,19 +53,22 @@ ipcMain.handle('clients:list', (_, { search = '', page = 1, limit = 25 } = {}) =
 
 ipcMain.handle('clients:get', (_, id) => getDB().prepare('SELECT * FROM clients WHERE id=?').get(id))
 
-ipcMain.handle('clients:create', (_, { name, phone, dni, email, address, notes, birth_date }) => {
+const PRICE_LISTS = ['publico', 'mayorista', 'distribuidor']
+const normPriceList = (v) => PRICE_LISTS.includes(v) ? v : 'publico'
+
+ipcMain.handle('clients:create', (_, { name, phone, dni, email, address, notes, birth_date, price_list }) => {
   const db = getDB()
   const { lastInsertRowid: id } = db.prepare(
-    'INSERT INTO clients (name,phone,dni,email,address,notes,birth_date) VALUES (?,?,?,?,?,?,?)'
-  ).run(name, phone||'', dni||'', email||'', address||'', notes||'', birth_date||'')
+    'INSERT INTO clients (name,phone,dni,email,address,notes,birth_date,price_list) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(name, phone||'', dni||'', email||'', address||'', notes||'', birth_date||'', normPriceList(price_list))
   db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('CREATE','clients',?,?)`).run(id, `Cliente creado: ${name}`)
   return id
 })
 
-ipcMain.handle('clients:update', (_, { id, name, phone, dni, email, address, notes, birth_date }) => {
+ipcMain.handle('clients:update', (_, { id, name, phone, dni, email, address, notes, birth_date, price_list }) => {
   const db = getDB()
-  db.prepare('UPDATE clients SET name=?,phone=?,dni=?,email=?,address=?,notes=?,birth_date=? WHERE id=?')
-    .run(name, phone||'', dni||'', email||'', address||'', notes||'', birth_date||'', id)
+  db.prepare('UPDATE clients SET name=?,phone=?,dni=?,email=?,address=?,notes=?,birth_date=?,price_list=? WHERE id=?')
+    .run(name, phone||'', dni||'', email||'', address||'', notes||'', birth_date||'', normPriceList(price_list), id)
   db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('UPDATE','clients',?,?)`).run(id, `Cliente actualizado: ${name}`)
   return true
 })

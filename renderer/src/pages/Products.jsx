@@ -58,7 +58,7 @@ function sizesForGroup(group, jeansArr, clothingArr, americanArr = DEFAULT_AMERI
 function emptyForm(allSizes) {
   return {
     barcode: '', external_barcode: '', name: '', brand: '', category: 'Jeans', color: '',
-    cost: '', price: '', min_stock: '5', image_data: '',
+    cost: '', price: '', price_wholesale: '', price_distributor: '', min_stock: '5', image_data: '',
     tn_sync: 1,
     is_consignment: false, consignment_supplier_id: '', consignment_cost: '',
     sizes: allSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })),
@@ -252,6 +252,7 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
       </div>
 
       {isAdmin ? (
+        <>
         <div className="grid grid-cols-4 gap-3">
           <div>
             <label className={labelCls}>Costo $</label>
@@ -264,7 +265,7 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
               onChange={e => onMarkupChange(e.target.value)} placeholder="Ej: 80" />
           </div>
           <div>
-            <label className={labelCls}>Precio venta $</label>
+            <label className={labelCls}>Precio público $</label>
             <input type="number" min="0" step="0.01" className={`${inputCls} border-accent/40`} value={form.price}
               onChange={e => onPriceChange(e.target.value)} placeholder="0,00" />
           </div>
@@ -274,6 +275,24 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
               onChange={e => field('min_stock', e.target.value)} placeholder="5" />
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Precio mayorista $</label>
+            <input type="number" min="0" step="0.01" className={inputCls} value={form.price_wholesale}
+              onChange={e => field('price_wholesale', e.target.value)} placeholder="0,00" />
+          </div>
+          <div>
+            <label className={labelCls}>Precio distribuidor $</label>
+            <input type="number" min="0" step="0.01" className={inputCls} value={form.price_distributor}
+              onChange={e => field('price_distributor', e.target.value)} placeholder="0,00" />
+          </div>
+        </div>
+        {(!(Number(form.price) > 0) || !(Number(form.price_wholesale) > 0) || !(Number(form.price_distributor) > 0)) && (
+          <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+            ⚠️ Completá los tres precios (público, mayorista y distribuidor). Si una lista queda en 0, esa venta usará el precio público.
+          </div>
+        )}
+        </>
       ) : (
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -1070,6 +1089,8 @@ export default function Products() {
       color: p.color || '',
       cost: p.cost,
       price: p.price,
+      price_wholesale: p.price_wholesale ?? '',
+      price_distributor: p.price_distributor ?? '',
       min_stock: p.min_stock,
       image_data: undefined,
       tn_sync: p.tn_sync ?? 1,

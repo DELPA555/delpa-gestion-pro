@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, Users, CreditCard,
-  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes, Tag, PackageCheck, Vault, Newspaper, Coins,
+  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes, Tag, PackageCheck, Vault, Newspaper, Coins, CalendarClock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -15,6 +15,7 @@ const NAV_ADMIN = [
   { to: '/productos',    label: 'Productos',        Icon: Package },
   { to: '/clientes',     label: 'Clientes',         Icon: Users },
   { to: '/cuentas',      label: 'Cuentas Ctes.',    Icon: CreditCard },
+  { to: '/creditos',     label: 'Créditos',         Icon: CalendarClock },
   { to: '/proveedores',  label: 'Proveedores',      Icon: Truck },
   { to: '/compras',      label: 'Compras',          Icon: ShoppingBag },
   { to: '/caja',         label: 'Caja',             Icon: Wallet },
@@ -153,7 +154,7 @@ export default function Sidebar() {
         >
           <LogOut size={11} /> Cerrar sesión
         </button>
-        <div className="text-[10px] text-zinc-700">v1.40.0 · DELPA</div>
+        <div className="text-[10px] text-zinc-700">v1.41.0 · DELPA</div>
       </div>
     </aside>
   )

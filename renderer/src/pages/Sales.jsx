@@ -93,6 +93,23 @@ function hasRealSize(size) {
   return !!size && size !== 'Único' && size !== 'N/A'
 }
 
+// ── Listas de precios (v1.41.0) ──
+// Cada cliente tiene una lista (publico/mayorista/distribuidor). El precio se toma de la
+// lista; si esa lista está en 0 (producto viejo sin precio cargado), cae a público.
+const PRICE_LIST_LABEL = { publico: 'Público', mayorista: 'Mayorista', distribuidor: 'Distribuidor' }
+function priceForList(prices, list) {
+  const pub = Number(prices?.publico) || 0
+  if (list === 'mayorista')     { const v = Number(prices?.mayorista)     || 0; return v > 0 ? v : pub }
+  if (list === 'distribuidor')  { const v = Number(prices?.distribuidor)  || 0; return v > 0 ? v : pub }
+  return pub
+}
+function basePricesOf(p) {
+  return { publico: Number(p.price) || 0, mayorista: Number(p.price_wholesale) || 0, distribuidor: Number(p.price_distributor) || 0 }
+}
+function priceForClient(p, client) {
+  return priceForList(basePricesOf(p), client?.price_list || 'publico')
+}
+
 function printTicket(sale, biz = {}, pointsInfo = null) {
   const bizName = biz.business_name || 'DELPA'
   const logoHtml = biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin:0 auto 4px" alt="logo">` : ''
@@ -130,6 +147,7 @@ ${cbteNum ? `<p class="center" style="font-size:11px">N° ${cbteNum}</p>` : ''}
 <div class="row"><span>Venta N°:</span><span>${saleNum}</span></div>
 ${sale.client_name ? `<div class="row"><span>Cliente:</span><span>${sale.client_name}</span></div>` : ''}
 ${sale.seller_name ? `<div class="row"><span>Vendedora:</span><span>${sale.seller_name}</span></div>` : ''}
+${sale.price_list && sale.price_list !== 'publico' ? `<div class="row"><span>Lista:</span><span>${sale.price_list === 'mayorista' ? 'Mayorista' : 'Distribuidor'}</span></div>` : ''}
 <div class="divider"></div>
 ${(sale.items || []).map(it => `
 <div class="row"><span>${it.product_name}${hasRealSize(it.size) ? ` T.${it.size}` : ''}</span><span>x${it.quantity}</span></div>
@@ -348,6 +366,19 @@ export default function Sales() {
   const [clientSearch, setClientSearch] = useState('')
   const [clientResults, setClientResults] = useState([])
   const [selectedClient, setSelectedClient] = useState(null)
+  // Ref para leer el cliente actual dentro de addItemDirect (deps []), sin closure obsoleto.
+  const selectedClientRef = useRef(null)
+  useEffect(() => { selectedClientRef.current = selectedClient }, [selectedClient])
+  const activeList = selectedClient?.price_list || 'publico'
+  // Re-precia el carrito al cambiar la lista del cliente (preserva precios editados a mano).
+  useEffect(() => {
+    setCart(c => c.map(it => {
+      if (!it.basePrices) return it
+      const newUnit = priceForList(it.basePrices, activeList)
+      const wasEdited = Number(it.editedPrice) !== Number(it.unitPrice)
+      return { ...it, unitPrice: newUnit, editedPrice: wasEdited ? it.editedPrice : newUnit }
+    }))
+  }, [activeList]) // eslint-disable-line react-hooks/exhaustive-deps
   const [completing, setCompleting] = useState(false)
   const [lastSale, setLastSale] = useState(null)
   const [lastSalePoints, setLastSalePoints] = useState(null)
@@ -605,14 +636,17 @@ export default function Sales() {
         wasIncrement = true
         return c.map(it => it.key === key ? { ...it, qty: it.qty + 1 } : it)
       }
+      const basePrices = basePricesOf(p)
+      const listPrice = priceForList(basePrices, selectedClientRef.current?.price_list || 'publico')
       return [...c, {
         key,
         productId: p.id,
         productName: p.name,
         editedName: p.name,
         size: sz,
-        unitPrice: p.price,
-        editedPrice: p.price,
+        unitPrice: listPrice,
+        editedPrice: listPrice,
+        basePrices,
         unitCost: p.cost || 0,
         qty: 1,
         maxStock: sizeInfo.stock,
@@ -749,14 +783,17 @@ export default function Sales() {
       if (!isNA && existing.qty + qty > sizeInfo.stock) return toast.error('Stock insuficiente')
       setCart(c => c.map(it => it.key === key ? { ...it, qty: it.qty + qty } : it))
     } else {
+      const basePrices = basePricesOf(selectedProduct)
+      const listPrice = priceForList(basePrices, selectedClient?.price_list || 'publico')
       setCart(c => [...c, {
         key,
         productId: selectedProduct.id,
         productName: selectedProduct.name,
         editedName: selectedProduct.name,
         size: selectedSize,
-        unitPrice: selectedProduct.price,
-        editedPrice: selectedProduct.price,
+        unitPrice: listPrice,
+        editedPrice: listPrice,
+        basePrices,
         unitCost: selectedProduct.cost || 0,
         qty,
         maxStock: isNA ? 999 : sizeInfo.stock,
@@ -1037,6 +1074,7 @@ export default function Sales() {
         docNro:      afipData?.docNro    || '0',
         payments:    paymentsPayload,
         mpPaymentId: mpPaymentId || '',
+        priceList:   activeList,
       })
       const saleId = typeof result === 'object' ? result.saleId : result
       const saleData = await api.sales.get(saleId)
@@ -1942,6 +1980,11 @@ export default function Sales() {
                     <div className="flex items-center gap-2">
                       <User size={14} className="text-zinc-500" />
                       <span className="text-sm text-white">{selectedClient.name}</span>
+                      {activeList !== 'publico' && (
+                        <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${activeList === 'mayorista' ? 'text-sky-300 bg-sky-500/10 border-sky-500/30' : 'text-purple-300 bg-purple-500/10 border-purple-500/30'}`}>
+                          Lista {PRICE_LIST_LABEL[activeList]}
+                        </span>
+                      )}
                       {selectedClient.balance > 0 && (
                         <span className="text-xs text-amber-400">Debe {formatCurrency(selectedClient.balance)}</span>
                       )}

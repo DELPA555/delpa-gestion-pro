@@ -11,18 +11,22 @@ ipcMain.handle('valuation:data', async () => {
     SELECT COUNT(DISTINCT p.id)                 AS total_productos,
            COALESCE(SUM(ps.stock), 0)          AS total_unidades,
            COALESCE(SUM(p.cost  * ps.stock), 0) AS valor_costo,
-           COALESCE(SUM(p.price * ps.stock), 0) AS valor_publico
+           COALESCE(SUM(p.price * ps.stock), 0) AS valor_publico,
+           COALESCE(SUM(p.price_wholesale   * ps.stock), 0) AS valor_mayorista,
+           COALESCE(SUM(p.price_distributor * ps.stock), 0) AS valor_distribuidor
     FROM products p
     JOIN product_sizes ps ON ps.product_id = p.id
     WHERE p.active = 1 AND ps.stock > 0
-  `).get() || { total_productos: 0, total_unidades: 0, valor_costo: 0, valor_publico: 0 }
+  `).get() || { total_productos: 0, total_unidades: 0, valor_costo: 0, valor_publico: 0, valor_mayorista: 0, valor_distribuidor: 0 }
 
   const byCategory = db.prepare(`
     SELECT COALESCE(NULLIF(TRIM(p.category), ''), 'Sin categoría') AS categoria,
            COUNT(DISTINCT p.id)                 AS total_productos,
            COALESCE(SUM(ps.stock), 0)          AS total_unidades,
            COALESCE(SUM(p.cost  * ps.stock), 0) AS valor_costo,
-           COALESCE(SUM(p.price * ps.stock), 0) AS valor_publico
+           COALESCE(SUM(p.price * ps.stock), 0) AS valor_publico,
+           COALESCE(SUM(p.price_wholesale   * ps.stock), 0) AS valor_mayorista,
+           COALESCE(SUM(p.price_distributor * ps.stock), 0) AS valor_distribuidor
     FROM products p
     JOIN product_sizes ps ON ps.product_id = p.id
     WHERE p.active = 1 AND ps.stock > 0

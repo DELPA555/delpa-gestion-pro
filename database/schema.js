@@ -22,6 +22,8 @@ function createTables(db) {
       color TEXT DEFAULT '',
       cost REAL DEFAULT 0,
       price REAL NOT NULL DEFAULT 0,
+      price_wholesale REAL NOT NULL DEFAULT 0,
+      price_distributor REAL NOT NULL DEFAULT 0,
       min_stock INTEGER DEFAULT 5,
       image_data TEXT DEFAULT '',
       active INTEGER DEFAULT 1,
@@ -59,7 +61,8 @@ function createTables(db) {
       total_spent REAL DEFAULT 0,
       purchase_count INTEGER DEFAULT 0,
       last_purchase TEXT DEFAULT '',
-      points INTEGER DEFAULT 0
+      points INTEGER DEFAULT 0,
+      price_list TEXT NOT NULL DEFAULT 'publico'
     );
 
     CREATE TABLE IF NOT EXISTS cashbox (
@@ -494,6 +497,42 @@ function createTables(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_senas_status ON senas(status);
     CREATE INDEX IF NOT EXISTS idx_senas_deadline ON senas(deadline);
+
+    -- Créditos personales (planes de cuotas). Spec: creditos → credits, cuotas → credit_installments.
+    CREATE TABLE IF NOT EXISTS credits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      sale_id INTEGER,
+      total_amount REAL NOT NULL,
+      installments_count INTEGER NOT NULL,
+      installment_amount REAL NOT NULL,
+      late_interest_rate REAL NOT NULL DEFAULT 0,   -- % mensual sobre cuota vencida
+      start_date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'activo',         -- activo | cancelado | completado
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id),
+      FOREIGN KEY (sale_id) REFERENCES sales(id)
+    );
+    CREATE TABLE IF NOT EXISTS credit_installments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      credit_id INTEGER NOT NULL,
+      number INTEGER NOT NULL,
+      original_amount REAL NOT NULL,
+      interest_amount REAL NOT NULL DEFAULT 0,
+      total_amount REAL NOT NULL,
+      due_date TEXT NOT NULL,
+      paid_date TEXT,
+      status TEXT NOT NULL DEFAULT 'pendiente',       -- pendiente | pagada | vencida
+      payment_method TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (credit_id) REFERENCES credits(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_credits_client ON credits(client_id);
+    CREATE INDEX IF NOT EXISTS idx_credits_status ON credits(status);
+    CREATE INDEX IF NOT EXISTS idx_credit_inst_credit ON credit_installments(credit_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_inst_status ON credit_installments(status);
+    CREATE INDEX IF NOT EXISTS idx_credit_inst_due ON credit_installments(due_date);
     CREATE INDEX IF NOT EXISTS idx_exchanges_created ON product_exchanges(created_at);
     CREATE INDEX IF NOT EXISTS idx_returns_created ON product_returns(created_at);
 
@@ -936,6 +975,11 @@ function createTables(db) {
   // db.exec de createTables) para no romper DBs existentes donde la columna aún no está.
   addColumnIfMissing(db, 'products', 'external_barcode', 'TEXT DEFAULT NULL')
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_external_barcode ON products(external_barcode)') } catch (e) { console.error('[DB Migration] índice external_barcode:', e.message) }
+  // Listas de precios (v1.41.0): precio mayorista y distribuidor por producto + lista del cliente.
+  addColumnIfMissing(db, 'products', 'price_wholesale',   'REAL NOT NULL DEFAULT 0')
+  addColumnIfMissing(db, 'products', 'price_distributor', 'REAL NOT NULL DEFAULT 0')
+  addColumnIfMissing(db, 'clients',  'price_list',         "TEXT NOT NULL DEFAULT 'publico'")
+  addColumnIfMissing(db, 'sales',    'price_list',         "TEXT DEFAULT 'publico'")
   // Ganancia real por línea: net_price = precio de venta menos el descuento distribuido
   // proporcionalmente; profit = net_price − costo. NULL = fila vieja pendiente de backfill.
   addColumnIfMissing(db, 'sale_items', 'net_price', 'REAL DEFAULT NULL')

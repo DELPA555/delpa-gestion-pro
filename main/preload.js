@@ -60,6 +60,8 @@ const CHANNELS = [
   'returns:create', 'returns:list',
   'senas:list', 'senas:pending', 'senas:create', 'senas:update',
   'senas:withdraw', 'senas:cancel', 'senas:checkExpired',
+  'credits:list', 'credits:get', 'credits:create', 'credits:preview',
+  'credits:registerPayment', 'credits:cancel', 'credits:accountStatement', 'credits:emailStatement',
   'sellers:list', 'sellers:add', 'sellers:update', 'sellers:delete',
   'mp:getConfig', 'mp:saveConfig', 'mp:testConnection', 'mp:checkPayment',
   'mp:createPos', 'mp:linkExistingPos', 'mp:getPos', 'mp:createOrder', 'mp:pollOrder', 'mp:cancelOrder',

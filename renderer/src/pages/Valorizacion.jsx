@@ -13,7 +13,7 @@ const fmtARS = (n) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(n) || 0)
 const fmtNum = (n) => new Intl.NumberFormat('es-AR').format(Number(n) || 0)
 
-const EMPTY_TOTALS = { total_productos: 0, total_unidades: 0, valor_costo: 0, valor_publico: 0 }
+const EMPTY_TOTALS = { total_productos: 0, total_unidades: 0, valor_costo: 0, valor_publico: 0, valor_mayorista: 0, valor_distribuidor: 0 }
 
 export default function Valorizacion() {
   const [totals, setTotals] = useState(EMPTY_TOTALS)
@@ -38,13 +38,15 @@ export default function Valorizacion() {
   const exportExcel = () => {
     if (byCategory.length === 0) return toast.error('No hay datos para exportar')
     const rows = [
-      ['Categoría', 'Productos', 'Unidades', 'Valor costo', 'Valor público'],
+      ['Categoría', 'Productos', 'Unidades', 'Valor costo', 'Valor público', 'Valor mayorista', 'Valor distribuidor'],
       ...byCategory.map((c) => [
         c.categoria,
         Number(c.total_productos) || 0,
         Number(c.total_unidades) || 0,
         Math.round(Number(c.valor_costo) || 0),
         Math.round(Number(c.valor_publico) || 0),
+        Math.round(Number(c.valor_mayorista) || 0),
+        Math.round(Number(c.valor_distribuidor) || 0),
       ]),
       [
         'TOTAL',
@@ -52,10 +54,12 @@ export default function Valorizacion() {
         Number(totals.total_unidades) || 0,
         Math.round(Number(totals.valor_costo) || 0),
         Math.round(Number(totals.valor_publico) || 0),
+        Math.round(Number(totals.valor_mayorista) || 0),
+        Math.round(Number(totals.valor_distribuidor) || 0),
       ],
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }]
+    ws['!cols'] = [{ wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Valorización')
     const fecha = new Date().toISOString().slice(0, 10)
@@ -67,6 +71,8 @@ export default function Valorizacion() {
     { key: 'u', Icon: Package,    label: 'Cantidad de artículos', value: fmtNum(totals.total_unidades), hint: `${fmtNum(totals.total_productos)} productos`, color: 'text-sky-400',    ring: 'bg-sky-500/10' },
     { key: 'c', Icon: DollarSign, label: 'Valor al costo',        value: fmtARS(totals.valor_costo),      hint: 'Inversión en stock',                             color: 'text-amber-400',  ring: 'bg-amber-500/10' },
     { key: 'p', Icon: Store,      label: 'Valor al público',      value: fmtARS(totals.valor_publico),    hint: 'A precio de venta',                              color: 'text-emerald-400', ring: 'bg-emerald-500/10' },
+    { key: 'm', Icon: Store,      label: 'Valor mayorista',       value: fmtARS(totals.valor_mayorista),  hint: 'A precio mayorista',                             color: 'text-sky-300',     ring: 'bg-sky-500/10' },
+    { key: 'd', Icon: Store,      label: 'Valor distribuidor',    value: fmtARS(totals.valor_distribuidor), hint: 'A precio distribuidor',                        color: 'text-purple-300',  ring: 'bg-purple-500/10' },
   ]
 
   return (
@@ -90,7 +96,7 @@ export default function Valorizacion() {
       />
 
       {/* Cards de resumen */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
         {cards.map(({ key, Icon, label, value, hint, color, ring }) => (
           <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl border border-border bg-card p-5">
@@ -131,6 +137,8 @@ export default function Valorizacion() {
                   <th className="px-5 py-3 font-medium text-right">Unidades</th>
                   <th className="px-5 py-3 font-medium text-right">Valor costo</th>
                   <th className="px-5 py-3 font-medium text-right">Valor público</th>
+                  <th className="px-5 py-3 font-medium text-right">Valor mayorista</th>
+                  <th className="px-5 py-3 font-medium text-right">Valor distribuidor</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,6 +149,8 @@ export default function Valorizacion() {
                     <td className="px-5 py-2.5 text-right text-zinc-300 tabular-nums">{fmtNum(c.total_unidades)}</td>
                     <td className="px-5 py-2.5 text-right text-amber-300 tabular-nums">{fmtARS(c.valor_costo)}</td>
                     <td className="px-5 py-2.5 text-right text-emerald-300 tabular-nums">{fmtARS(c.valor_publico)}</td>
+                    <td className="px-5 py-2.5 text-right text-sky-300 tabular-nums">{fmtARS(c.valor_mayorista)}</td>
+                    <td className="px-5 py-2.5 text-right text-purple-300 tabular-nums">{fmtARS(c.valor_distribuidor)}</td>
                   </tr>
                 ))}
                 <tr className="bg-white/[0.04] font-bold border-t border-border">
@@ -149,6 +159,8 @@ export default function Valorizacion() {
                   <td className="px-5 py-3 text-right text-white tabular-nums">{fmtNum(totals.total_unidades)}</td>
                   <td className="px-5 py-3 text-right text-amber-400 tabular-nums">{fmtARS(totals.valor_costo)}</td>
                   <td className="px-5 py-3 text-right text-emerald-400 tabular-nums">{fmtARS(totals.valor_publico)}</td>
+                  <td className="px-5 py-3 text-right text-sky-400 tabular-nums">{fmtARS(totals.valor_mayorista)}</td>
+                  <td className="px-5 py-3 text-right text-purple-400 tabular-nums">{fmtARS(totals.valor_distribuidor)}</td>
                 </tr>
               </tbody>
             </table>

@@ -30,6 +30,7 @@ const Sucursales = lazy(() => import('./pages/Sucursales'))
 const Inventory = lazy(() => import('./pages/Inventory'))
 const Valorizacion = lazy(() => import('./pages/Valorizacion'))
 const Senas = lazy(() => import('./pages/Senas'))
+const Creditos = lazy(() => import('./pages/Creditos'))
 const StockEntry = lazy(() => import('./pages/StockEntry'))
 const StockEgreso = lazy(() => import('./pages/StockEgreso'))
 const Remitos = lazy(() => import('./pages/Remitos'))
@@ -104,6 +105,7 @@ function AnimatedRoutes() {
           <Route path="/sucursales"   element={<PageErrorBoundary><Sucursales /></PageErrorBoundary>} />
           <Route path="/inventario"   element={<PageErrorBoundary><Inventory /></PageErrorBoundary>} />
           <Route path="/valorizacion" element={<PageErrorBoundary><Valorizacion /></PageErrorBoundary>} />
+          <Route path="/creditos"     element={<PageErrorBoundary><Creditos /></PageErrorBoundary>} />
           <Route path="/configuracion" element={<PageErrorBoundary><Settings /></PageErrorBoundary>} />
           <Route path="/remitos"      element={<PageErrorBoundary><Remitos /></PageErrorBoundary>} />
           <Route path="/reposicion"   element={<PageErrorBoundary><SupplierOrders /></PageErrorBoundary>} />

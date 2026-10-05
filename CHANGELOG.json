@@ -1,4 +1,15 @@
 {
+  "v1.41.0": {
+    "fecha": "2026-10-05",
+    "titulo": "Créditos personales (cuotas) + Listas de precios",
+    "mejoras": [
+      "Nueva sección Créditos: armá planes de cuotas fijas para tus clientes, con interés por mora configurable. Ves el estado de cada deudor, cobrás cuotas desde la app (se registran en la caja) y el saldo se actualiza solo.",
+      "Interés por mora automático: las cuotas vencidas suman el interés configurado (% mensual) según los días de atraso, recalculado cada vez que abrís la app.",
+      "Estado de cuenta por cliente: resumen de la deuda con cuotas vencidas y próximas, con opción de imprimir o enviar por email.",
+      "Listas de precios: cada producto tiene precio público, mayorista y distribuidor. Le asignás una lista a cada cliente y, al venderle, el precio se toma automáticamente de su lista (con indicador en la pantalla de ventas y en el ticket).",
+      "La Valorización de Stock ahora también muestra el valor total a precio mayorista y a precio distribuidor."
+    ]
+  },
   "v1.40.0": {
     "fecha": "2026-10-05",
     "titulo": "Código de barras del fabricante + rubros Bazar y Kiosco",

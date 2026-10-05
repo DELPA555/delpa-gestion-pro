@@ -16,6 +16,8 @@ ipcMain.handle('sales:create', (_, {
   amountReceived, changeGiven,
   // Descuento: tipo ('amount'|'percent') y valor ingresado
   discountType, discountValue,
+  // Lista de precios aplicada (publico|mayorista|distribuidor)
+  priceList,
 }) => {
   const db = getDB()
   const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
@@ -41,8 +43,8 @@ ipcMain.handle('sales:create', (_, {
         (client_id,total,subtotal,subtotal_sin_recargo,discount,payment_method,notes,cashbox_id,installments,
          surcharge_rate,voucher_type,seller_name,sale_number,sucursal_id,
          cae,cae_fch_vto,tipo_cbte,cbte_nro,pto_venta,doc_tipo,doc_nro,mp_payment_id,
-         amount_received,change_given,discount_type,discount_value)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         amount_received,change_given,discount_type,discount_value,price_list)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       clientId || null, total, subtotal || total, pointsBase, discount || 0,
       effectiveMethod, notes || '', cashbox?.id || null,
@@ -51,6 +53,7 @@ ipcMain.handle('sales:create', (_, {
       cae || '', caeFchVto || '', tipoCbte || 0, cbteNro || 0,
       ptoVenta || 0, docTipo || 99, docNro || '0', mpPaymentId || '',
       amountReceived || 0, changeGiven || 0, discountType || 'amount', discountValue || 0,
+      priceList || 'publico',
     )
 
     // Insert payment breakdown rows

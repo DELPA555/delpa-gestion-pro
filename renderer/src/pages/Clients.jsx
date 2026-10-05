@@ -18,7 +18,7 @@ import EmptyState from '@/components/shared/EmptyState'
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
-function emptyForm() { return { name:'', phone:'', dni:'', email:'', address:'', notes:'', birth_date:'' } }
+function emptyForm() { return { name:'', phone:'', dni:'', email:'', address:'', notes:'', birth_date:'', price_list:'publico' } }
 
 function whatsappUrl(client, message) {
   const phone = (client.phone||'').replace(/\D/g,'')
@@ -108,7 +108,7 @@ export default function Clients() {
 
   const openCreate = () => { setForm(emptyForm()); setEditId(null); setModal('form') }
   const openEdit = (c) => {
-    setForm({ name:c.name, phone:c.phone, dni:c.dni, email:c.email, address:c.address, notes:c.notes, birth_date:c.birth_date||'' })
+    setForm({ name:c.name, phone:c.phone, dni:c.dni, email:c.email, address:c.address, notes:c.notes, birth_date:c.birth_date||'', price_list:c.price_list||'publico' })
     setEditId(c.id); setModal('form')
   }
 
@@ -372,6 +372,14 @@ export default function Clients() {
             <div>
               <label className={labelCls}>Fecha de nacimiento</label>
               <input type="date" className={inputCls} value={form.birth_date} onChange={e => f('birth_date', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Lista de precios</label>
+              <select className={inputCls} value={form.price_list} onChange={e => f('price_list', e.target.value)}>
+                <option value="publico">Público</option>
+                <option value="mayorista">Mayorista</option>
+                <option value="distribuidor">Distribuidor</option>
+              </select>
             </div>
             <div className="col-span-2">
               <label className={labelCls}>Dirección</label>

@@ -298,6 +298,16 @@ export const api = {
     cancel:       (d) => inv('senas:cancel', d),
     checkExpired: ()  => inv('senas:checkExpired'),
   },
+  credits: {
+    list:            (p)  => inv('credits:list', p),
+    get:             (id) => inv('credits:get', id),
+    create:          (d)  => inv('credits:create', d),
+    preview:         (d)  => inv('credits:preview', d),
+    registerPayment: (d)  => inv('credits:registerPayment', d),
+    cancel:          (d)  => inv('credits:cancel', d),
+    accountStatement:(d)  => inv('credits:accountStatement', d),
+    emailStatement:  (d)  => inv('credits:emailStatement', d),
+  },
   remito: {
     list:         (p) => inv('remito:list', p),
     get:          (id) => inv('remito:get', id),
