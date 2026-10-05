@@ -1723,12 +1723,13 @@ export default function Products() {
         onAddToSale={(g, c) => { setFinderOpen(false); addColorToSale(g, c) }}
       />
 
-      {/* Product modal */}
+      {/* Product modal — no se cierra por click afuera (es carga de datos; evita perder lo cargado) */}
       <Modal
         open={modal !== null}
         onClose={() => setModal(null)}
         title={modal === 'create' ? 'Nuevo producto' : 'Editar producto'}
         width="max-w-3xl"
+        closeOnOverlayClick={false}
       >
         <PriceHistoryInModal productId={editId} isEdit={modal === 'edit'} />
         <ProductForm

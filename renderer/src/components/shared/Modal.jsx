@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 
-export default function Modal({ open, onClose, title, children, width = 'max-w-2xl' }) {
+export default function Modal({ open, onClose, title, children, width = 'max-w-2xl', closeOnOverlayClick = true }) {
   useEffect(() => {
     if (!open) return
     const handler = (e) => { if (e.key === 'Escape') onClose() }
@@ -10,10 +10,20 @@ export default function Modal({ open, onClose, title, children, width = 'max-w-2
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  // Cerrar SOLO si el gesto empezó Y terminó directamente sobre el overlay (no burbujeado
+  // desde el contenido). Así, hacer clic en un campo —o arrastrar para seleccionar texto y
+  // soltar fuera del modal— nunca cierra el formulario.
+  const downOnOverlay = useRef(false)
+  const onOverlayMouseDown = (e) => { downOnOverlay.current = e.target === e.currentTarget }
+  const onOverlayClick = (e) => {
+    if (closeOnOverlayClick && downOnOverlay.current && e.target === e.currentTarget) onClose()
+    downOnOverlay.current = false
+  }
+
   return (
     <AnimatePresence>
       {open && (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onMouseDown={onOverlayMouseDown} onClick={onOverlayClick}>
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

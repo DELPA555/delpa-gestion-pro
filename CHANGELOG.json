@@ -1,4 +1,11 @@
 {
+  "v1.41.1": {
+    "fecha": "2026-10-05",
+    "titulo": "Fix: el formulario de producto se cerraba solo",
+    "correcciones": [
+      "Al cargar o editar un producto, el formulario ya no se cierra por hacer clic fuera, por seleccionar texto arrastrando con el mouse o por cambiar de campo: solo se cierra con Cancelar, Guardar, la X o Escape. Ya no se pierde lo cargado."
+    ]
+  },
   "v1.41.0": {
     "fecha": "2026-10-05",
     "titulo": "Créditos personales (cuotas) + Listas de precios",
