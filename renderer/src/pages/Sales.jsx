@@ -87,6 +87,12 @@ function bizContactFooterHtml(biz = {}) {
   return `<div class="divider"></div>${lines.map(l => `<p class="center" style="font-size:11px;margin:2px 0">${l}</p>`).join('')}`
 }
 
+// Rubros sin talle (Bazar/Kiosco/Accesorios/Otros) usan el talle 'Único': no se muestra
+// en tickets ni en el carrito (igual criterio que 'N/A').
+function hasRealSize(size) {
+  return !!size && size !== 'Único' && size !== 'N/A'
+}
+
 function printTicket(sale, biz = {}, pointsInfo = null) {
   const bizName = biz.business_name || 'DELPA'
   const logoHtml = biz.business_logo ? `<img src="${biz.business_logo}" style="height:40px;object-fit:contain;display:block;margin:0 auto 4px" alt="logo">` : ''
@@ -126,7 +132,7 @@ ${sale.client_name ? `<div class="row"><span>Cliente:</span><span>${sale.client_
 ${sale.seller_name ? `<div class="row"><span>Vendedora:</span><span>${sale.seller_name}</span></div>` : ''}
 <div class="divider"></div>
 ${(sale.items || []).map(it => `
-<div class="row"><span>${it.product_name} T.${it.size}</span><span>x${it.quantity}</span></div>
+<div class="row"><span>${it.product_name}${hasRealSize(it.size) ? ` T.${it.size}` : ''}</span><span>x${it.quantity}</span></div>
 <div class="row" style="padding-left:8px"><span>@ ${formatCurrency(it.unit_price)}</span><span>${formatCurrency(it.unit_price * it.quantity)}</span></div>
 `).join('')}
 <div class="divider"></div>
@@ -221,13 +227,13 @@ ${(sale.returned_items && sale.returned_items.length) ? `
 <div class="row"><strong>Devuelve:</strong></div>
 ${sale.returned_items.map(it => `
 <div class="row"><span>${it.product_name}</span><span>x${it.quantity}</span></div>
-<div class="row" style="padding-left:8px"><span>Talle: ${it.size}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
+${hasRealSize(it.size) || it.color ? `<div class="row" style="padding-left:8px">${hasRealSize(it.size) ? `<span>Talle: ${it.size}</span>` : ''}${it.color ? `<span>${it.color}</span>` : ''}</div>` : ''}
 `).join('')}
 <div class="divider"></div>
 <div class="row"><strong>Se lleva:</strong></div>` : ''}
 ${(sale.items || []).map(it => `
 <div class="row"><span>${it.product_name}</span><span>${withPrices && it.unit_price != null ? formatCurrency((it.unit_price || 0) * (it.quantity || 1)) : `x${it.quantity}`}</span></div>
-<div class="row" style="padding-left:8px"><span>Talle: ${it.size}${withPrices ? ` · x${it.quantity}` : ''}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
+<div class="row" style="padding-left:8px"><span>${hasRealSize(it.size) ? `Talle: ${it.size}${withPrices ? ` · x${it.quantity}` : ''}` : (withPrices ? `x${it.quantity}` : '')}</span>${it.color ? `<span>${it.color}</span>` : ''}</div>
 `).join('')}
 ${withPrices && typeof sale.total === 'number' ? `<div class="divider"></div><div class="row" style="font-size:13px"><strong>Total:</strong><strong>${formatCurrency(sale.total)}</strong></div>` : ''}
 ${typeof sale.difference === 'number' && sale.difference !== 0 ? (
@@ -282,7 +288,7 @@ function printGiftTickets(tickets, biz = {}) {
       <div class="line">Valido hasta: ${fmt(t.expires_at)}</div>
       <div class="sep">${SUB}</div>
       <div class="prod">${(t.product_name || '').toUpperCase()}</div>
-      ${t.size ? `<div class="line">TALLE: ${t.size}</div>` : ''}
+      ${hasRealSize(t.size) ? `<div class="line">TALLE: ${t.size}</div>` : ''}
       ${t.color ? `<div class="line">COLOR: ${t.color}</div>` : ''}
       <div class="sep">${SUB}</div>
       <div class="c">Presenta este ticket para</div>
@@ -1888,7 +1894,7 @@ export default function Sales() {
                         title="Editar nombre para esta venta"
                       />
                       <span className="text-xs text-zinc-500 shrink-0">
-                        T.{it.size}{it.color ? ` · ${it.color}` : ''}
+                        {hasRealSize(it.size) ? `T.${it.size}` : ''}{it.color ? `${hasRealSize(it.size) ? ' · ' : ''}${it.color}` : ''}
                       </span>
                       <button onClick={() => removeItem(it.key)}
                         className="text-zinc-600 hover:text-red-400 transition-colors p-1 shrink-0">

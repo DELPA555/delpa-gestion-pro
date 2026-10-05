@@ -66,8 +66,28 @@ ipcMain.handle('inventory:scan', (_, { sessionId, barcode }) => {
 
   let productId, productName, color, matchedSize
 
-  // 1. Igual que searchByBarcode paso 1: buscar por products.barcode exacto
-  const byProduct = db.prepare(
+  // 1. Código de barras del fabricante (external_barcode) — prioridad. Defensivo por si
+  //    la columna no existe en DBs muy viejas.
+  try {
+    const byExternal = db.prepare(
+      'SELECT id, name, color FROM products WHERE active=1 AND external_barcode=?'
+    ).get(code)
+    if (byExternal) {
+      productId   = byExternal.id
+      productName = byExternal.name
+      color       = byExternal.color || ''
+      const firstInSession = db.prepare(
+        'SELECT size FROM inventory_items WHERE session_id=? AND product_id=? ORDER BY id ASC LIMIT 1'
+      ).get(sessionId, productId)
+      matchedSize = firstInSession?.size
+      console.log('[INVENTORY SCAN] encontrado por external_barcode, size sesión:', matchedSize)
+    }
+  } catch (e) {
+    console.log('[INVENTORY SCAN] error en búsqueda external_barcode:', e.message)
+  }
+
+  // 2. Igual que searchByBarcode: buscar por products.barcode exacto (código interno)
+  const byProduct = !productId && db.prepare(
     'SELECT id, name, color FROM products WHERE active=1 AND barcode=?'
   ).get(code)
 

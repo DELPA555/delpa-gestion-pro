@@ -15,6 +15,7 @@ function createTables(db) {
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       barcode TEXT UNIQUE,
+      external_barcode TEXT DEFAULT NULL,
       name TEXT NOT NULL,
       brand TEXT DEFAULT '',
       category TEXT DEFAULT '',
@@ -929,6 +930,12 @@ function createTables(db) {
   addColumnIfMissing(db, 'clients', 'last_purchase',  "TEXT DEFAULT ''")
   addColumnIfMissing(db, 'clients', 'points',         'INTEGER DEFAULT 0')
   addColumnIfMissing(db, 'products', 'supplier_id',   'INTEGER DEFAULT NULL')
+  // Código de barras del FABRICANTE (EAN-13/EAN-8/UPC-A que ya trae el producto),
+  // separado del código interno DELPA (products.barcode). Permite escanear en caja
+  // sin imprimir etiqueta propia. El índice se crea DESPUÉS de la columna (no en el
+  // db.exec de createTables) para no romper DBs existentes donde la columna aún no está.
+  addColumnIfMissing(db, 'products', 'external_barcode', 'TEXT DEFAULT NULL')
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_products_external_barcode ON products(external_barcode)') } catch (e) { console.error('[DB Migration] índice external_barcode:', e.message) }
   // Ganancia real por línea: net_price = precio de venta menos el descuento distribuido
   // proporcionalmente; profit = net_price − costo. NULL = fila vieja pendiente de backfill.
   addColumnIfMissing(db, 'sale_items', 'net_price', 'REAL DEFAULT NULL')

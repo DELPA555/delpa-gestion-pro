@@ -1,4 +1,13 @@
 {
+  "v1.40.0": {
+    "fecha": "2026-10-05",
+    "titulo": "Código de barras del fabricante + rubros Bazar y Kiosco",
+    "mejoras": [
+      "Ahora cada producto puede guardar el código de barras que ya trae de fábrica (EAN-13, EAN-8, UPC, etc.): se carga en la ficha del producto escaneándolo o escribiéndolo, y se puede escanear directamente en Ventas e Inventario sin imprimir una etiqueta propia.",
+      "La búsqueda por código reconoce tanto el código del fabricante como el código interno DELPA, en Ventas, Inventario, el listado de productos y la impresión de etiquetas.",
+      "Nuevos rubros Bazar y Kiosco para productos sin talle: al elegirlos (igual que Accesorios), el producto usa un stock único sin grilla de talles, y el ticket no muestra talle."
+    ]
+  },
   "v1.39.2": {
     "fecha": "2026-10-01",
     "titulo": "Borrar TODO: dejar la app como recién instalada",

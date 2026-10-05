@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, Package, ImagePlus, X, ChevronDown,
   Cloud, CloudOff, CheckSquare, Square, Download, Upload, FileText,
   Layers, Palette, Tag, Percent, Printer, RefreshCw, TrendingUp, TrendingDown,
-  PackageCheck, Ruler, ShoppingCart,
+  PackageCheck, Ruler, ShoppingCart, ScanLine,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -33,7 +33,18 @@ const DEFAULT_JEANS_SIZES    = ['34','36','38','40','42','44','46','48','50']
 const DEFAULT_CLOTHING_SIZES = ['XS','S','M','L','XL','XXL','XXXL']
 const DEFAULT_AMERICAN_SIZES = ['28','30','32','34','36','38','40','42','44','46','48','50','52','54','56','58','60']
 const DEFAULT_SHOE_SIZES     = ['25','26','27','28','29','30','31','32','33','34','35','36','37','38','39','40','41','42','43','44','45','46','47','48']
-const DEFAULT_CATEGORIES     = ['Jeans','Camisas','Remeras','Buzos','Camperas','Pantalones','Shorts','Ropa interior','Accesorios','Calzado','Otros']
+const DEFAULT_CATEGORIES     = ['Jeans','Camisas','Remeras','Buzos','Camperas','Pantalones','Shorts','Ropa interior','Accesorios','Calzado','Bazar','Kiosco','Otros']
+
+// Rubros que NO usan talle: se manejan con un único talle 'Único' (mismo criterio que
+// StockEntry.SIZES_FOR). Bazar y Kiosco se suman a los que ya no usaban talle.
+const NO_SIZE_CATEGORIES = ['Accesorios', 'Bazar', 'Kiosco', 'Otros']
+const SINGLE_SIZE = 'Único'
+function isNoSizeCategory(cat, categorySizeGroups = {}) {
+  return NO_SIZE_CATEGORIES.includes(cat) || categorySizeGroups[cat] === 'none'
+}
+function singleSizeRow() {
+  return [{ size: SINGLE_SIZE, stock: 0, min_stock: 0 }]
+}
 
 function sizesForGroup(group, jeansArr, clothingArr, americanArr = DEFAULT_AMERICAN_SIZES, shoeArr = DEFAULT_SHOE_SIZES) {
   if (group === 'numeric')  return jeansArr
@@ -46,7 +57,7 @@ function sizesForGroup(group, jeansArr, clothingArr, americanArr = DEFAULT_AMERI
 
 function emptyForm(allSizes) {
   return {
-    barcode: '', name: '', brand: '', category: 'Jeans', color: '',
+    barcode: '', external_barcode: '', name: '', brand: '', category: 'Jeans', color: '',
     cost: '', price: '', min_stock: '5', image_data: '',
     tn_sync: 1,
     is_consignment: false, consignment_supplier_id: '', consignment_cost: '',
@@ -136,7 +147,10 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
   }
 
   const handleCategoryChange = (newCat) => {
-    if (categorySizeGroups[newCat]) {
+    if (isNoSizeCategory(newCat, categorySizeGroups)) {
+      // Rubro sin talle (Bazar/Kiosco/Accesorios/Otros o configurado 'none') → talle único.
+      setForm(f => ({ ...f, category: newCat, sizes: singleSizeRow() }))
+    } else if (categorySizeGroups[newCat]) {
       const group = categorySizeGroups[newCat]
       const newSizes = sizesForGroup(group, jeansSizes, clothingSizes, americanSizes || DEFAULT_AMERICAN_SIZES, shoeSizes || DEFAULT_SHOE_SIZES)
       setForm(f => ({ ...f, category: newCat, sizes: newSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })) }))
@@ -144,6 +158,16 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
       field('category', newCat)
     }
   }
+
+  // ── Rubro sin talle: stock único en lugar de la grilla de talles ──
+  // (si un producto legacy del rubro tuviera varias filas de talle, se muestra la grilla
+  //  para no perder esos datos; el caso normal es 0 o 1 talle)
+  const noSize = isNoSizeCategory(form.category, categorySizeGroups) && form.sizes.length <= 1
+  const singleRow = form.sizes[0] || { size: SINGLE_SIZE, stock: 0, min_stock: 0 }
+  const setSingle = (patch) => setForm(f => {
+    const base = f.sizes[0] || { size: SINGLE_SIZE, stock: 0, min_stock: 0 }
+    return { ...f, sizes: [{ ...base, size: base.size || SINGLE_SIZE, ...patch }] }
+  })
 
   const inputCls = 'input-field w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 no-drag'
   const labelCls = 'text-xs text-zinc-500 uppercase tracking-wider mb-1 block'
@@ -167,7 +191,7 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImage} />
         <div className="flex-1 space-y-3">
           <div>
-            <label className={labelCls}>Código de barras</label>
+            <label className={labelCls}>Código interno (DELPA)</label>
             <div className="flex gap-2">
               <input
                 className={inputCls}
@@ -188,6 +212,20 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
                 <svg ref={barcodeRef} />
               </div>
             )}
+          </div>
+          <div>
+            <label className={labelCls}>Código de barras del fabricante</label>
+            <div className="flex items-center gap-2">
+              <ScanLine size={16} className="text-zinc-500 shrink-0" />
+              <input
+                className={inputCls}
+                value={form.external_barcode}
+                onChange={e => field('external_barcode', e.target.value)}
+                maxLength={20}
+                placeholder="Escanear o ingresar código"
+              />
+            </div>
+            <p className="text-[10px] text-zinc-600 mt-1">El código EAN/UPC que ya trae el producto — para escanear en caja sin imprimir etiqueta.</p>
           </div>
           <div>
             <label className={labelCls}>Nombre *</label>
@@ -315,7 +353,26 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         </div>
       )}
 
-      <SizeGrid sizes={form.sizes} onChange={sizes => setForm(f => ({ ...f, sizes }))} />
+      {noSize ? (
+        <div>
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Stock (sin talle)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Stock</label>
+              <input type="number" min="0" className={inputCls} value={singleRow.stock}
+                onChange={e => setSingle({ stock: Number(e.target.value) || 0 })} placeholder="0" />
+            </div>
+            <div>
+              <label className={labelCls}>Stock mínimo</label>
+              <input type="number" min="0" className={inputCls} value={singleRow.min_stock}
+                onChange={e => setSingle({ min_stock: Number(e.target.value) || 0 })} placeholder="0" />
+            </div>
+          </div>
+          <p className="text-[10px] text-zinc-600 mt-1">Este rubro no usa talle.</p>
+        </div>
+      ) : (
+        <SizeGrid sizes={form.sizes} onChange={sizes => setForm(f => ({ ...f, sizes }))} />
+      )}
     </div>
   )
 }
@@ -444,7 +501,9 @@ function BulkLabelModal({ open, onClose, products: preSelected }) {
   const filtered = allProducts.filter(p =>
     !search ||
     p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.brand || '').toLowerCase().includes(search.toLowerCase())
+    (p.brand || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.barcode || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.external_barcode || '').toLowerCase().includes(search.toLowerCase())
   )
 
   const toggleProduct = (id) => setSelectedIds(prev => {
@@ -993,8 +1052,18 @@ export default function Products() {
     if (!p) return
     const cp = (cpRows || []).find(r => r.product_id === id)
     const sizeMap = Object.fromEntries((p.sizes || []).map(s => [s.size, s]))
+    const prodSizes = p.sizes || []
+    // Rubro sin talle → cargar los talles REALES del producto (p.ej. 'Único'), no la grilla
+    // de talles de ropa (allSizes no incluye 'Único' → se perdería el stock).
+    const noSizeEdit = isNoSizeCategory(p.category || 'Jeans', categorySizeGroups)
+    const editSizes = noSizeEdit
+      ? (prodSizes.length
+          ? prodSizes.map(s => ({ size: s.size, stock: s.stock ?? 0, min_stock: s.min_stock ?? 0 }))
+          : singleSizeRow())
+      : allSizes.map(s => ({ size: s, stock: sizeMap[s]?.stock ?? 0, min_stock: sizeMap[s]?.min_stock ?? 0 }))
     setForm({
       barcode: p.barcode || '',
+      external_barcode: p.external_barcode || '',
       name: p.name,
       brand: p.brand || '',
       category: p.category || 'Jeans',
@@ -1007,11 +1076,7 @@ export default function Products() {
       is_consignment: !!cp,
       consignment_supplier_id: cp ? String(cp.supplier_id || '') : '',
       consignment_cost: cp ? String(cp.cost_per_unit || '') : '',
-      sizes: allSizes.map(s => ({
-        size: s,
-        stock: sizeMap[s]?.stock ?? 0,
-        min_stock: sizeMap[s]?.min_stock ?? 0,
-      })),
+      sizes: editSizes,
     })
     setEditId(id)
     setModal('edit')
@@ -1028,7 +1093,9 @@ export default function Products() {
         cost: Number(form.cost) || 0,
         price: Number(form.price),
         min_stock: Number(form.min_stock) || 5,
-        sizes: form.sizes.filter(s => s.stock > 0 || s.min_stock > 0),
+        // El talle único 'Único' (rubros sin talle) se conserva aunque tenga stock 0,
+        // para que el producto tenga su fila de stock y sea vendible/reponible.
+        sizes: form.sizes.filter(s => s.stock > 0 || s.min_stock > 0 || s.size === 'Único'),
       }
       let savedId = editId
       if (modal === 'create') {
@@ -1453,6 +1520,11 @@ export default function Products() {
                           )}
                           {consignmentIds.has(p.id) && (
                             <span className="text-[9px] text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded font-medium">CONSIG</span>
+                          )}
+                          {p.external_barcode && (
+                            <span className="text-[9px] text-zinc-400 bg-surface border border-border px-1.5 py-0.5 rounded font-mono inline-flex items-center gap-1 shrink-0" title="Código de barras del fabricante">
+                              <ScanLine size={9} />{p.external_barcode}
+                            </span>
                           )}
                         </div>
                         <p className="text-xs text-zinc-500 truncate">{[p.brand, p.color].filter(Boolean).join(' · ') || p.barcode || '—'}</p>

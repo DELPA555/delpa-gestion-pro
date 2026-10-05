@@ -53,15 +53,15 @@ ipcMain.handle('products:list', (_, { page = 1, search = '', category = '', bran
   let where = 'WHERE p.active=1 AND (p.parent_product_id IS NULL OR p.is_variant=0)'
   const params = []
   if (search) {
-    where += ' AND (p.name LIKE ? OR p.barcode LIKE ? OR p.brand LIKE ?)'
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`)
+    where += ' AND (p.name LIKE ? OR p.barcode LIKE ? OR p.external_barcode LIKE ? OR p.brand LIKE ?)'
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`)
   }
   if (category) { where += ' AND p.category=?'; params.push(category) }
   if (brand)    { where += ' AND p.brand=?';    params.push(brand) }
 
   const { count } = db.prepare(`SELECT COUNT(*) as count FROM products p ${where}`).get(...params)
   const rows = db.prepare(`
-    SELECT p.id, p.barcode, p.name, p.brand, p.category, p.color,
+    SELECT p.id, p.barcode, p.external_barcode, p.name, p.brand, p.category, p.color,
            p.cost, p.price, p.min_stock, p.image_data, p.active,
            COALESCE(p.tn_sync,1) as tn_sync,
            p.parent_product_id, COALESCE(p.is_variant,0) as is_variant,
@@ -142,11 +142,11 @@ ipcMain.handle('products:get', (_, id) => {
 ipcMain.handle('products:search', (_, { q }) => {
   const db = getDB()
   const rows = db.prepare(`
-    SELECT p.id, p.barcode, p.name, p.brand, p.color, p.price, p.cost,
+    SELECT p.id, p.barcode, p.external_barcode, p.name, p.brand, p.color, p.price, p.cost,
            p.image_data, p.parent_product_id, COALESCE(p.is_variant,0) as is_variant
-    FROM products p WHERE p.active=1 AND (p.name LIKE ? OR p.barcode LIKE ?)
+    FROM products p WHERE p.active=1 AND (p.name LIKE ? OR p.barcode LIKE ? OR p.external_barcode LIKE ?)
     LIMIT 20
-  `).all(`%${q}%`, `%${q}%`)
+  `).all(`%${q}%`, `%${q}%`, `%${q}%`)
   const sizesStmt = db.prepare(`SELECT size, stock FROM product_sizes WHERE product_id=? AND stock>0 ORDER BY ${SIZE_ORDER}`)
   return rows.map(p => ({ ...p, sizes: sizesStmt.all(p.id) }))
 })
@@ -218,7 +218,20 @@ ipcMain.handle('products:searchByBarcode', (_, code) => {
   const db = getDB()
   const sizesQ = `SELECT size, stock, size_barcode FROM product_sizes WHERE product_id=? ORDER BY ${SIZE_ORDER}`
 
-  // 1. Exact product barcode
+  // 1. Código de barras del fabricante (external_barcode) — tiene prioridad sobre el
+  //    código interno DELPA. Defensivo por si la columna aún no existe (DB muy vieja).
+  try {
+    const byExternal = db.prepare(
+      'SELECT id, barcode, name, brand, color, price, cost, image_data FROM products WHERE active=1 AND external_barcode=?'
+    ).get(code)
+    if (byExternal) {
+      byExternal.sizes = db.prepare(sizesQ).all(byExternal.id)
+      byExternal.matchedSize = null
+      return byExternal
+    }
+  } catch {}
+
+  // 2. Código interno DELPA (products.barcode)
   const byProduct = db.prepare(
     'SELECT id, barcode, name, brand, color, price, cost, image_data FROM products WHERE active=1 AND barcode=?'
   ).get(code)
@@ -228,7 +241,7 @@ ipcMain.handle('products:searchByBarcode', (_, code) => {
     return byProduct
   }
 
-  // 2. Size-level barcode (may not exist on very old DBs — wrap defensively)
+  // 3. Size-level barcode (may not exist on very old DBs — wrap defensively)
   try {
     const bySize = db.prepare(`
       SELECT p.id, p.barcode, p.name, p.brand, p.color, p.price, p.cost, p.image_data,
@@ -265,14 +278,15 @@ ipcMain.handle('products:getVariants', (_, parentId) => {
 
 ipcMain.handle('products:create', (_, data) => {
   const db = getDB()
-  const { barcode, name, brand, category, color, cost, price, min_stock, image_data, sizes = [], tn_sync = 1 } = data
+  const { barcode, external_barcode, name, brand, category, color, cost, price, min_stock, image_data, sizes = [], tn_sync = 1 } = data
   let createdBy = ''
   try { createdBy = require('./auth').getCurrentSession()?.username || '' } catch {}
   const run = db.transaction(() => {
     const { lastInsertRowid: id } = db.prepare(`
-      INSERT INTO products (barcode,name,brand,category,color,cost,price,min_stock,image_data,tn_sync)
-      VALUES (?,?,?,?,?,?,?,?,?,?)
-    `).run(barcode || null, name, brand || '', category || '', color || '',
+      INSERT INTO products (barcode,external_barcode,name,brand,category,color,cost,price,min_stock,image_data,tn_sync)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    `).run(barcode || null, (external_barcode && String(external_barcode).trim()) || null,
+           name, brand || '', category || '', color || '',
            cost || 0, price, min_stock || 5, image_data || '', tn_sync ? 1 : 0)
     const ins = db.prepare(`INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,?) ON CONFLICT(product_id,size) DO UPDATE SET stock=excluded.stock,min_stock=excluded.min_stock`)
     for (const s of sizes) if (s.size) ins.run(id, s.size, s.stock || 0, s.min_stock || 2)
@@ -321,7 +335,8 @@ ipcMain.handle('products:createVariant', (_, data) => {
 
 ipcMain.handle('products:update', (_, { id, ...data }) => {
   const db = getDB()
-  const { barcode, name, brand, category, color, cost, price, min_stock, image_data, sizes = [], tn_sync, changedBy } = data
+  const { barcode, external_barcode, name, brand, category, color, cost, price, min_stock, image_data, sizes = [], tn_sync, changedBy } = data
+  const extVal = external_barcode !== undefined ? ((external_barcode && String(external_barcode).trim()) || null) : undefined
   const run = db.transaction(() => {
     // Registrar cambio de precio si cambió
     const current = db.prepare('SELECT price, name FROM products WHERE id=?').get(id)
@@ -334,12 +349,17 @@ ipcMain.handle('products:update', (_, { id, ...data }) => {
     }
 
     const tnVal = tn_sync !== undefined ? (tn_sync ? 1 : 0) : 1
+    // Si el payload no trae external_barcode (callers que no lo mandan), conservar el actual.
+    let finalExt = extVal
+    if (finalExt === undefined) {
+      try { finalExt = db.prepare('SELECT external_barcode FROM products WHERE id=?').get(id)?.external_barcode ?? null } catch { finalExt = null }
+    }
     if (image_data !== undefined) {
-      db.prepare(`UPDATE products SET barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,min_stock=?,image_data=?,tn_sync=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(barcode || null, name, brand || '', category || '', color || '', cost || 0, price, min_stock || 5, image_data, tnVal, id)
+      db.prepare(`UPDATE products SET barcode=?,external_barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,min_stock=?,image_data=?,tn_sync=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(barcode || null, finalExt, name, brand || '', category || '', color || '', cost || 0, price, min_stock || 5, image_data, tnVal, id)
     } else {
-      db.prepare(`UPDATE products SET barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,min_stock=?,tn_sync=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(barcode || null, name, brand || '', category || '', color || '', cost || 0, price, min_stock || 5, tnVal, id)
+      db.prepare(`UPDATE products SET barcode=?,external_barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,min_stock=?,tn_sync=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(barcode || null, finalExt, name, brand || '', category || '', color || '', cost || 0, price, min_stock || 5, tnVal, id)
     }
     if (sizes.length > 0) {
       const validSizes = sizes.filter(s => s.size && String(s.size).trim() !== '')
