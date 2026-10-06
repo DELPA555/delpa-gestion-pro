@@ -43,6 +43,9 @@ main/ipc/gd-credentials.js
 main/*.crt
 main/*.key
 main/*.pem
+# Certificado AFIP legacy — nunca debe commitearse ni empaquetarse (ya no se incluye en el build)
+main/delpa.crt.crt
+main/delpa.key
 *.key
 *.crt
 *.pem

@@ -1,6 +1,6 @@
 {
   "name": "panel-financiero",
-  "version": "1.42.0",
+  "version": "1.42.1",
   "private": true,
   "description": "DELPA Gestion PRO - sistema de gestion comercial para tienda de ropa",
   "author": "Ivan del Palacio <delpa555@gmail.com>",
@@ -55,6 +55,8 @@
     },
     "files": [
       "main/**",
+      "!main/*.crt",
+      "!main/*.key",
       "renderer/dist/**",
       "database/**",
       "node_modules/**"

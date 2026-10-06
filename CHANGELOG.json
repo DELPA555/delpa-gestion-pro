@@ -1,4 +1,12 @@
 {
+  "v1.42.1": {
+    "fecha": "2026-10-06",
+    "titulo": "Certificado AFIP: cada cliente usa el suyo (ya no viene uno por defecto)",
+    "mejoras": [
+      "El instalador ya no incluye un certificado digital por defecto. Cada negocio genera su CSR y carga su propio certificado desde Configuración → AFIP.",
+      "Si todavía no cargaste un certificado, la pantalla muestra “Sin certificado instalado” y el botón Generar CSR como primer paso."
+    ]
+  },
   "v1.42.0": {
     "fecha": "2026-10-06",
     "titulo": "Certificado AFIP configurable desde la app (sin reemplazar archivos)",

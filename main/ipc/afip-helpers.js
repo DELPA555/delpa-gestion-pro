@@ -21,6 +21,9 @@ function getCertPath() { return path.join(getCertDir(), 'cert.crt') }
 function getKeyPath()  { return path.join(getCertDir(), 'key.key') }
 
 // Migra los archivos legacy (main/delpa.*) a userData/afip-cert la primera vez.
+// Desde v1.42.1 el build YA NO empaqueta esos archivos → en instalaciones nuevas no
+// existen y esto no migra nada (no-op). Solo ayuda a quien venía de una versión que aún
+// los traía. Sin cert → el usuario genera su CSR y carga su .crt desde la UI.
 let _migrated = false
 function migrateLegacyCerts() {
   if (_migrated) return

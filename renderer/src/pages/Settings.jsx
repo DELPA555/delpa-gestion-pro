@@ -1333,16 +1333,20 @@ export default function Settings() {
 
             <div className="flex flex-wrap gap-2">
               <button onClick={genCSR} disabled={certBusy}
-                className="no-drag inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-zinc-200 hover:bg-white/5 disabled:opacity-50">
-                <Download size={13} /> {certBusy ? 'Procesando…' : (certStatus?.installed ? 'Regenerar / nuevo CSR' : 'Generar CSR')}
+                className={`no-drag inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium disabled:opacity-50 ${(certStatus?.installed || certStatus?.hasKey) ? 'border border-border text-zinc-200 hover:bg-white/5' : 'bg-accent text-white hover:brightness-110'}`}>
+                <Download size={13} /> {certBusy ? 'Procesando…' : (certStatus?.installed ? 'Regenerar / nuevo CSR' : (certStatus?.hasKey ? 'Generar CSR de nuevo' : '1) Generar CSR'))}
               </button>
-              <button onClick={loadCrt} disabled={certBusy}
-                className="no-drag inline-flex items-center gap-1.5 rounded-lg bg-accent text-white px-3 py-2 text-xs font-medium hover:brightness-110 disabled:opacity-50">
-                <Upload size={13} /> Cargar certificado .crt
-              </button>
+              {(certStatus?.installed || certStatus?.hasKey) && (
+                <button onClick={loadCrt} disabled={certBusy}
+                  className="no-drag inline-flex items-center gap-1.5 rounded-lg bg-accent text-white px-3 py-2 text-xs font-medium hover:brightness-110 disabled:opacity-50">
+                  <Upload size={13} /> {certStatus?.installed ? 'Reemplazar certificado .crt' : '2) Cargar certificado .crt'}
+                </button>
+              )}
             </div>
             <p className="text-[11px] text-zinc-600 leading-relaxed">
-              La clave privada y el certificado se guardan en los datos de tu PC (no en la app ni en el build). El CSR usa el CUIT y la razón social de Configuración → Negocio.
+              {(certStatus?.installed || certStatus?.hasKey)
+                ? 'La clave privada y el certificado se guardan en los datos de tu PC (no en la app ni en el build). El CSR usa el CUIT y la razón social de Configuración → Negocio.'
+                : 'Primer paso: generá el CSR, subilo a AFIP y después vas a poder cargar el .crt que AFIP te devuelve. El CSR usa el CUIT y la razón social de Configuración → Negocio.'}
             </p>
           </div>
 
