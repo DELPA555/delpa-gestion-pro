@@ -1,4 +1,12 @@
 {
+  "v1.41.2": {
+    "fecha": "2026-10-05",
+    "titulo": "Pedidos a proveedor: crear producto nuevo y borrador que no se pierde",
+    "mejoras": [
+      "Al armar un pedido a proveedor, si buscás un producto que todavía no existe, ahora aparece la opción “➕ Agregar como producto nuevo”: se abre un mini-formulario (nombre, rubro, costo, precio) y al guardarlo el producto queda creado en tu base y agregado al pedido, sin salir del módulo.",
+      "El pedido en progreso ya no se pierde: si navegás a otro módulo y volvés, aparece un aviso “Tenés un pedido sin terminar” con las opciones Retomar o Descartar, y “Nuevo pedido” retoma lo que tenías cargado."
+    ]
+  },
   "v1.41.1": {
     "fecha": "2026-10-05",
     "titulo": "Fix: el formulario de producto se cerraba solo",

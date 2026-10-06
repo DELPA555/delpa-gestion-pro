@@ -13,6 +13,21 @@ import PageHeader from '@/components/shared/PageHeader'
 import HelpButton from '@/components/HelpButton'
 import EmptyState from '@/components/shared/EmptyState'
 import SkeletonTable from '@/components/shared/SkeletonLoader'
+import Modal from '@/components/shared/Modal'
+
+// Borrador del pedido en progreso (persistido en localStorage para no perderlo al navegar).
+const ORDER_DRAFT_KEY = 'delpa_supplier_order_draft'
+
+// Categorías y talles por rubro para crear un producto nuevo desde el pedido (mismo criterio
+// que StockEntry: rubros sin talle → 'Único').
+const NEW_PROD_CATEGORIES = ['Jeans','Camisas','Remeras','Buzos','Camperas','Pantalones','Shorts','Ropa interior','Accesorios','Calzado','Bazar','Kiosco','Otros']
+const NEW_PROD_SIZES = {
+  Jeans:['34','36','38','40','42','44','46','48','50'], Pantalones:['34','36','38','40','42','44','46','48','50'], Shorts:['34','36','38','40','42','44','46','48','50'],
+  Camisas:['XS','S','M','L','XL','XXL','XXXL'], Remeras:['XS','S','M','L','XL','XXL','XXXL'], Buzos:['XS','S','M','L','XL','XXL','XXXL'], Camperas:['XS','S','M','L','XL','XXL','XXXL'], 'Ropa interior':['XS','S','M','L','XL','XXL','XXXL'],
+  Calzado:['35','36','37','38','39','40','41','42','43','44','45'],
+  Accesorios:['Único'], Bazar:['Único'], Kiosco:['Único'], Otros:['Único'],
+}
+const sizesForCat = (cat) => NEW_PROD_SIZES[cat] || ['XS','S','M','L','XL','XXL','XXXL']
 
 const STATUS = {
   draft:    { label: 'Borrador',         cls: 'bg-zinc-800 text-zinc-400 border-zinc-700' },
@@ -63,12 +78,84 @@ function SizeGridOrder({ sizes, onChange }) {
   )
 }
 
+// ── Mini-formulario para crear un producto nuevo desde el pedido ──────────────
+
+function NewProductMini({ initialName, onClose, onCreated }) {
+  const [name, setName]         = useState(initialName || '')
+  const [category, setCategory] = useState('Jeans')
+  const [cost, setCost]         = useState('')
+  const [price, setPrice]       = useState('')
+  const [saving, setSaving]     = useState(false)
+
+  const sizePreview = sizesForCat(category)
+
+  const save = async () => {
+    if (!name.trim()) return toast.error('El nombre es requerido')
+    if (!(Number(price) > 0)) return toast.error('El precio de venta es requerido')
+    setSaving(true)
+    try {
+      const sizes = sizesForCat(category).map(s => ({ size: s, stock: 0, min_stock: 0 }))
+      const res = await api.products.create({
+        name: name.trim(), category, cost: Number(cost) || 0, price: Number(price) || 0,
+        sizes, min_stock: 5,
+      })
+      const newId = (res && typeof res === 'object') ? (res.id ?? res) : res
+      // Traer el producto recién creado para obtener sus talles reales (con stock 0).
+      const full = await api.products.get(newId)
+      const cardSizes = (full?.sizes || sizes).map(s => ({ size: s.size, stock: s.stock ?? 0, qty: 0 }))
+      onCreated({ id: newId, name: name.trim(), color: '', cost: Number(cost) || 0, sizes: cardSizes })
+      toast.success('Producto creado y agregado al pedido')
+    } catch (e) { toast.error(e?.message || 'No se pudo crear el producto') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Nuevo producto" width="max-w-md" closeOnOverlayClick={false}>
+      <div className="p-5 space-y-3">
+        <div>
+          <label className={labelCls}>Nombre *</label>
+          <input className={inputCls} value={name} onChange={e => setName(e.target.value)} autoFocus placeholder="Ej: Jean clásico" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Categoría / rubro</label>
+            <select className={inputCls} value={category} onChange={e => setCategory(e.target.value)}>
+              {NEW_PROD_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <p className="text-[11px] text-zinc-500">Talles: <span className="text-zinc-300">{sizePreview.join(', ')}</span></p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Precio costo $</label>
+            <input type="number" min="0" step="0.01" className={inputCls} value={cost} onChange={e => setCost(e.target.value)} placeholder="0,00" />
+          </div>
+          <div>
+            <label className={labelCls}>Precio venta $ *</label>
+            <input type="number" min="0" step="0.01" className={inputCls} value={price} onChange={e => setPrice(e.target.value)} placeholder="0,00" />
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-600">Se crea con stock 0 en todos los talles; cargás las cantidades del pedido abajo.</p>
+      </div>
+      <div className="flex justify-end gap-2 p-4 border-t border-border">
+        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-border text-zinc-300 hover:text-white">Cancelar</button>
+        <button onClick={save} disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-accent text-white font-medium hover:brightness-110 disabled:opacity-50">
+          {saving ? 'Creando…' : 'Crear y agregar'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Tarjeta de producto para pedido ──────────────────────────────────────────
 
 function ProductCardOrder({ card, onUpdate, onRemove }) {
   const [search,  setSearch]  = useState(card.product_name || '')
   const [results, setResults] = useState([])
   const [open,    setOpen]    = useState(false)
+  const [newProdOpen, setNewProdOpen] = useState(false)
   const dropRef = useRef(null)
   const timer   = useRef(null)
 
@@ -87,8 +174,9 @@ function ProductCardOrder({ card, onUpdate, onRemove }) {
       try {
         const res = await api.products.search(q) || []
         setResults(res)
-        setOpen(res.length > 0)
-      } catch {}
+      } catch { setResults([]) }
+      // Abrir el dropdown aunque no haya resultados, para ofrecer "Agregar nuevo".
+      setOpen(true)
     }, 220)
   }
 
@@ -103,6 +191,12 @@ function ProductCardOrder({ card, onUpdate, onRemove }) {
     } catch {
       onUpdate({ ...card, product_id: p.id, product_name: p.name, color: p.color || '', cost: p.cost || 0, sizes: [] })
     }
+  }
+
+  // El producto recién creado se agrega al card actual.
+  const handleCreated = (prod) => {
+    setSearch(prod.name); setResults([]); setOpen(false); setNewProdOpen(false)
+    onUpdate({ ...card, product_id: prod.id, product_name: prod.name, color: prod.color || '', cost: prod.cost || 0, sizes: prod.sizes || [] })
   }
 
   const totalQty = card.sizes.reduce((s, sz) => s + (sz.qty || 0), 0)
@@ -121,11 +215,11 @@ function ProductCardOrder({ card, onUpdate, onRemove }) {
             placeholder="Buscar producto por nombre o código..."
             autoComplete="off"
           />
-          {open && results.length > 0 && (
-            <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-[#111] border border-border rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
+          {open && search.trim().length >= 2 && (
+            <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-[#111] border border-border rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto">
               {results.slice(0, 10).map(p => (
                 <button key={p.id} type="button" onClick={() => pick(p)}
-                  className="w-full text-left px-3 py-2.5 text-xs hover:bg-white/[0.06] transition-colors border-b border-border/40 last:border-0">
+                  className="w-full text-left px-3 py-2.5 text-xs hover:bg-white/[0.06] transition-colors border-b border-border/40">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-white font-medium truncate">{p.name}</span>
                     <span className="text-zinc-500 shrink-0">{formatCurrency(p.cost || 0)}</span>
@@ -133,6 +227,13 @@ function ProductCardOrder({ card, onUpdate, onRemove }) {
                   {p.color && <span className="text-zinc-500">{p.color}</span>}
                 </button>
               ))}
+              {results.length === 0 && (
+                <p className="px-3 py-2 text-[11px] text-zinc-600">Sin resultados para “{search.trim()}”.</p>
+              )}
+              <button type="button" onClick={() => { setOpen(false); setNewProdOpen(true) }}
+                className="w-full text-left px-3 py-2.5 text-xs text-accent font-medium hover:bg-accent/10 transition-colors flex items-center gap-1.5">
+                <PackagePlus size={13} /> Agregar “{search.trim()}” como producto nuevo
+              </button>
             </div>
           )}
         </div>
@@ -181,6 +282,10 @@ function ProductCardOrder({ card, onUpdate, onRemove }) {
         <p className="text-xs text-zinc-600 text-center py-1">
           ← Buscá y seleccioná un producto para ver la grilla de talles
         </p>
+      )}
+
+      {newProdOpen && (
+        <NewProductMini initialName={search.trim()} onClose={() => setNewProdOpen(false)} onCreated={handleCreated} />
       )}
     </div>
   )
@@ -303,8 +408,20 @@ export default function SupplierOrders() {
   const [fCards,        setFCards]        = useState([newCard()])
   const [fSaving,       setFSaving]       = useState(false)
   const [loadingLow,    setLoadingLow]    = useState(false)
+  const [hasDraft,      setHasDraft]      = useState(false)
 
   const LIMIT = 20
+
+  // ── Borrador del pedido en progreso (localStorage) ──
+  const isMeaningfulDraft = (d) =>
+    !!d && ((d.fCards || []).some(c => c.product_id) || !!d.fSupplierName || !!d.fSupplierId || !!(d.fNotes || '').trim())
+  const readDraft = () => {
+    try { return JSON.parse(localStorage.getItem(ORDER_DRAFT_KEY) || 'null') } catch { return null }
+  }
+  const clearDraft = useCallback(() => {
+    try { localStorage.removeItem(ORDER_DRAFT_KEY) } catch {}
+    setHasDraft(false)
+  }, [])
 
   const loadOrders = useCallback(async () => {
     setLoading(true)
@@ -325,14 +442,36 @@ export default function SupplierOrders() {
   useEffect(() => {
     api.suppliers.list({ limit: 999 }).then(r => setSuppliers(r.suppliers || [])).catch(() => {})
     api.settings.getAll().then(s => setBiz(s)).catch(() => {})
+    setHasDraft(isMeaningfulDraft(readDraft()))   // ¿quedó un pedido sin terminar?
   }, [])
 
-  const openNew = () => {
+  // Auto-guardar el borrador mientras se arma un pedido NUEVO (no en edición).
+  useEffect(() => {
+    if (view !== 'form' || editOrder) return
+    try {
+      localStorage.setItem(ORDER_DRAFT_KEY, JSON.stringify({ fSupplierId, fSupplierName, fSupplierEmail, fSupplierPhone, fNotes, fCards }))
+    } catch {}
+  }, [view, editOrder, fSupplierId, fSupplierName, fSupplierEmail, fSupplierPhone, fNotes, fCards])
+
+  const loadForm = (d) => {
     setEditOrder(null)
-    setFSupplierId(''); setFSupplierName(''); setFSupplierEmail(''); setFSupplierPhone('')
-    setFNotes(''); setFCards([newCard()])
+    setFSupplierId(d?.fSupplierId || ''); setFSupplierName(d?.fSupplierName || '')
+    setFSupplierEmail(d?.fSupplierEmail || ''); setFSupplierPhone(d?.fSupplierPhone || '')
+    setFNotes(d?.fNotes || ''); setFCards(d?.fCards?.length ? d.fCards : [newCard()])
     setView('form')
   }
+  // "Nuevo pedido": si hay un borrador en progreso, lo retoma (no se pierde el trabajo).
+  const openNew = () => {
+    const d = readDraft()
+    loadForm(isMeaningfulDraft(d) ? d : null)
+  }
+  const resumeDraft = () => { loadForm(readDraft()) }
+  const discardDraft = () => {
+    clearDraft()
+    toast.success('Borrador descartado')
+  }
+  // Volver a la lista sin perder el borrador; refresca el indicador del banner.
+  const backToList = () => { setHasDraft(isMeaningfulDraft(readDraft())); setView('list') }
 
   const openEdit = async (id) => {
     try {
@@ -466,6 +605,7 @@ export default function SupplierOrders() {
         const res = await api.supplierOrders.create(payload)
         toast.success(`Pedido ${res.order_number} creado`)
       }
+      clearDraft()
       setView('list')
       loadOrders()
     } catch (e) { toast.error(e.message || 'Error al guardar') }
@@ -492,6 +632,7 @@ export default function SupplierOrders() {
       }
       printOrderPDF({ ...payload, order_number: orderNumber, created_at: new Date().toISOString() }, biz)
       toast.success(`Pedido ${orderNumber} generado`)
+      clearDraft()
       setView('list')
       loadOrders()
     } catch (e) { toast.error(e.message || 'Error') }
@@ -561,7 +702,7 @@ export default function SupplierOrders() {
     <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0, y:-4 }} transition={{ duration:0.18 }}
       className="p-6 space-y-5 h-full overflow-auto">
       <div className="flex items-center gap-3">
-        <button onClick={() => setView('list')} className="no-drag flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
+        <button onClick={backToList} className="no-drag flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
           <ChevronLeft size={15} /> Volver
         </button>
         <div className="h-4 w-px bg-border" />
@@ -644,7 +785,7 @@ export default function SupplierOrders() {
           <p className="text-xl font-bold text-accent tabular-nums">{formatCurrency(fTotal)}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setView('list')} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
+          <button onClick={backToList} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
             Cancelar
           </button>
           <button onClick={() => saveOrder('draft')} disabled={fSaving}
@@ -675,6 +816,18 @@ export default function SupplierOrders() {
           </button>
         </div>
       </div>
+
+      {hasDraft && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3">
+          <span className="flex items-center gap-2 text-sm text-accent">
+            <ClipboardList size={15} /> Tenés un pedido sin terminar.
+          </span>
+          <div className="flex gap-2 no-drag">
+            <button onClick={resumeDraft} className="px-3 py-1.5 text-xs rounded-lg bg-accent text-white font-medium hover:brightness-110">Retomar</button>
+            <button onClick={discardDraft} className="px-3 py-1.5 text-xs rounded-lg border border-border text-zinc-300 hover:text-white">Descartar</button>
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="flex items-center gap-3 flex-wrap">
