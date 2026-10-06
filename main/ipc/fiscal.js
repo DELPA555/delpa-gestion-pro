@@ -285,8 +285,8 @@ ipcMain.handle('afip:syncComprobantes', async (_, { tipoComprobante = 11, mes } 
     const afipModule = require('./afip-helpers')
     if (!afipModule) return { ok: false, error: 'Módulo AFIP no disponible', sincronizados: 0 }
 
-    const { authenticate, getSoapClient, getEnv, getPtoVta, CUIT } = afipModule
-    const afipCuit = CUIT
+    const { authenticate, getSoapClient, getEnv, getPtoVta, getCuit } = afipModule
+    const afipCuit = getCuit()
     const env    = getEnv()
     const pv     = getPtoVta()
     const ta     = await authenticate(env)

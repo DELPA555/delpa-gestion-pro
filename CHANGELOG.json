@@ -1,4 +1,13 @@
 {
+  "v1.42.0": {
+    "fecha": "2026-10-06",
+    "titulo": "Certificado AFIP configurable desde la app (sin reemplazar archivos)",
+    "mejoras": [
+      "En Configuración → AFIP ahora podés gestionar tu certificado digital vos mismo: botón “Generar CSR” que crea el par de claves (RSA 2048) y te deja guardar el archivo .csr para subir a AFIP, y botón “Cargar certificado .crt” para instalar el que descargaste de AFIP.",
+      "La pantalla muestra el estado del certificado: CUIT, alias, fecha de vencimiento y si está válido, próximo a vencer o vencido.",
+      "El certificado y la clave se guardan en los datos de tu PC (no dentro de la app), y la facturación usa automáticamente el CUIT de tu certificado. Si ya tenías el certificado instalado por soporte, se migra solo la primera vez."
+    ]
+  },
   "v1.41.2": {
     "fecha": "2026-10-05",
     "titulo": "Pedidos a proveedor: crear producto nuevo y borrador que no se pierde",

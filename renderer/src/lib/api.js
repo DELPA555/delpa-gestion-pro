@@ -228,6 +228,9 @@ export const api = {
     testConexion:              ()  => inv('afip:testConexion'),
     consultarUltimoComprobante:(p) => inv('afip:consultarUltimoComprobante', p),
     generarCAE:                (d) => inv('afip:generarCAE', d),
+    certStatus:                ()  => inv('afip:certStatus'),
+    generateCSR:               ()  => inv('afip:generateCSR'),
+    loadCert:                  ()  => inv('afip:loadCert'),
   },
   shell: {
     openExternal: (url) => inv('shell:openExternal', url),

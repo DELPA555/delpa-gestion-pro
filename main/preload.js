@@ -36,6 +36,7 @@ const CHANNELS = [
   'settings:get', 'settings:set', 'settings:getAll',
   'googledrive:auth', 'googledrive:backup', 'googledrive:status', 'googledrive:disconnect', 'googledrive:clearTokens',
   'afip:generarCAE', 'afip:consultarUltimoComprobante', 'afip:status', 'afip:testConexion',
+  'afip:certStatus', 'afip:generateCSR', 'afip:loadCert',
   'inventory:start', 'inventory:getCurrent', 'inventory:scan', 'inventory:increment',
   'inventory:updateItem', 'inventory:close', 'inventory:exportPDF', 'inventory:emailReport',
   'inventory:history', 'inventory:getReport',

@@ -2,11 +2,70 @@
 // No registra handlers IPC — solo exporta funciones
 const fs   = require('fs')
 const path = require('path')
+const { app } = require('electron')
 const { getDB } = require('../../database/db')
 
-const CUIT      = '27436672948'
-const CERT_PATH = path.join(__dirname, '..', 'delpa.crt.crt')
-const KEY_PATH  = path.join(__dirname, '..', 'delpa.key')
+// CUIT legacy (certificado DELPA empaquetado) — fallback si el cliente no cargó el suyo.
+const LEGACY_CUIT = '27436672948'
+// Archivos legacy (dentro del asar) — fuente de migración a userData.
+const LEGACY_CERT_PATH = path.join(__dirname, '..', 'delpa.crt.crt')
+const LEGACY_KEY_PATH  = path.join(__dirname, '..', 'delpa.key')
+
+// ── Certificados por cliente en userData (fuera del asar) ──────────────────────
+function getCertDir() {
+  const dir = path.join(app.getPath('userData'), 'afip-cert')
+  try { fs.mkdirSync(dir, { recursive: true }) } catch {}
+  return dir
+}
+function getCertPath() { return path.join(getCertDir(), 'cert.crt') }
+function getKeyPath()  { return path.join(getCertDir(), 'key.key') }
+
+// Migra los archivos legacy (main/delpa.*) a userData/afip-cert la primera vez.
+let _migrated = false
+function migrateLegacyCerts() {
+  if (_migrated) return
+  _migrated = true
+  try {
+    const certDst = getCertPath(), keyDst = getKeyPath()
+    if (!fs.existsSync(certDst) && fs.existsSync(LEGACY_CERT_PATH)) {
+      fs.writeFileSync(certDst, fs.readFileSync(LEGACY_CERT_PATH))
+      console.log('[AFIP] cert legacy migrado a userData')
+    }
+    if (!fs.existsSync(keyDst) && fs.existsSync(LEGACY_KEY_PATH)) {
+      fs.writeFileSync(keyDst, fs.readFileSync(LEGACY_KEY_PATH))
+      console.log('[AFIP] key legacy migrada a userData')
+    }
+  } catch (e) { console.error('[AFIP] migración cert legacy:', e.message) }
+}
+
+function hasCert() {
+  migrateLegacyCerts()
+  return fs.existsSync(getCertPath()) && fs.existsSync(getKeyPath())
+}
+
+// CUIT dinámico: cert instalado (afip_cert_cuit) → business_cuit → legacy.
+function getCuit() {
+  try {
+    const db = getDB()
+    const certCuit = db.prepare("SELECT value FROM settings WHERE key='afip_cert_cuit'").get()?.value
+    if (certCuit && /^\d{11}$/.test(certCuit)) return certCuit
+    const bizCuit = (db.prepare("SELECT value FROM settings WHERE key='business_cuit'").get()?.value || '').replace(/\D/g, '')
+    if (/^\d{11}$/.test(bizCuit)) return bizCuit
+  } catch {}
+  return LEGACY_CUIT
+}
+
+// Info del certificado (CUIT del serialNumber, vencimiento, alias) vía node-forge.
+function parseCertInfo(pem) {
+  const forge = require('node-forge')
+  const cert = forge.pki.certificateFromPem(pem)
+  const field = (name) => { try { return cert.subject.getField(name)?.value || '' } catch { return '' } }
+  const cn = field('CN'), org = field('O')
+  let serial = ''
+  try { serial = (cert.subject.attributes.find(a => a.shortName === 'serialNumber' || a.type === '2.5.4.5') || {}).value || '' } catch {}
+  const cuit = (serial.match(/\d{11}/) || cn.match(/\d{11}/) || [''])[0]
+  return { cuit, alias: cn || org || 'certificado', org, notBefore: cert.validity.notBefore, notAfter: cert.validity.notAfter }
+}
 
 const ENDPOINTS = {
   testing: {
@@ -60,8 +119,8 @@ function buildTRA() {
 
 function signTRA(tra) {
   const forge = require('node-forge')
-  const cert  = forge.pki.certificateFromPem(fs.readFileSync(CERT_PATH, 'utf8'))
-  const key   = forge.pki.privateKeyFromPem(fs.readFileSync(KEY_PATH,  'utf8'))
+  const cert  = forge.pki.certificateFromPem(fs.readFileSync(getCertPath(), 'utf8'))
+  const key   = forge.pki.privateKeyFromPem(fs.readFileSync(getKeyPath(),  'utf8'))
   const p7 = forge.pkcs7.createSignedData()
   p7.content = forge.util.createBuffer(tra, 'utf8')
   p7.addCertificate(cert)
@@ -92,8 +151,9 @@ async function getSoapClient(type, env) {
 async function authenticate(env) {
   const cached = taCache[env]
   if (cached && new Date(cached.expiresAt) > new Date(Date.now() + 5 * 60 * 1000)) return cached
-  if (!fs.existsSync(CERT_PATH)) throw new Error(`Certificado no encontrado: ${CERT_PATH}`)
-  if (!fs.existsSync(KEY_PATH))  throw new Error(`Clave privada no encontrada: ${KEY_PATH}`)
+  migrateLegacyCerts()
+  if (!fs.existsSync(getCertPath())) throw new Error('No hay certificado AFIP instalado. Cargá el .crt en Configuración → AFIP.')
+  if (!fs.existsSync(getKeyPath()))  throw new Error('No hay clave privada AFIP. Generá el CSR en Configuración → AFIP.')
   const tra = buildTRA()
   const cms = signTRA(tra)
   const client = await getSoapClient('wsaa', env)
@@ -107,4 +167,8 @@ async function authenticate(env) {
   return taCache[env]
 }
 
-module.exports = { CUIT, CERT_PATH, KEY_PATH, ENDPOINTS, taCache, soapClients, getEnv, getPtoVta, clearAllCaches, toAfipTs, getSoapClient, authenticate }
+module.exports = {
+  LEGACY_CUIT, LEGACY_CERT_PATH, LEGACY_KEY_PATH,
+  getCertDir, getCertPath, getKeyPath, migrateLegacyCerts, hasCert, getCuit, parseCertInfo,
+  ENDPOINTS, taCache, soapClients, getEnv, getPtoVta, clearAllCaches, toAfipTs, getSoapClient, authenticate,
+}

@@ -244,6 +244,8 @@ export default function Settings() {
   const [afipStatus, setAfipStatus] = useState(null)
   const [afipTesting, setAfipTesting] = useState(false)
   const [afipSaving, setAfipSaving] = useState(false)
+  const [certStatus, setCertStatus] = useState(null)
+  const [certBusy, setCertBusy] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Red de locales (multi-nodo por CUIT)
@@ -415,7 +417,33 @@ export default function Settings() {
 
   const loadAfipStatus = useCallback(async () => {
     try { setAfipStatus(await api.afip.status()) } catch {}
+    try { setCertStatus(await api.afip.certStatus()) } catch {}
   }, [])
+
+  const genCSR = async () => {
+    setCertBusy(true)
+    try {
+      const res = await api.afip.generateCSR()
+      if (res?.ok) {
+        toast.success(res.csrSaved ? 'CSR generado y guardado. Subilo a AFIP y después cargá el .crt acá.' : (res.message || 'Clave privada generada.'))
+        setCertStatus(await api.afip.certStatus())
+      } else toast.error(res?.error || 'No se pudo generar el CSR')
+    } catch (e) { toast.error(e?.message || 'Error') }
+    finally { setCertBusy(false) }
+  }
+
+  const loadCrt = async () => {
+    setCertBusy(true)
+    try {
+      const res = await api.afip.loadCert()
+      if (res?.ok) {
+        toast.success(`Certificado cargado${res.cuit ? ` · CUIT ${res.cuit}` : ''}${res.venceDisplay ? ` · vence ${res.venceDisplay}` : ''}`)
+        setCertStatus(res)
+        loadAfipStatus()
+      } else if (!res?.canceled) toast.error(res?.error || 'No se pudo cargar el certificado')
+    } catch (e) { toast.error(e?.message || 'Error') }
+    finally { setCertBusy(false) }
+  }
 
   const loadUsers = useCallback(async () => {
     try { setUsers(await api.auth.users.list()) } catch {}
@@ -1272,6 +1300,51 @@ export default function Settings() {
           >
             🧾 ¿Cómo configuro AFIP? — Guía paso a paso
           </button>
+
+          {/* ── Certificado digital ── */}
+          <div className="p-4 bg-surface border border-border rounded-xl space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={16} className="text-accent" />
+              <p className="text-sm font-semibold text-white">Certificado digital</p>
+            </div>
+
+            {!certStatus?.installed ? (
+              <div className="flex items-start gap-2 text-xs text-zinc-400 bg-zinc-800/40 border border-border rounded-lg p-3">
+                <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                <span>Sin certificado instalado. Generá el CSR, subilo a AFIP y después cargá el .crt que te descargás.</span>
+              </div>
+            ) : (
+              <div className={`rounded-lg p-3 border text-xs ${certStatus.estado === 'vencido' ? 'bg-red-500/10 border-red-500/20' : certStatus.estado === 'por_vencer' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  {certStatus.estado === 'valido' ? <CheckCircle size={14} className="text-green-400" /> : <AlertCircle size={14} className={certStatus.estado === 'vencido' ? 'text-red-400' : 'text-amber-400'} />}
+                  <span className={`font-semibold ${certStatus.estado === 'vencido' ? 'text-red-300' : certStatus.estado === 'por_vencer' ? 'text-amber-300' : 'text-green-300'}`}>
+                    {certStatus.estado === 'vencido' ? 'Certificado vencido' : certStatus.estado === 'por_vencer' ? `Próximo a vencer (${certStatus.diasRestantes} días)` : 'Certificado válido'}
+                  </span>
+                </div>
+                <div className="text-zinc-300 space-y-0.5">
+                  {certStatus.cuit && <div>CUIT: <span className="font-mono">{certStatus.cuit}</span></div>}
+                  {certStatus.alias && <div>Alias: <span className="text-zinc-400">{certStatus.alias}</span></div>}
+                  {certStatus.venceDisplay && <div>Vence: {certStatus.venceDisplay}</div>}
+                  {!certStatus.hasKey && <div className="text-amber-400">⚠️ Falta la clave privada — generá un CSR nuevo.</div>}
+                  {certStatus.error && <div className="text-red-400">{certStatus.error}</div>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <button onClick={genCSR} disabled={certBusy}
+                className="no-drag inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-zinc-200 hover:bg-white/5 disabled:opacity-50">
+                <Download size={13} /> {certBusy ? 'Procesando…' : (certStatus?.installed ? 'Regenerar / nuevo CSR' : 'Generar CSR')}
+              </button>
+              <button onClick={loadCrt} disabled={certBusy}
+                className="no-drag inline-flex items-center gap-1.5 rounded-lg bg-accent text-white px-3 py-2 text-xs font-medium hover:brightness-110 disabled:opacity-50">
+                <Upload size={13} /> Cargar certificado .crt
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-600 leading-relaxed">
+              La clave privada y el certificado se guardan en los datos de tu PC (no en la app ni en el build). El CSR usa el CUIT y la razón social de Configuración → Negocio.
+            </p>
+          </div>
 
           {/* Ambiente */}
           <div>

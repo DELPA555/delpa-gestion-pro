@@ -1,10 +1,11 @@
-const { ipcMain } = require('electron')
+const { ipcMain, dialog, BrowserWindow } = require('electron')
 const fs = require('fs')
+const path = require('path')
 const { getDB } = require('../../database/db')
 
 // Importar helpers compartidos con fiscal.js
 const {
-  CUIT, CERT_PATH, KEY_PATH,
+  getCuit, getCertPath, getKeyPath, getCertDir, hasCert, parseCertInfo, migrateLegacyCerts,
   taCache, soapClients,
   getEnv, getPtoVta, clearAllCaches,
   getSoapClient, authenticate,
@@ -55,7 +56,7 @@ ipcMain.handle('afip:consultarUltimoComprobante', async (_, { tipoComprobante } 
     const ta     = await authenticate(env)
     const client = await getSoapClient('wsfev1', env)
     const [res]  = await client.FECompUltimoAutorizadoAsync({
-      Auth: { Token: ta.token, Sign: ta.sign, Cuit: parseInt(CUIT, 10) },
+      Auth: { Token: ta.token, Sign: ta.sign, Cuit: parseInt(getCuit(), 10) },
       PtoVta: getPtoVta(), CbteTipo: tipoComprobante,
     })
     return { ok: true, ultimo: res?.FECompUltimoAutorizadoResult?.CbteNro ?? 0 }
@@ -77,7 +78,7 @@ ipcMain.handle('afip:generarCAE', async (_, {
     const ta     = await authenticate(env)
     const client = await getSoapClient('wsfev1', env)
     const pv     = getPtoVta()
-    const cuitN  = parseInt(CUIT, 10)
+    const cuitN  = parseInt(getCuit(), 10)
 
     const [lastRes] = await client.FECompUltimoAutorizadoAsync({
       Auth: { Token: ta.token, Sign: ta.sign, Cuit: cuitN },
@@ -195,6 +196,114 @@ ipcMain.handle('afip:generarCAE', async (_, {
     }
   } catch (e) {
     console.error('[AFIP] generarCAE error:', e.message)
+    return { ok: false, error: e.message || String(e) }
+  }
+})
+
+// ── Gestión de certificados digitales (desde la UI, por cliente) ───────────────
+
+function certStatusPayload() {
+  migrateLegacyCerts()
+  const certPath = getCertPath(), keyPath = getKeyPath()
+  const installed = fs.existsSync(certPath)
+  if (!installed) return { installed: false, hasKey: fs.existsSync(keyPath), dir: getCertDir() }
+  try {
+    const info = parseCertInfo(fs.readFileSync(certPath, 'utf8'))
+    const now = new Date()
+    const days = Math.ceil((info.notAfter.getTime() - now.getTime()) / 86400000)
+    const estado = days < 0 ? 'vencido' : (days <= 30 ? 'por_vencer' : 'valido')
+    return {
+      installed: true, hasKey: fs.existsSync(keyPath),
+      cuit: info.cuit, alias: info.alias,
+      vence: info.notAfter.toISOString(),
+      venceDisplay: info.notAfter.toLocaleDateString('es-AR'),
+      diasRestantes: days, estado, dir: getCertDir(),
+    }
+  } catch (e) {
+    return { installed: true, hasKey: fs.existsSync(keyPath), error: 'No se pudo leer el certificado: ' + e.message, dir: getCertDir() }
+  }
+}
+
+ipcMain.handle('afip:certStatus', () => {
+  try { return certStatusPayload() }
+  catch (e) { return { installed: false, error: e.message } }
+})
+
+// Genera par RSA 2048 + CSR. Guarda la .key en userData y deja elegir dónde guardar el .csr.
+ipcMain.handle('afip:generateCSR', async () => {
+  try {
+    const db = getDB()
+    const org  = (db.prepare("SELECT value FROM settings WHERE key='business_name'").get()?.value || 'DELPA').trim() || 'DELPA'
+    const cuit = (db.prepare("SELECT value FROM settings WHERE key='business_cuit'").get()?.value || '').replace(/\D/g, '')
+    if (!/^\d{11}$/.test(cuit)) {
+      return { ok: false, error: 'Cargá el CUIT del negocio (11 dígitos) en Configuración → Negocio antes de generar el CSR.' }
+    }
+    const forge = require('node-forge')
+    const keys = await new Promise((resolve, reject) => {
+      // Sin 'workers' (no hay web workers en el proceso main de Node) → generación async de forge.
+      forge.pki.rsa.generateKeyPair({ bits: 2048 }, (err, kp) => err ? reject(err) : resolve(kp))
+    })
+    const csr = forge.pki.createCertificationRequest()
+    csr.publicKey = keys.publicKey
+    csr.setSubject([
+      { name: 'countryName',      value: 'AR' },
+      { name: 'organizationName', value: org },
+      { name: 'commonName',       value: 'DELPA' },
+      { type: '2.5.4.5',          value: `CUIT ${cuit}` }, // serialNumber
+    ])
+    csr.sign(keys.privateKey, forge.md.sha256.create())
+    const csrPem = forge.pki.certificationRequestToPem(csr)
+    const keyPem = forge.pki.privateKeyToPem(keys.privateKey)
+
+    // Guardar la clave privada en userData (reemplaza la anterior si existía).
+    migrateLegacyCerts()
+    fs.writeFileSync(getKeyPath(), keyPem)
+
+    // Diálogo para guardar el .csr donde quiera el usuario.
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Guardar pedido de certificado (CSR) para subir a AFIP',
+      defaultPath: `delpa-${cuit}.csr`,
+      filters: [{ name: 'Pedido de certificado', extensions: ['csr'] }],
+    })
+    if (canceled || !filePath) {
+      return { ok: true, keySaved: true, csrSaved: false, message: 'Clave privada guardada. Cancelaste el guardado del CSR; podés regenerarlo cuando quieras.' }
+    }
+    fs.writeFileSync(filePath, csrPem)
+    return { ok: true, keySaved: true, csrSaved: true, csrPath: filePath, cuit, org }
+  } catch (e) {
+    console.error('[AFIP] generateCSR error:', e.message)
+    return { ok: false, error: e.message || String(e) }
+  }
+})
+
+// Abre un file picker para el .crt descargado de AFIP, lo copia a userData y lo valida.
+ipcMain.handle('afip:loadCert', async () => {
+  try {
+    const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Seleccioná el certificado .crt descargado de AFIP',
+      properties: ['openFile'],
+      filters: [{ name: 'Certificado', extensions: ['crt', 'cer', 'pem'] }],
+    })
+    if (canceled || !filePaths?.length) return { ok: false, canceled: true }
+    const src = filePaths[0]
+    const pem = fs.readFileSync(src, 'utf8')
+    // Validar que sea un certificado parseable antes de instalarlo.
+    let info
+    try { info = parseCertInfo(pem) }
+    catch { return { ok: false, error: 'El archivo no parece un certificado válido (.crt en formato PEM).' } }
+
+    migrateLegacyCerts()
+    fs.writeFileSync(getCertPath(), pem)
+    // Guardar el CUIT del certificado para usarlo en la conexión AFIP.
+    if (info.cuit && /^\d{11}$/.test(info.cuit)) {
+      getDB().prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('afip_cert_cuit',?)").run(info.cuit)
+    }
+    clearAllCaches() // forzar re-autenticación con el cert nuevo
+    return { ok: true, ...certStatusPayload() }
+  } catch (e) {
+    console.error('[AFIP] loadCert error:', e.message)
     return { ok: false, error: e.message || String(e) }
   }
 })
