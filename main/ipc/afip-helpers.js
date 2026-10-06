@@ -20,24 +20,34 @@ function getCertDir() {
 function getCertPath() { return path.join(getCertDir(), 'cert.crt') }
 function getKeyPath()  { return path.join(getCertDir(), 'key.key') }
 
-// Migra los archivos legacy (main/delpa.*) a userData/afip-cert la primera vez.
-// Desde v1.42.1 el build YA NO empaqueta esos archivos → en instalaciones nuevas no
-// existen y esto no migra nada (no-op). Solo ayuda a quien venía de una versión que aún
-// los traía. Sin cert → el usuario genera su CSR y carga su .crt desde la UI.
+// Migra los archivos legacy (main/delpa.*) a userData/afip-cert UNA SOLA VEZ.
+// Reglas (v1.42.2 — fix: NO sobreescribir el cert que el cliente cargó):
+//  1) Si existe el flag userData/afip-cert/.migrated → ya se hizo, no tocar NADA.
+//  2) Si el usuario ya tiene un certificado cargado (cert.crt) → NO migrar ni
+//     sobreescribir; el cert del usuario SIEMPRE tiene prioridad. Se marca el flag.
+//  3) Recién si no hay cert del usuario y nunca se migró, se copian los legacy (si existen).
+// Desde v1.42.1 el build ya no empaqueta los legacy → en instalaciones nuevas esto no
+// copia nada, solo deja el flag. Marcar como migrado SIEMPRE evita reintentar en cada inicio.
+function markMigrated() {
+  try { fs.writeFileSync(path.join(getCertDir(), '.migrated'), new Date().toISOString()) } catch {}
+}
 let _migrated = false
 function migrateLegacyCerts() {
   if (_migrated) return
   _migrated = true
   try {
-    const certDst = getCertPath(), keyDst = getKeyPath()
-    if (!fs.existsSync(certDst) && fs.existsSync(LEGACY_CERT_PATH)) {
-      fs.writeFileSync(certDst, fs.readFileSync(LEGACY_CERT_PATH))
-      console.log('[AFIP] cert legacy migrado a userData')
+    const flag = path.join(getCertDir(), '.migrated')
+    if (fs.existsSync(flag)) return                 // (1) ya migrado alguna vez
+    if (fs.existsSync(getCertPath())) { markMigrated(); return }  // (2) el usuario ya tiene su cert
+    // (3) primera vez y sin cert del usuario → migrar legacy si existen
+    if (fs.existsSync(LEGACY_CERT_PATH)) {
+      fs.writeFileSync(getCertPath(), fs.readFileSync(LEGACY_CERT_PATH))
+      if (!fs.existsSync(getKeyPath()) && fs.existsSync(LEGACY_KEY_PATH)) {
+        fs.writeFileSync(getKeyPath(), fs.readFileSync(LEGACY_KEY_PATH))
+      }
+      console.log('[AFIP] cert legacy migrado a userData (una vez)')
     }
-    if (!fs.existsSync(keyDst) && fs.existsSync(LEGACY_KEY_PATH)) {
-      fs.writeFileSync(keyDst, fs.readFileSync(LEGACY_KEY_PATH))
-      console.log('[AFIP] key legacy migrada a userData')
-    }
+    markMigrated()
   } catch (e) { console.error('[AFIP] migración cert legacy:', e.message) }
 }
 
@@ -172,6 +182,6 @@ async function authenticate(env) {
 
 module.exports = {
   LEGACY_CUIT, LEGACY_CERT_PATH, LEGACY_KEY_PATH,
-  getCertDir, getCertPath, getKeyPath, migrateLegacyCerts, hasCert, getCuit, parseCertInfo,
+  getCertDir, getCertPath, getKeyPath, migrateLegacyCerts, markMigrated, hasCert, getCuit, parseCertInfo,
   ENDPOINTS, taCache, soapClients, getEnv, getPtoVta, clearAllCaches, toAfipTs, getSoapClient, authenticate,
 }

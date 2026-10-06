@@ -1,4 +1,11 @@
 {
+  "v1.42.2": {
+    "fecha": "2026-10-06",
+    "titulo": "Fix: el certificado AFIP que cargás ya no se pierde al reiniciar",
+    "correcciones": [
+      "La migración del certificado de fábrica ahora corre una sola vez y nunca pisa el certificado que vos cargaste: al reiniciar DELPA, tu certificado se mantiene."
+    ]
+  },
   "v1.42.1": {
     "fecha": "2026-10-06",
     "titulo": "Certificado AFIP: cada cliente usa el suyo (ya no viene uno por defecto)",
