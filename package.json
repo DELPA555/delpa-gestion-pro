@@ -1,6 +1,6 @@
 {
   "name": "panel-financiero",
-  "version": "1.42.4",
+  "version": "1.42.5",
   "private": true,
   "description": "DELPA Gestion PRO - sistema de gestion comercial para tienda de ropa",
   "author": "Ivan del Palacio <delpa555@gmail.com>",
@@ -68,8 +68,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "DELPA-Gestion-PRO-Setup.exe",
-      "include": "build/installer.nsh"
+      "artifactName": "DELPA-Gestion-PRO-Setup.exe"
     },
     "publish": {
       "provider": "github",

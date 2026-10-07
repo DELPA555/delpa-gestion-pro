@@ -1,4 +1,11 @@
 {
+  "v1.42.5": {
+    "fecha": "2026-10-07",
+    "titulo": "Las actualizaciones ya no tocan tu certificado AFIP",
+    "correcciones": [
+      "Se quitó del instalador el borrado automático de la carpeta del certificado. A partir de ahora, actualizar DELPA NO elimina ni modifica tu certificado AFIP: el que cargaste se mantiene entre versiones."
+    ]
+  },
   "v1.42.4": {
     "fecha": "2026-10-07",
     "titulo": "Limpieza: se quitó el certificado AFIP de fábrica",
