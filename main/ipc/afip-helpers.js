@@ -5,13 +5,9 @@ const path = require('path')
 const { app } = require('electron')
 const { getDB } = require('../../database/db')
 
-// CUIT legacy (certificado DELPA empaquetado) — fallback si el cliente no cargó el suyo.
-const LEGACY_CUIT = '27436672948'
-// Archivos legacy (dentro del asar) — fuente de migración a userData.
-const LEGACY_CERT_PATH = path.join(__dirname, '..', 'delpa.crt.crt')
-const LEGACY_KEY_PATH  = path.join(__dirname, '..', 'delpa.key')
-
 // ── Certificados por cliente en userData (fuera del asar) ──────────────────────
+// Cada cliente genera su CSR y carga su propio .crt desde la UI; NO hay certificado de
+// fábrica ni migración legacy. El instalador (build/installer.nsh) limpia esta carpeta.
 function getCertDir() {
   const dir = path.join(app.getPath('userData'), 'afip-cert')
   try { fs.mkdirSync(dir, { recursive: true }) } catch {}
@@ -20,43 +16,11 @@ function getCertDir() {
 function getCertPath() { return path.join(getCertDir(), 'cert.crt') }
 function getKeyPath()  { return path.join(getCertDir(), 'key.key') }
 
-// Migra los archivos legacy (main/delpa.*) a userData/afip-cert UNA SOLA VEZ.
-// Reglas (v1.42.2 — fix: NO sobreescribir el cert que el cliente cargó):
-//  1) Si existe el flag userData/afip-cert/.migrated → ya se hizo, no tocar NADA.
-//  2) Si el usuario ya tiene un certificado cargado (cert.crt) → NO migrar ni
-//     sobreescribir; el cert del usuario SIEMPRE tiene prioridad. Se marca el flag.
-//  3) Recién si no hay cert del usuario y nunca se migró, se copian los legacy (si existen).
-// Desde v1.42.1 el build ya no empaqueta los legacy → en instalaciones nuevas esto no
-// copia nada, solo deja el flag. Marcar como migrado SIEMPRE evita reintentar en cada inicio.
-function markMigrated() {
-  try { fs.writeFileSync(path.join(getCertDir(), '.migrated'), new Date().toISOString()) } catch {}
-}
-let _migrated = false
-function migrateLegacyCerts() {
-  if (_migrated) return
-  _migrated = true
-  try {
-    const flag = path.join(getCertDir(), '.migrated')
-    if (fs.existsSync(flag)) return                 // (1) ya migrado alguna vez
-    if (fs.existsSync(getCertPath())) { markMigrated(); return }  // (2) el usuario ya tiene su cert
-    // (3) primera vez y sin cert del usuario → migrar legacy si existen
-    if (fs.existsSync(LEGACY_CERT_PATH)) {
-      fs.writeFileSync(getCertPath(), fs.readFileSync(LEGACY_CERT_PATH))
-      if (!fs.existsSync(getKeyPath()) && fs.existsSync(LEGACY_KEY_PATH)) {
-        fs.writeFileSync(getKeyPath(), fs.readFileSync(LEGACY_KEY_PATH))
-      }
-      console.log('[AFIP] cert legacy migrado a userData (una vez)')
-    }
-    markMigrated()
-  } catch (e) { console.error('[AFIP] migración cert legacy:', e.message) }
-}
-
 function hasCert() {
-  migrateLegacyCerts()
   return fs.existsSync(getCertPath()) && fs.existsSync(getKeyPath())
 }
 
-// CUIT dinámico: cert instalado (afip_cert_cuit) → business_cuit → legacy.
+// CUIT dinámico: cert instalado (afip_cert_cuit) → business_cuit. Vacío si no hay nada.
 function getCuit() {
   try {
     const db = getDB()
@@ -65,7 +29,7 @@ function getCuit() {
     const bizCuit = (db.prepare("SELECT value FROM settings WHERE key='business_cuit'").get()?.value || '').replace(/\D/g, '')
     if (/^\d{11}$/.test(bizCuit)) return bizCuit
   } catch {}
-  return LEGACY_CUIT
+  return ''  // sin CUIT configurado → la conexión AFIP fallará pidiendo configurarlo
 }
 
 // Info del certificado (CUIT del serialNumber, vencimiento, alias) vía node-forge.
@@ -164,7 +128,6 @@ async function getSoapClient(type, env) {
 async function authenticate(env) {
   const cached = taCache[env]
   if (cached && new Date(cached.expiresAt) > new Date(Date.now() + 5 * 60 * 1000)) return cached
-  migrateLegacyCerts()
   if (!fs.existsSync(getCertPath())) throw new Error('No hay certificado AFIP instalado. Cargá el .crt en Configuración → AFIP.')
   if (!fs.existsSync(getKeyPath()))  throw new Error('No hay clave privada AFIP. Generá el CSR en Configuración → AFIP.')
   const tra = buildTRA()
@@ -181,7 +144,6 @@ async function authenticate(env) {
 }
 
 module.exports = {
-  LEGACY_CUIT, LEGACY_CERT_PATH, LEGACY_KEY_PATH,
-  getCertDir, getCertPath, getKeyPath, migrateLegacyCerts, markMigrated, hasCert, getCuit, parseCertInfo,
+  getCertDir, getCertPath, getKeyPath, hasCert, getCuit, parseCertInfo,
   ENDPOINTS, taCache, soapClients, getEnv, getPtoVta, clearAllCaches, toAfipTs, getSoapClient, authenticate,
 }

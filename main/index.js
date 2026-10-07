@@ -108,7 +108,6 @@ app.whenReady().then(() => {
   const { runPointsExpiry } = require('./ipc/pointsMaintenance')
   try { runPointsExpiry() } catch (e) { console.error('[POINTS] expiry on startup:', e.message) }
   try { require('./ipc/credits').recalcAllOverdueCredits() } catch (e) { console.error('[CREDITS] recalc on startup:', e.message) }
-  try { require('./ipc/afip-helpers').migrateLegacyCerts() } catch (e) { console.error('[AFIP] migrate certs on startup:', e.message) }
   const { performBackup } = require('./ipc/googledrive')
   require('./ipc/weeklySummary')            // mantiene los canales legacy weeklySummary:send/monthlySummary:send
   const { scheduleInformes } = require('./ipc/informes')

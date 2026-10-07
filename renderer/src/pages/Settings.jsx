@@ -1431,15 +1431,6 @@ export default function Settings() {
             </div>
           )}
 
-          {/* Info certificado */}
-          <div className="p-3 bg-white/[0.03] border border-border rounded-xl text-xs text-zinc-500 space-y-1">
-            <p className="text-zinc-400 font-medium">Certificado digital</p>
-            <p>CUIT: <span className="text-zinc-300 font-mono">27-43667294-8</span></p>
-            <p>Cert: <span className="text-zinc-300 font-mono">main/delpa.crt.crt</span></p>
-            <p>Key: <span className="text-zinc-300 font-mono">main/delpa.key</span></p>
-            <p className="text-zinc-600 pt-1">Los archivos de certificado se incluyen automáticamente en el build.</p>
-          </div>
-
           {/* Buttons */}
           <div className="flex gap-3 pt-1">
             <button

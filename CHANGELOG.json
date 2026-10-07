@@ -1,4 +1,12 @@
 {
+  "v1.42.4": {
+    "fecha": "2026-10-07",
+    "titulo": "Limpieza: se quitó el certificado AFIP de fábrica",
+    "correcciones": [
+      "Se eliminó la sección vieja de Configuración → AFIP que mostraba un certificado de fábrica (CUIT y archivos fijos). Ahora solo existe la gestión de tu propio certificado (Generar CSR / Cargar .crt).",
+      "La facturación usa exclusivamente el certificado que vos cargaste; ya no hay ningún certificado por defecto en la app."
+    ]
+  },
   "v1.42.3": {
     "fecha": "2026-10-07",
     "titulo": "Instalación limpia del certificado AFIP",

@@ -5,7 +5,7 @@ const { getDB } = require('../../database/db')
 
 // Importar helpers compartidos con fiscal.js
 const {
-  getCuit, getCertPath, getKeyPath, getCertDir, hasCert, parseCertInfo, migrateLegacyCerts, markMigrated,
+  getCuit, getCertPath, getKeyPath, getCertDir, hasCert, parseCertInfo,
   taCache, soapClients,
   getEnv, getPtoVta, clearAllCaches,
   getSoapClient, authenticate,
@@ -203,7 +203,6 @@ ipcMain.handle('afip:generarCAE', async (_, {
 // ── Gestión de certificados digitales (desde la UI, por cliente) ───────────────
 
 function certStatusPayload() {
-  migrateLegacyCerts()
   const certPath = getCertPath(), keyPath = getKeyPath()
   const installed = fs.existsSync(certPath)
   if (!installed) return { installed: false, hasKey: fs.existsSync(keyPath), dir: getCertDir() }
@@ -256,9 +255,7 @@ ipcMain.handle('afip:generateCSR', async () => {
     const keyPem = forge.pki.privateKeyToPem(keys.privateKey)
 
     // Guardar la clave privada nueva en userData (reemplaza la anterior si existía).
-    // A partir de acá el usuario maneja su propio cert → la migración legacy no debe correr.
     fs.writeFileSync(getKeyPath(), keyPem)
-    markMigrated()
     // Un CSR nuevo usa OTRA clave → el certificado anterior (si había) queda inválido:
     // se descarta para no mostrar uno que ya no corresponde. El usuario carga el .crt nuevo.
     try { if (fs.existsSync(getCertPath())) fs.unlinkSync(getCertPath()) } catch {}
@@ -299,7 +296,6 @@ ipcMain.handle('afip:loadCert', async () => {
     catch { return { ok: false, error: 'El archivo no parece un certificado válido (.crt en formato PEM).' } }
 
     fs.writeFileSync(getCertPath(), pem)
-    markMigrated() // el usuario maneja su propio cert → la migración legacy no debe correr más
     // Guardar el CUIT del certificado para usarlo en la conexión AFIP.
     if (info.cuit && /^\d{11}$/.test(info.cuit)) {
       getDB().prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('afip_cert_cuit',?)").run(info.cuit)
