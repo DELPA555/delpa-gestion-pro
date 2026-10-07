@@ -1,4 +1,12 @@
 {
+  "v1.42.3": {
+    "fecha": "2026-10-07",
+    "titulo": "Instalación limpia del certificado AFIP",
+    "correcciones": [
+      "Al instalar/actualizar, se limpia cualquier certificado AFIP guardado de versiones anteriores (incluido el certificado de fábrica que quedaba de v1.42.0), para que arranques sin un certificado que no es tuyo.",
+      "Importante: si ya habías cargado tu propio certificado, después de actualizar tenés que volver a configurarlo en Configuración → AFIP (Generar CSR → subir a AFIP → cargar el .crt)."
+    ]
+  },
   "v1.42.2": {
     "fecha": "2026-10-06",
     "titulo": "Fix: el certificado AFIP que cargás ya no se pierde al reiniciar",
