@@ -59,7 +59,7 @@ function emptyForm(allSizes) {
   return {
     barcode: '', external_barcode: '', name: '', brand: '', category: 'Jeans', color: '',
     cost: '', price: '', price_wholesale: '', price_distributor: '', min_stock: '5', image_data: '',
-    tn_sync: 1,
+    tn_sync: 1, no_sizes: 0,
     is_consignment: false, consignment_supplier_id: '', consignment_cost: '',
     sizes: allSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })),
   }
@@ -146,27 +146,49 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
     reader.readAsDataURL(file)
   }
 
+  // Grilla de talles por defecto según el rubro (para volver desde "talle único").
+  const defaultSizesFor = (cat) => {
+    const group = categorySizeGroups[cat]
+    const arr = group
+      ? sizesForGroup(group, jeansSizes, clothingSizes, americanSizes || DEFAULT_AMERICAN_SIZES, shoeSizes || DEFAULT_SHOE_SIZES)
+      : [...jeansSizes, ...clothingSizes]
+    return arr.length > 0 ? arr.map(s => ({ size: s, stock: 0, min_stock: 0 })) : singleSizeRow()
+  }
+
   const handleCategoryChange = (newCat) => {
+    // La categoría fija el default de "talle único" (override manual vía checkbox).
     if (isNoSizeCategory(newCat, categorySizeGroups)) {
       // Rubro sin talle (Bazar/Kiosco/Accesorios/Otros o configurado 'none') → talle único.
-      setForm(f => ({ ...f, category: newCat, sizes: singleSizeRow() }))
+      setForm(f => ({ ...f, category: newCat, no_sizes: 1, sizes: singleSizeRow() }))
     } else if (categorySizeGroups[newCat]) {
       const group = categorySizeGroups[newCat]
       const newSizes = sizesForGroup(group, jeansSizes, clothingSizes, americanSizes || DEFAULT_AMERICAN_SIZES, shoeSizes || DEFAULT_SHOE_SIZES)
-      setForm(f => ({ ...f, category: newCat, sizes: newSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })) }))
+      setForm(f => ({ ...f, category: newCat, no_sizes: 0, sizes: newSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })) }))
     } else {
-      field('category', newCat)
+      setForm(f => ({ ...f, category: newCat, no_sizes: 0 }))
     }
   }
 
-  // ── Rubro sin talle: stock único en lugar de la grilla de talles ──
-  // (si un producto legacy del rubro tuviera varias filas de talle, se muestra la grilla
-  //  para no perder esos datos; el caso normal es 0 o 1 talle)
-  const noSize = isNoSizeCategory(form.category, categorySizeGroups) && form.sizes.length <= 1
+  // ── Talle único / N/A: flag explícito por producto (no_sizes) ──
+  const noSize = !!form.no_sizes
   const singleRow = form.sizes[0] || { size: SINGLE_SIZE, stock: 0, min_stock: 0 }
   const setSingle = (patch) => setForm(f => {
     const base = f.sizes[0] || { size: SINGLE_SIZE, stock: 0, min_stock: 0 }
     return { ...f, sizes: [{ ...base, size: base.size || SINGLE_SIZE, ...patch }] }
+  })
+
+  // Activar/desactivar "talle único" conservando el stock total (no perder datos).
+  const toggleNoSizes = (checked) => setForm(f => {
+    const total = f.sizes.reduce((a, s) => a + (Number(s.stock) || 0), 0)
+    const totalMin = f.sizes.reduce((a, s) => a + (Number(s.min_stock) || 0), 0)
+    if (checked) {
+      // Consolidar todo el stock en una única fila genérica 'Único'.
+      return { ...f, no_sizes: 1, sizes: [{ size: SINGLE_SIZE, stock: total, min_stock: totalMin }] }
+    }
+    // Volver a la grilla del rubro; el total queda en la primera fila para no perder stock.
+    const rows = defaultSizesFor(f.category)
+    if (rows[0]) rows[0] = { ...rows[0], stock: total }
+    return { ...f, no_sizes: 0, sizes: rows }
   })
 
   const inputCls = 'input-field w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 no-drag'
@@ -331,6 +353,19 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         >
           {form.tn_sync ? <Cloud size={12} /> : <CloudOff size={12} />}
           {form.tn_sync ? 'Sync TN activo' : 'Sync TN desactivado'}
+        </div>
+        <div
+          onClick={() => toggleNoSizes(!form.no_sizes)}
+          title="Para accesorios, carteras, cinturones, bijouterie y productos sin talle. Al activarlo se conserva el stock total sumado."
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors no-drag cursor-pointer',
+            form.no_sizes
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+              : 'border-border bg-surface text-zinc-500 hover:text-zinc-300'
+          )}
+        >
+          <Ruler size={12} />
+          {form.no_sizes ? 'Talle único / N/A' : 'Talle único / No aplica talles'}
         </div>
         {isAdmin && (
           <div
@@ -1072,13 +1107,14 @@ export default function Products() {
     const cp = (cpRows || []).find(r => r.product_id === id)
     const sizeMap = Object.fromEntries((p.sizes || []).map(s => [s.size, s]))
     const prodSizes = p.sizes || []
-    // Rubro sin talle → cargar los talles REALES del producto (p.ej. 'Único'), no la grilla
-    // de talles de ropa (allSizes no incluye 'Único' → se perdería el stock).
-    const noSizeEdit = isNoSizeCategory(p.category || 'Jeans', categorySizeGroups)
+    // Talle único: flag explícito no_sizes; para productos legacy (sin flag seteado) se
+    // mantiene el criterio anterior por rubro cuando tienen 0/1 fila de talle.
+    const catNoSize = isNoSizeCategory(p.category || 'Jeans', categorySizeGroups)
+    const noSizeEdit = !!p.no_sizes || (catNoSize && prodSizes.length <= 1)
     const editSizes = noSizeEdit
-      ? (prodSizes.length
-          ? prodSizes.map(s => ({ size: s.size, stock: s.stock ?? 0, min_stock: s.min_stock ?? 0 }))
-          : singleSizeRow())
+      ? [{ size: SINGLE_SIZE,
+           stock: prodSizes.reduce((a, s) => a + (Number(s.stock) || 0), 0),
+           min_stock: prodSizes.reduce((a, s) => a + (Number(s.min_stock) || 0), 0) }]
       : allSizes.map(s => ({ size: s, stock: sizeMap[s]?.stock ?? 0, min_stock: sizeMap[s]?.min_stock ?? 0 }))
     setForm({
       barcode: p.barcode || '',
@@ -1094,6 +1130,7 @@ export default function Products() {
       min_stock: p.min_stock,
       image_data: undefined,
       tn_sync: p.tn_sync ?? 1,
+      no_sizes: noSizeEdit ? 1 : 0,
       is_consignment: !!cp,
       consignment_supplier_id: cp ? String(cp.supplier_id || '') : '',
       consignment_cost: cp ? String(cp.cost_per_unit || '') : '',

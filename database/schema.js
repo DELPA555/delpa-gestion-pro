@@ -27,6 +27,7 @@ function createTables(db) {
       min_stock INTEGER DEFAULT 5,
       image_data TEXT DEFAULT '',
       active INTEGER DEFAULT 1,
+      no_sizes INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -980,6 +981,19 @@ function createTables(db) {
   addColumnIfMissing(db, 'products', 'price_distributor', 'REAL NOT NULL DEFAULT 0')
   addColumnIfMissing(db, 'clients',  'price_list',         "TEXT NOT NULL DEFAULT 'publico'")
   addColumnIfMissing(db, 'sales',    'price_list',         "TEXT DEFAULT 'publico'")
+  // Talle único / N/A (v1.42.8): productos sin talles (accesorios, bijouterie, etc.).
+  // no_sizes=1 → se maneja una sola fila genérica ('Único'), sin grilla de talles.
+  addColumnIfMissing(db, 'products', 'no_sizes', 'INTEGER DEFAULT 0')
+  // Backfill único: marcar como no_sizes=1 los productos legacy que ya tenían
+  // una sola fila 'Único' (convención de v1.40.0), para que reconozcan la nueva
+  // grilla reducida al editarlos. Guardado por flag para no re-ejecutar.
+  try {
+    const noSizesBackfill = db.prepare("SELECT value FROM settings WHERE key='no_sizes_backfill_v1428'").get()
+    if (!noSizesBackfill) {
+      db.exec("UPDATE products SET no_sizes=1 WHERE no_sizes=0 AND id IN (SELECT product_id FROM product_sizes GROUP BY product_id HAVING COUNT(*)=1 AND MAX(size)='Único')")
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('no_sizes_backfill_v1428', '1')").run()
+    }
+  } catch (e) { console.error('[DB Migration] backfill no_sizes:', e.message) }
   // Ganancia real por línea: net_price = precio de venta menos el descuento distribuido
   // proporcionalmente; profit = net_price − costo. NULL = fila vieja pendiente de backfill.
   addColumnIfMissing(db, 'sale_items', 'net_price', 'REAL DEFAULT NULL')

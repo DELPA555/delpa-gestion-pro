@@ -1,4 +1,14 @@
 {
+  "v1.42.8": {
+    "fecha": "2026-10-08",
+    "titulo": "Talle único / N/A para accesorios y productos sin talle",
+    "novedades": [
+      "Nuevo botón 'Talle único / No aplica talles' en el alta y edición de productos: ideal para accesorios, carteras, cinturones, bijouterie y todo lo que no usa talle. Se maneja con una sola unidad de stock, sin grilla de talles.",
+      "Al activarlo en un producto que ya tenía talles cargados, se conserva el stock total sumado en la unidad genérica (no se pierde ningún dato).",
+      "Las categorías sin talle (Accesorios, Bazar, Kiosco, Otros) ya vienen marcadas como talle único por defecto, y podés activarlo o desactivarlo manualmente en cualquier producto.",
+      "En la pantalla de venta, los productos de talle único se agregan al carrito directo, sin pedir talle. El stock, la valorización y los informes los cuentan como una sola unidad."
+    ]
+  },
   "v1.42.7": {
     "fecha": "2026-10-07",
     "titulo": "Fixes: valorización con variantes y ganancia de ventas online",

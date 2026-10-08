@@ -761,10 +761,13 @@ export default function Sales() {
 
   const selectProduct = (p) => {
     setSelectedProduct(p)
+    const sizesArr = p.sizes || []
     // Si hay filtro de talle activo y el producto lo tiene con stock, lo pre-selecciona.
-    const preSize = sizeFilter.trim()
-      ? (p.sizes || []).find(s => sizeMatches(s.size) && s.stock > 0)?.size || null
+    let preSize = sizeFilter.trim()
+      ? sizesArr.find(s => sizeMatches(s.size) && s.stock > 0)?.size || null
       : null
+    // Talle único / N/A → preseleccionar la única fila (no hace falta elegir talle).
+    if (!preSize && (p.no_sizes || sizesArr.length === 1)) preSize = sizesArr[0]?.size || null
     setSelectedSize(preSize)
     setQty(1)
     setQuery(p.name)
@@ -1861,6 +1864,15 @@ export default function Sales() {
                     <p className="text-sm font-medium text-white truncate">{selectedProduct.name}</p>
                     <p className="text-sm font-bold text-accent shrink-0 ml-2">{formatCurrency(selectedProduct.price)}</p>
                   </div>
+                  {(selectedProduct.no_sizes || (selectedProduct.sizes?.length === 1 && !hasRealSize(selectedProduct.sizes[0]?.size))) ? (
+                    // Talle único / N/A → sin grilla de talles, solo el stock disponible.
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-zinc-500 uppercase tracking-wider">Talle único</span>
+                      <span className="px-2 py-0.5 rounded-full bg-black/30 text-zinc-200 font-mono">
+                        {selectedProduct.sizes?.[0]?.stock ?? 0} en stock
+                      </span>
+                    </div>
+                  ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {selectedProduct.sizes?.map(s => {
                       const stockColor = s.stock > 10 ? 'text-green-400' : s.stock >= 3 ? 'text-amber-400' : 'text-red-400'
@@ -1888,6 +1900,7 @@ export default function Sales() {
                       N/A
                     </button>
                   </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 border border-border rounded-lg">
                       <button onClick={() => setQty(q => Math.max(1, q - 1))}
