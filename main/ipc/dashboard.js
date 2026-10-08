@@ -373,15 +373,15 @@ ipcMain.handle('dashboard:monthlyProfit', async () => {
     FROM sales WHERE voided=0
       AND strftime('%Y-%m', created_at,'localtime') = strftime('%Y-%m','now','localtime')
   `).get()
-  // Ganancia bruta real = Σ (precio_venta - precio_costo) × cantidad por item.
-  // Se excluyen los items sin costo cargado (unit_cost 0 o NULL): no se puede
-  // saber su ganancia, así que no aportan ni al numerador ni al margen.
+  // Ganancia bruta real: se usa directamente la columna si.profit, que se calcula y guarda
+  // al crear la venta con el costo real (incluye ventas de Tienda Nube, que se importan con
+  // unit_cost=0 pero con su profit ya calculado). NO se filtra por unit_cost>0 (eso excluía
+  // las ventas online). Fallback a (precio - costo)×qty solo para filas viejas sin profit.
   const grossProfit = db.prepare(`
     SELECT COALESCE(SUM(COALESCE(si.profit,(si.unit_price - si.unit_cost) * si.quantity)),0) as total,
            COALESCE(SUM(COALESCE(si.net_price, si.unit_price * si.quantity)),0) as revenueWithCost
     FROM sale_items si JOIN sales s ON s.id=si.sale_id
     WHERE s.voided=0
-      AND si.unit_cost IS NOT NULL AND si.unit_cost > 0
       AND strftime('%Y-%m', s.created_at,'localtime') = strftime('%Y-%m','now','localtime')
   `).get()
   const monthlyExpenses = db.prepare(`

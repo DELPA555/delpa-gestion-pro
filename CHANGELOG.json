@@ -1,4 +1,12 @@
 {
+  "v1.42.7": {
+    "fecha": "2026-10-07",
+    "titulo": "Fixes: valorización con variantes y ganancia de ventas online",
+    "correcciones": [
+      "Valorización de Stock: los productos con variantes de color ya no se cuentan varias veces; cada producto se cuenta una sola vez y el stock de todos sus colores se suma correctamente.",
+      "Dashboard: la ganancia del mes ahora incluye las ventas de Tienda Nube (antes quedaban afuera por importarse sin costo cargado)."
+    ]
+  },
   "v1.42.5": {
     "fecha": "2026-10-07",
     "titulo": "Las actualizaciones ya no tocan tu certificado AFIP",

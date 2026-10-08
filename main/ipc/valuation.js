@@ -4,11 +4,14 @@ const { getDB } = require('../../database/db')
 // Valorización de stock: totales y desglose por categoría.
 // El stock vive por talle en product_sizes (stock), el costo/precio en products.
 // Solo cuenta productos activos con stock > 0.
+// Variantes de color: cada una es una fila products con su propio stock. Para el CONTEO se
+// agrupan bajo el padre (COUNT DISTINCT COALESCE(parent_product_id, id)) para no contarlas
+// como productos separados; su stock/valor SÍ se suma (es stock real de cada color).
 ipcMain.handle('valuation:data', async () => {
   const db = getDB()
 
   const totals = db.prepare(`
-    SELECT COUNT(DISTINCT p.id)                 AS total_productos,
+    SELECT COUNT(DISTINCT COALESCE(p.parent_product_id, p.id)) AS total_productos,
            COALESCE(SUM(ps.stock), 0)          AS total_unidades,
            COALESCE(SUM(p.cost  * ps.stock), 0) AS valor_costo,
            COALESCE(SUM(p.price * ps.stock), 0) AS valor_publico,
@@ -21,7 +24,7 @@ ipcMain.handle('valuation:data', async () => {
 
   const byCategory = db.prepare(`
     SELECT COALESCE(NULLIF(TRIM(p.category), ''), 'Sin categoría') AS categoria,
-           COUNT(DISTINCT p.id)                 AS total_productos,
+           COUNT(DISTINCT COALESCE(p.parent_product_id, p.id)) AS total_productos,
            COALESCE(SUM(ps.stock), 0)          AS total_unidades,
            COALESCE(SUM(p.cost  * ps.stock), 0) AS valor_costo,
            COALESCE(SUM(p.price * ps.stock), 0) AS valor_publico,
