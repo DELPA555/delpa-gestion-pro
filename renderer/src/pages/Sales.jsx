@@ -156,11 +156,11 @@ ${(sale.items || []).map(it => `
 <div class="divider"></div>
 ${sale.discount > 0 ? `<div class="row"><span>Subtotal:</span><span>${formatCurrency(sale.subtotal)}</span></div>
 <div class="row"><span>Descuento${sale.discount_type === 'percent' && sale.discount_value ? ` (${sale.discount_value}%)` : ''}:</span><span>-${formatCurrency(sale.discount)}</span></div>` : ''}
-${sale.surcharge_rate > 0 ? `<div class="row"><span>Recargo ${sale.surcharge_rate}%:</span><span>+${formatCurrency(sale.total - (sale.subtotal - (sale.discount||0)))}</span></div>` : ''}
+${sale.surcharge_rate > 0 && biz.price_display_mode !== '1' ? `<div class="row"><span>Recargo ${sale.surcharge_rate}%:</span><span>+${formatCurrency(sale.total - (sale.subtotal - (sale.discount||0)))}</span></div>` : ''}
 <div class="row bold total"><span>TOTAL:</span><span>${formatCurrency(sale.total)}</span></div>
 ${sale.payments && sale.payments.length > 0
   ? sale.payments.map(p =>
-    `<div class="row"><span>${p.payment_method}${p.installments > 1 ? ` (${p.installments}c)` : ''}${p.surcharge_rate > 0 ? ` +${p.surcharge_rate}%` : ''}:</span><span>${formatCurrency(p.final_amount)}</span></div>`
+    `<div class="row"><span>${p.payment_method}${p.installments > 1 ? ` (${p.installments}c)` : ''}${p.surcharge_rate > 0 && biz.price_display_mode !== '1' ? ` +${p.surcharge_rate}%` : ''}:</span><span>${formatCurrency(p.final_amount)}</span></div>`
   ).join('')
   : `<div class="row"><span>Medio de pago:</span><span>${sale.payment_method}${sale.installments > 1 ? ` (${sale.installments} cuotas)` : ''}</span></div>
 ${installLine}`
@@ -257,7 +257,7 @@ ${withPrices && typeof sale.total === 'number' ? `<div class="divider"></div><di
 ${typeof sale.difference === 'number' && sale.difference !== 0 ? (
   sale.difference > 0
     ? `<div class="divider"></div>
-${sale.surcharge_amount > 0 ? `<div class="row"><span>Diferencia:</span><span>${formatCurrency(sale.difference)}</span></div>
+${sale.surcharge_amount > 0 && biz.price_display_mode !== '1' ? `<div class="row"><span>Diferencia:</span><span>${formatCurrency(sale.difference)}</span></div>
 <div class="row"><span>Recargo (${sale.surcharge_rate}%):</span><span>+${formatCurrency(sale.surcharge_amount)}</span></div>` : ''}
 <div class="row" style="font-size:13px"><strong>Total abonado:</strong><strong>${formatCurrency(sale.difference + (sale.surcharge_amount || 0))}</strong></div>`
     : `<div class="divider"></div>
@@ -819,6 +819,8 @@ export default function Sales() {
   const removeItem = (key) => { setCart(c => c.filter(it => it.key !== key)); toast('Producto quitado del carrito', { duration: 2000 }) }
 
   const surchargeRate = surcharges[getSurchargeKey(paymentMethod, installments)] ?? 0
+  // Modo "precio lista / precio efectivo": oculta la palabra "Recargo" y muestra solo el precio final.
+  const listaEfectivo = biz.price_display_mode === '1'
   const subtotal = cart.reduce((s, it) => s + (Number(it.editedPrice) || 0) * it.qty, 0)
   const discountPct = discountType === 'percent' ? Math.min(Math.max(Number(discount) || 0, 0), 100) : 0
   const discountAmt = discountType === 'percent'
@@ -1802,18 +1804,25 @@ export default function Sales() {
               <div data-tour="ventas-buscador" className="flex gap-2">
                 <div className="relative flex-1">
                   <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-accent" />
-                  <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)}
+                  <input ref={searchRef} value={query}
+                    onChange={e => {
+                      const v = e.target.value
+                      setQuery(v)
+                      // Si el vendedor edita la búsqueda, soltamos la selección previa para
+                      // volver a habilitar el dropdown (que nunca convive con el selector de talles).
+                      if (selectedProduct && v !== selectedProduct.name) { setSelectedProduct(null); setSelectedSize(null) }
+                    }}
                     placeholder="F12 · Buscar producto por nombre o código de barras..."
                     className="input-field w-full bg-[#181818] border border-[#252525] focus:border-accent rounded-xl pl-10 pr-3 py-3 text-base text-white placeholder-zinc-600 no-drag"
-                    onFocus={() => visibleResults.length > 0 && setShowResults(true)}
+                    onFocus={() => !selectedProduct && visibleResults.length > 0 && setShowResults(true)}
                     onBlur={() => setTimeout(() => setShowResults(false), 150)}
                     autoFocus
                   />
                   <AnimatePresence>
-                    {showResults && visibleResults.length > 0 && (
+                    {showResults && !selectedProduct && visibleResults.length > 0 && (
                       <motion.div
                         initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                        className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden z-20 shadow-2xl"
+                        className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-y-auto max-h-72 z-20 shadow-2xl"
                       >
                         {visibleResults.map(p => {
                           const szStock = sizeFilter.trim()
@@ -2348,7 +2357,7 @@ export default function Sales() {
                   <span className="text-purple-400 tabular-nums">-{formatCurrency(computedValeDiscount)}</span>
                 </div>
               )}
-              {!splitPayment && surchargeRate > 0 && (
+              {!splitPayment && surchargeRate > 0 && !listaEfectivo && (
                 <div className="flex justify-between text-sm">
                   <span className="text-zinc-500">Recargo {surchargeRate}%</span>
                   <span className="text-amber-400 tabular-nums">+{formatCurrency(surchargeAmt)}</span>
@@ -2360,7 +2369,7 @@ export default function Sales() {
                     <div key={i} className="flex justify-between text-xs">
                       <span className="text-zinc-400">{r.method}{r.installments > 1 ? ` ${r.installments}c` : ''}</span>
                       <div className="flex items-center gap-2">
-                        {r.rate > 0 && r.base > 0 && <span className="text-amber-400">+{r.rate}%</span>}
+                        {r.rate > 0 && r.base > 0 && !listaEfectivo && <span className="text-amber-400">+{r.rate}%</span>}
                         <span className="text-white tabular-nums">{formatCurrency(r.final)}</span>
                       </div>
                     </div>
@@ -2373,6 +2382,13 @@ export default function Sales() {
                   {formatCurrency(total)}
                 </span>
               </div>
+              {listaEfectivo && !splitPayment && net > 0 && (
+                <div className="text-xs text-right -mt-1">
+                  <span className={paymentMethod === 'Efectivo' ? 'text-green-400' : 'text-zinc-400'}>
+                    {paymentMethod === 'Efectivo' ? 'Precio efectivo' : 'Precio de lista'}
+                  </span>
+                </div>
+              )}
               {!splitPayment && installments > 1 && singleTotal > 0 && (
                 <div className="text-xs text-amber-400 text-right">
                   {installments} cuotas de {formatCurrency(perInstallment)} c/u
@@ -2716,7 +2732,7 @@ export default function Sales() {
               <div className="flex justify-between"><span>Cliente:</span><span className="text-white">{detailModal.client_name || '—'}</span></div>
               <div className="flex justify-between"><span>Pago:</span><span className="text-white">{detailModal.payment_method}{detailModal.installments > 1 ? ` · ${detailModal.installments} cuotas` : ''}</span></div>
               {detailModal.seller_name && <div className="flex justify-between"><span>Vendedora:</span><span className="text-white">{detailModal.seller_name}</span></div>}
-              {detailModal.surcharge_rate > 0 && <div className="flex justify-between"><span>Recargo:</span><span className="text-amber-400">{detailModal.surcharge_rate}%</span></div>}
+              {detailModal.surcharge_rate > 0 && !listaEfectivo && <div className="flex justify-between"><span>Recargo:</span><span className="text-amber-400">{detailModal.surcharge_rate}%</span></div>}
             </div>
             <div className="border-t border-border pt-3 space-y-1">
               <div className="grid text-[11px] text-zinc-500 uppercase pb-1" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr' }}>
@@ -3159,7 +3175,7 @@ export default function Sales() {
                     <button key={n} onClick={() => setExchInstallments(n)}
                       className={cn('px-2.5 py-1 rounded-lg text-xs border transition-colors',
                         exchInstallments === n ? 'border-accent bg-accent/10 text-white' : 'border-border text-zinc-500 hover:text-zinc-300')}>
-                      {n} cuota{n > 1 ? 's' : ''}{(surcharges[getSurchargeKey('Tarjeta Crédito', n)] ?? 0) > 0 ? ` +${surcharges[getSurchargeKey('Tarjeta Crédito', n)]}%` : ''}
+                      {n} cuota{n > 1 ? 's' : ''}{!listaEfectivo && (surcharges[getSurchargeKey('Tarjeta Crédito', n)] ?? 0) > 0 ? ` +${surcharges[getSurchargeKey('Tarjeta Crédito', n)]}%` : ''}
                     </button>
                   ))}
                 </div>
@@ -3167,7 +3183,7 @@ export default function Sales() {
               {/* Desglose */}
               <div className="p-3 rounded-xl bg-zinc-800/50 border border-border text-sm space-y-1">
                 <div className="flex justify-between text-zinc-400"><span>Diferencia base</span><span className="tabular-nums">{formatCurrency(exchDiff)}</span></div>
-                {exchSurchargeAmt > 0 && (
+                {exchSurchargeAmt > 0 && !listaEfectivo && (
                   <div className="flex justify-between text-amber-400"><span>Recargo {exchPayMethod === 'Tarjeta Crédito' ? `(${exchInstallments}c) ` : ''}({exchSurchargeRate}%)</span><span className="tabular-nums">+{formatCurrency(exchSurchargeAmt)}</span></div>
                 )}
                 <div className="flex justify-between text-white font-semibold border-t border-border pt-1"><span>Total a abonar</span><span className="tabular-nums">{formatCurrency(exchTotalToPay)}</span></div>

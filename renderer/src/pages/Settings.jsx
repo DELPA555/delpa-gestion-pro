@@ -233,6 +233,7 @@ export default function Settings() {
   const [paymentMethods, setPaymentMethods] = useState([])
   const [sellers, setSellers] = useState([])
   const [surcharges, setSurcharges] = useState(DEFAULT_SURCHARGES)
+  const [priceDisplayMode, setPriceDisplayMode] = useState('0')
   const [emailForm, setEmailForm] = useState({ email_smtp: 'smtp.gmail.com', email_port: '587', email_user: '', email_from: '', email_pass: '', email_to: '',
     report_weekly_enabled: '1', report_monthly_enabled: '1', report_email_to: '', report_email_cc: '',
     report_weekly_dow: '1', report_weekly_hour: '19', report_monthly_day: '1', report_monthly_hour: '19' })
@@ -346,6 +347,7 @@ export default function Settings() {
       try { setCategorySizeGroups(JSON.parse(all.category_size_groups || '{}')) } catch {}
       setPaymentMethods(JSON.parse(all.custom_payment_methods || '[]'))
       try { setSurcharges({ ...DEFAULT_SURCHARGES, ...JSON.parse(all.surcharges_json || '{}') }) } catch {}
+      setPriceDisplayMode(all.price_display_mode || '0')
       api.sellers.list().then(setSellers).catch(() => {})
       setPointsForm({
         points_enabled:   all.points_enabled   || '0',
@@ -518,6 +520,13 @@ export default function Settings() {
   const saveSurcharges = async (obj) => {
     try { await api.settings.set('surcharges_json', JSON.stringify(obj)); toast.success('Recargos guardados') }
     catch { toast.error('Error al guardar') }
+  }
+
+  const togglePriceDisplayMode = async () => {
+    const next = priceDisplayMode === '1' ? '0' : '1'
+    setPriceDisplayMode(next)
+    try { await api.settings.set('price_display_mode', next); toast.success(next === '1' ? 'Modo precio lista / efectivo activado' : 'Modo recargo restaurado') }
+    catch { setPriceDisplayMode(priceDisplayMode); toast.error('Error al guardar') }
   }
 
   const savePoints = async () => {
@@ -1055,7 +1064,26 @@ export default function Settings() {
       {/* ── Tab: Recargos ── */}
       {tab === 'surcharges' && (
         <div className="max-w-lg space-y-3">
-          <p className="text-sm text-zinc-500 mb-4">Configurá el porcentaje de recargo por medio de pago y cantidad de cuotas. Se aplica automáticamente en cada venta.</p>
+          {/* Toggle: mostrar precios como lista / efectivo */}
+          <div className="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3 mb-4">
+            <div className="pr-4">
+              <p className="text-sm text-white font-medium">Mostrar precios como lista / efectivo</p>
+              <p className="text-xs text-zinc-500 mt-0.5">En vez de "Recargo X%", el cobro y los tickets muestran el precio final según el medio de pago (precio efectivo con el pago en efectivo, precio de lista con tarjeta/transferencia). El cálculo no cambia.</p>
+            </div>
+            <button
+              onClick={togglePriceDisplayMode}
+              className={cn('no-drag relative w-10 h-5 rounded-full transition-colors shrink-0',
+                priceDisplayMode === '1' ? 'bg-accent' : 'bg-zinc-700')}
+            >
+              <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow',
+                priceDisplayMode === '1' ? 'translate-x-5' : 'translate-x-0.5')} />
+            </button>
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">
+            {priceDisplayMode === '1'
+              ? 'Estos porcentajes definen la diferencia entre el precio de lista y el precio efectivo según el medio de pago y las cuotas. Se aplican automáticamente en cada venta.'
+              : 'Configurá el porcentaje de recargo por medio de pago y cantidad de cuotas. Se aplica automáticamente en cada venta.'}
+          </p>
           {Object.entries(surcharges).map(([key, rate]) => (
             <div key={key} className="flex items-center gap-3">
               <span className="flex-1 text-sm text-zinc-300">{key}</span>

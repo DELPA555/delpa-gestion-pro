@@ -1,4 +1,13 @@
 {
+  "v1.42.9": {
+    "fecha": "2026-10-13",
+    "titulo": "Buscador del POS más claro y modo precio lista / efectivo",
+    "novedades": [
+      "Venta: al buscar un producto, la lista de resultados ya no tapa el selector de talles. Apenas elegís el producto, los resultados se cierran y quedan a la vista los talles; si volvés a escribir, la búsqueda se reabre sola. Además la lista de resultados tiene altura máxima con scroll.",
+      "Nuevo modo 'Mostrar precios como lista / efectivo' (Configuración → Recargos): en vez de 'Recargo X%', el cobro, los tickets y el detalle de venta muestran el precio final según el medio de pago (precio efectivo al pagar en efectivo, precio de lista con tarjeta/transferencia). El cálculo es exactamente el mismo; solo cambia cómo se muestra al cliente y al vendedor.",
+      "El modo viene apagado: si no lo activás, todo sigue funcionando como hasta ahora con el 'Recargo'."
+    ]
+  },
   "v1.42.8": {
     "fecha": "2026-10-08",
     "titulo": "Talle único / N/A para accesorios y productos sin talle",
