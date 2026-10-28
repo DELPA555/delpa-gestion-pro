@@ -1,4 +1,15 @@
 {
+  "v1.43.0": {
+    "fecha": "2026-10-27",
+    "titulo": "Modo multi-caja: varias PC con la misma base en red local",
+    "novedades": [
+      "Nuevo modo Multi-caja (Configuración → Multi-caja): una PC funciona como servidor (tiene la base de datos) y las demás se conectan a ella por la red local (LAN). Ideal para tener 2 o 3 cajas trabajando sobre los mismos productos, ventas, clientes y stock.",
+      "La PC servidora muestra su IP de red y un token de acceso; cada caja cliente ingresa esa IP y el token, y puede probar la conexión antes de empezar.",
+      "Cada venta queda registrada con el número de caja que la hizo, y las ventas se pueden filtrar por caja.",
+      "El modo 'Standalone' (sin red) sigue siendo el comportamiento de siempre para quien usa una sola PC.",
+      "Seguridad: la conexión es solo dentro de la red local y protegida con un token; si no coincide, el servidor rechaza el pedido."
+    ]
+  },
   "v1.42.9": {
     "fecha": "2026-10-13",
     "titulo": "Buscador del POS más claro y modo precio lista / efectivo",

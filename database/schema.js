@@ -984,6 +984,9 @@ function createTables(db) {
   // Talle único / N/A (v1.42.8): productos sin talles (accesorios, bijouterie, etc.).
   // no_sizes=1 → se maneja una sola fila genérica ('Único'), sin grilla de talles.
   addColumnIfMissing(db, 'products', 'no_sizes', 'INTEGER DEFAULT 0')
+  // Multi-caja (v1.43.0): número de la caja de origen de la venta (1..N). En instalaciones
+  // sin red siempre es 1. Lo setea la caja de origen (ver main/ipc/sales.js + client-mode.js).
+  addColumnIfMissing(db, 'sales', 'numero_caja', 'INTEGER DEFAULT 1')
   // Backfill único: marcar como no_sizes=1 los productos legacy que ya tenían
   // una sola fila 'Único' (convención de v1.40.0), para que reconozcan la nueva
   // grilla reducida al editarlos. Guardado por flag para no re-ejecutar.

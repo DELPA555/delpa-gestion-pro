@@ -461,4 +461,10 @@ export const api = {
     salesToday:     ()    => inv('tn:salesToday'),
     salesPeriod:    (p)   => inv('tn:salesPeriod', p),
   },
+  multicaja: {
+    get:            ()    => inv('multicaja:get'),
+    set:            (cfg) => inv('multicaja:set', cfg),
+    testConnection: (p)   => inv('multicaja:testConnection', p),
+    regenToken:     ()    => inv('multicaja:regenToken'),
+  },
 }

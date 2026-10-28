@@ -37,7 +37,72 @@ function createWindow() {
   )
 }
 
+let appMode = 'standalone' // 'standalone' | 'server' | 'client' — define el arranque
+let multiCajaServer = null
+
 app.whenReady().then(() => {
+  const mc = require('./multi-caja')
+  mc.ensureToken()
+  appMode = mc.getMode()
+
+  // IPC común a TODOS los modos (ventana, shell local, config multi-caja).
+  ipcMain.on('window:minimize', () => mainWindow?.minimize())
+  ipcMain.on('window:maximize', () => {
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize()
+    else mainWindow?.maximize()
+  })
+  ipcMain.on('window:close', () => mainWindow?.close())
+  ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url))
+  ipcMain.handle('shell:openPath', (_, p) => shell.openPath(p))
+  mc.registerIpc(() => mainWindow)
+
+  if (appMode === 'client') {
+    bootClient(mc)
+  } else {
+    bootServerOrStandalone(mc, appMode)
+  }
+
+  createWindow()
+  setupAutoUpdater()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+// ── Modo CLIENTE: sin DB local; reenvía el IPC al servidor por LAN ───────────────
+function bootClient(mc) {
+  const { logTech } = tryLogTech()
+  try { logTech?.('info', 'multicaja', `App iniciada en modo CLIENTE → servidor ${mc.getConfig().serverIp}:${mc.getConfig().serverPort}`) } catch {}
+
+  // Handlers locales que NO se reenvían (el resto los registra startClient como proxy).
+  require('./ipc/updater-manual') // updater:* — cada PC se actualiza sola
+  ipcMain.handle('reset:relaunch', () => { setTimeout(() => { app.relaunch(); app.exit(0) }, 250); return true })
+
+  const { startClient, checkConnectivity } = require('./client-mode')
+  startClient({ ipcMain })
+
+  // Verificar que el servidor esté accesible; avisar si no.
+  checkConnectivity().then((r) => {
+    if (!r.ok) {
+      const cfg = mc.getConfig()
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Sin conexión con el servidor',
+        message: `No se puede conectar al servidor ${cfg.serverIp}:${cfg.serverPort}.`,
+        detail: `${r.error || ''}\n\nVerificá que la PC servidora esté encendida y en la misma red. Podés revisar la configuración en Configuración → Multi-caja.`,
+        buttons: ['Entendido'],
+      }).catch(() => {})
+    }
+  }).catch(() => {})
+}
+
+function tryLogTech() {
+  try { return { logTech: require('./ipc/techLogs').logTech } } catch { return {} }
+}
+
+// ── Modo SERVIDOR / STANDALONE: DB local + todos los handlers + tareas de fondo ──
+function bootServerOrStandalone(mc, mode) {
   const { initDB } = require('../database/db')
   initDB()
 
@@ -47,8 +112,15 @@ app.whenReady().then(() => {
     process.on('uncaughtException', (e) => { try { logTech('error', 'app', 'uncaughtException: ' + (e?.message || e), e?.stack) } catch {} })
     process.on('unhandledRejection', (e) => { try { logTech('error', 'app', 'unhandledRejection: ' + (e?.message || e), e?.stack) } catch {} })
     const pkg = require('../package.json')
-    logTech('info', 'app', `App iniciada v${pkg.version} (${isDev ? 'dev' : 'prod'})`)
+    logTech('info', 'app', `App iniciada v${pkg.version} (${isDev ? 'dev' : 'prod'}) — modo ${mode}`)
   } catch {}
+
+  // En modo servidor capturamos cada handler IPC (channel → fn) para poder exponerlo
+  // por HTTP. Envolvemos ipcMain.handle ANTES de registrar los módulos y lo restauramos
+  // después. En standalone el registro queda sin usar (sin costo).
+  const handlerRegistry = new Map()
+  const origHandle = ipcMain.handle.bind(ipcMain)
+  ipcMain.handle = (channel, fn) => { handlerRegistry.set(channel, fn); return origHandle(channel, fn) }
 
   require('./ipc/dashboard')
   require('./ipc/products')
@@ -105,6 +177,8 @@ app.whenReady().then(() => {
   require('./ipc/pausedsales')
   require('./ipc/training')
   require('./ipc/reset')
+  ipcMain.handle = origHandle // fin de la captura del registro de handlers
+
   const { runPointsExpiry } = require('./ipc/pointsMaintenance')
   try { runPointsExpiry() } catch (e) { console.error('[POINTS] expiry on startup:', e.message) }
   try { require('./ipc/credits').recalcAllOverdueCredits() } catch (e) { console.error('[CREDITS] recalc on startup:', e.message) }
@@ -113,17 +187,6 @@ app.whenReady().then(() => {
   const { scheduleInformes } = require('./ipc/informes')
   const { pingDistributor } = require('./lib/distributorPing')
 
-  ipcMain.on('window:minimize', () => mainWindow?.minimize())
-  ipcMain.on('window:maximize', () => {
-    if (mainWindow?.isMaximized()) mainWindow.unmaximize()
-    else mainWindow?.maximize()
-  })
-  ipcMain.on('window:close', () => mainWindow?.close())
-  ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url))
-  ipcMain.handle('shell:openPath', (_, p) => shell.openPath(p))
-
-  createWindow()
-  setupAutoUpdater()
   setupDailyBackup()
   scheduleInformes()
   setTimeout(pingDistributor, 30 * 1000)
@@ -146,10 +209,25 @@ app.whenReady().then(() => {
     app.exit(0)
   })
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+  // Modo SERVIDOR: exponer los handlers por LAN (ver server-mode.js).
+  if (mode === 'server') {
+    try {
+      const { startServer } = require('./server-mode')
+      const pkg = require('../package.json')
+      const cfg = mc.getConfig()
+      multiCajaServer = startServer({
+        port: cfg.serverPort,
+        getToken: () => mc.getConfig().token,
+        handlerRegistry,
+        version: pkg.version,
+        onLog: (m) => { try { require('./ipc/techLogs').logTech('info', 'multicaja', m) } catch {} },
+      })
+      mc.setServerRunning(true)
+    } catch (e) {
+      try { require('./ipc/techLogs').logTech('error', 'multicaja', 'No se pudo iniciar el servidor: ' + e.message) } catch {}
+    }
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

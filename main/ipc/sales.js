@@ -18,9 +18,16 @@ ipcMain.handle('sales:create', (_, {
   discountType, discountValue,
   // Lista de precios aplicada (publico|mayorista|distribuidor)
   priceList,
+  // Multi-caja: número de la caja de ORIGEN. En modo cliente lo inyecta el proxy con
+  // el número local de esa PC; en standalone/servidor cae a la config local.
+  numeroCaja,
 }) => {
   const db = getDB()
   const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+
+  const nCaja = (numeroCaja != null && Number(numeroCaja) > 0)
+    ? Number(numeroCaja)
+    : (() => { try { return require('../multi-caja').getNumeroCaja() } catch { return 1 } })()
 
   const isMulti = Array.isArray(payments) && payments.length > 1
   const effectiveMethod = isMulti ? 'Múltiple' : paymentMethod
@@ -43,8 +50,8 @@ ipcMain.handle('sales:create', (_, {
         (client_id,total,subtotal,subtotal_sin_recargo,discount,payment_method,notes,cashbox_id,installments,
          surcharge_rate,voucher_type,seller_name,sale_number,sucursal_id,
          cae,cae_fch_vto,tipo_cbte,cbte_nro,pto_venta,doc_tipo,doc_nro,mp_payment_id,
-         amount_received,change_given,discount_type,discount_value,price_list)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         amount_received,change_given,discount_type,discount_value,price_list,numero_caja)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       clientId || null, total, subtotal || total, pointsBase, discount || 0,
       effectiveMethod, notes || '', cashbox?.id || null,
@@ -53,7 +60,7 @@ ipcMain.handle('sales:create', (_, {
       cae || '', caeFchVto || '', tipoCbte || 0, cbteNro || 0,
       ptoVenta || 0, docTipo || 99, docNro || '0', mpPaymentId || '',
       amountReceived || 0, changeGiven || 0, discountType || 'amount', discountValue || 0,
-      priceList || 'publico',
+      priceList || 'publico', nCaja,
     )
 
     // Insert payment breakdown rows
@@ -192,19 +199,20 @@ ipcMain.handle('sales:create', (_, {
   return { saleId: result.saleId, saleNumber: result.saleNumber }
 })
 
-ipcMain.handle('sales:list', (_, { page = 1, limit = 25, from, to, includeVoided } = {}) => {
+ipcMain.handle('sales:list', (_, { page = 1, limit = 25, from, to, includeVoided, numeroCaja } = {}) => {
   const db = getDB()
   const offset = (page - 1) * limit
   let where = includeVoided ? 'WHERE 1=1' : 'WHERE s.voided=0'
   const params = []
   if (from) { where += " AND date(s.created_at,'localtime')>=?"; params.push(from) }
   if (to)   { where += " AND date(s.created_at,'localtime')<=?"; params.push(to) }
+  if (numeroCaja != null && Number(numeroCaja) > 0) { where += ' AND s.numero_caja=?'; params.push(Number(numeroCaja)) }
 
   const { count } = db.prepare(`SELECT COUNT(*) as count FROM sales s ${where}`).get(...params)
   const rows = db.prepare(`
     SELECT s.id, s.sale_number, s.total, s.subtotal, s.discount, s.payment_method, s.notes,
            s.created_at, s.voided, s.void_reason, s.installments, s.surcharge_rate,
-           s.voucher_type, s.seller_name, s.cae, s.tipo_cbte, s.cbte_nro, s.pto_venta,
+           s.voucher_type, s.seller_name, s.cae, s.tipo_cbte, s.cbte_nro, s.pto_venta, s.numero_caja,
            c.name as client_name
     FROM sales s LEFT JOIN clients c ON c.id=s.client_id
     ${where} ORDER BY s.created_at DESC LIMIT ? OFFSET ?

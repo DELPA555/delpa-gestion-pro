@@ -50,6 +50,7 @@ const TAB_GROUPS = [
     label: 'Sistema',
     items: [
       { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
+      { id: 'multicaja',         label: 'Multi-caja',      Icon: Network, adminOnly: true },
       { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
       { id: 'logstecnicos',      label: 'Logs técnicos',   Icon: ScrollText, adminOnly: true },
       { id: 'ayuda',             label: 'Tutorial y ayuda', Icon: HelpCircle },
@@ -2710,6 +2711,9 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
 
       {tab === 'apariencia' && <TabApariencia username={sessionUser?.username} />}
 
+      {/* ── Tab: Multi-caja / red local (solo admin) ── */}
+      {tab === 'multicaja' && sessionUser?.role === 'admin' && <TabMultiCaja />}
+
       {/* ── Tab: Datos y reseteo (solo admin) ── */}
       {tab === 'reseteo' && sessionUser?.role === 'admin' && <TabReseteo />}
 
@@ -2727,6 +2731,193 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
         finishLabel={guide?.finishLabel || '✅ Entendido'}
       />
     </motion.div>
+  )
+}
+
+// ── Multi-caja / red local ───────────────────────────────────────────────────────
+
+function TabMultiCaja() {
+  const [cfg, setCfg] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [needsRestart, setNeedsRestart] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+
+  const load = useCallback(() => {
+    api.multicaja.get().then(setCfg).catch(() => toast.error('No se pudo leer la configuración de red'))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  if (!cfg) return <div className="text-sm text-zinc-500">Cargando…</div>
+
+  const upd = (patch) => setCfg(c => ({ ...c, ...patch }))
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const next = await api.multicaja.set({
+        mode: cfg.mode,
+        serverIp: cfg.serverIp,
+        serverPort: cfg.serverPort,
+        token: cfg.token,
+        numeroCaja: cfg.numeroCaja,
+      })
+      setCfg(next)
+      setNeedsRestart(true)
+      toast.success('Configuración guardada. Reiniciá la app para aplicarla.')
+    } catch (e) {
+      toast.error('No se pudo guardar: ' + (e?.message || e))
+    } finally { setSaving(false) }
+  }
+
+  const test = async () => {
+    setTesting(true); setTestResult(null)
+    try {
+      const r = await api.multicaja.testConnection({ ip: cfg.serverIp, port: cfg.serverPort, token: cfg.token })
+      setTestResult(r)
+    } catch (e) {
+      setTestResult({ ok: false, error: e?.message || String(e) })
+    } finally { setTesting(false) }
+  }
+
+  const regen = async () => {
+    try { const t = await api.multicaja.regenToken(); upd({ token: t }); setNeedsRestart(true); toast.success('Token regenerado') }
+    catch { toast.error('No se pudo regenerar el token') }
+  }
+
+  const copy = (txt) => { try { navigator.clipboard.writeText(txt); toast.success('Copiado') } catch {} }
+
+  const modes = [
+    { id: 'standalone', label: 'Standalone', desc: 'Sin red (clásico)' },
+    { id: 'server',     label: 'Servidor',   desc: 'Esta PC tiene la base' },
+    { id: 'client',     label: 'Cliente',    desc: 'Se conecta al servidor' },
+  ]
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="flex items-center gap-2">
+        <Network size={18} className="text-accent" />
+        <h3 className="text-base font-semibold text-white">Multi-caja / Red local</h3>
+      </div>
+      <p className="text-sm text-zinc-500">
+        Permite que varias PC compartan la misma base en la red local. Una PC es el
+        <strong className="text-zinc-300"> servidor</strong> (tiene los datos) y las demás son
+        <strong className="text-zinc-300"> clientes</strong>. Los cambios se aplican al reiniciar la app.
+      </p>
+
+      {cfg.mode === 'server' && cfg.serverRunning && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">
+          <CheckCircle size={15} /> Servidor activo — Puerto {cfg.serverPort}
+        </div>
+      )}
+
+      {/* Selector de modo */}
+      <div className="grid grid-cols-3 gap-2">
+        {modes.map(m => (
+          <button key={m.id} onClick={() => { upd({ mode: m.id }); setTestResult(null) }}
+            className={cn(
+              'no-drag text-left p-3 rounded-xl border transition-colors',
+              cfg.mode === m.id ? 'border-accent bg-accent/10' : 'border-border hover:border-zinc-600'
+            )}>
+            <p className={cn('text-sm font-semibold', cfg.mode === m.id ? 'text-white' : 'text-zinc-300')}>{m.label}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{m.desc}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Config servidor */}
+      {cfg.mode === 'server' && (
+        <div className="space-y-4 p-4 bg-[#0a0a0a] border border-border rounded-xl">
+          <div>
+            <label className={labelCls}>IP de esta PC en la red (dársela a los clientes)</label>
+            {cfg.localIps?.length ? cfg.localIps.map(ip => (
+              <div key={ip} className="flex items-center gap-2 mb-1">
+                <code className="text-sm text-accent bg-black/40 px-2 py-1 rounded">{ip}</code>
+                <button onClick={() => copy(ip)} className="no-drag text-zinc-500 hover:text-white"><Copy size={13} /></button>
+              </div>
+            )) : <p className="text-sm text-zinc-600">No se detectó IP de red (¿sin red?).</p>}
+          </div>
+          <div>
+            <label className={labelCls}>Puerto</label>
+            <input type="number" className={inputCls + ' max-w-[140px]'} value={cfg.serverPort}
+              onChange={e => upd({ serverPort: e.target.value })} />
+          </div>
+          <div>
+            <label className={labelCls}>Token de acceso (los clientes lo ingresan)</label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs text-zinc-300 bg-black/40 px-2 py-1.5 rounded break-all">{cfg.token || '(se genera al guardar)'}</code>
+              {cfg.token && <button onClick={() => copy(cfg.token)} className="no-drag text-zinc-500 hover:text-white"><Copy size={14} /></button>}
+              <button onClick={regen} className="no-drag text-zinc-500 hover:text-white" title="Regenerar token"><RefreshCw size={14} /></button>
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Número de esta caja</label>
+            <input type="number" min="1" className={inputCls + ' max-w-[140px]'} value={cfg.numeroCaja}
+              onChange={e => upd({ numeroCaja: e.target.value })} />
+          </div>
+        </div>
+      )}
+
+      {/* Config cliente */}
+      {cfg.mode === 'client' && (
+        <div className="space-y-4 p-4 bg-[#0a0a0a] border border-border rounded-xl">
+          <div>
+            <label className={labelCls}>IP del servidor</label>
+            <input className={inputCls} placeholder="192.168.0.10" value={cfg.serverIp}
+              onChange={e => { upd({ serverIp: e.target.value }); setTestResult(null) }} />
+          </div>
+          <div>
+            <label className={labelCls}>Puerto</label>
+            <input type="number" className={inputCls + ' max-w-[140px]'} value={cfg.serverPort}
+              onChange={e => { upd({ serverPort: e.target.value }); setTestResult(null) }} />
+          </div>
+          <div>
+            <label className={labelCls}>Token</label>
+            <input className={inputCls} placeholder="Pegá el token del servidor" value={cfg.token}
+              onChange={e => { upd({ token: e.target.value }); setTestResult(null) }} />
+          </div>
+          <div>
+            <label className={labelCls}>Número de esta caja</label>
+            <input type="number" min="1" className={inputCls + ' max-w-[140px]'} value={cfg.numeroCaja}
+              onChange={e => upd({ numeroCaja: e.target.value })} />
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={test} disabled={testing || !cfg.serverIp}
+              className="no-drag px-4 py-2 rounded-lg text-sm border border-border text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50 flex items-center gap-2">
+              <Globe size={14} /> {testing ? 'Probando…' : 'Probar conexión'}
+            </button>
+            {testResult && (
+              <span className={cn('text-sm flex items-center gap-1', testResult.ok ? 'text-green-400' : 'text-red-400')}>
+                {testResult.ok ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                {testResult.ok ? `Conectado (v${testResult.version || '?'})` : (testResult.error || 'Sin conexión')}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {cfg.mode === 'standalone' && (
+        <p className="text-sm text-zinc-500 p-4 bg-[#0a0a0a] border border-border rounded-xl">
+          Modo standalone: la app usa su propia base local, sin red. Es el comportamiento normal.
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving}
+          className="btn-primary no-drag px-5 py-2 rounded-lg text-sm disabled:opacity-50">
+          {saving ? 'Guardando…' : 'Guardar configuración'}
+        </button>
+        {needsRestart && (
+          <button onClick={() => api.reset.relaunch()}
+            className="no-drag px-4 py-2 rounded-lg text-sm border border-accent/40 text-accent hover:bg-accent/10 transition-colors flex items-center gap-2">
+            <RefreshCw size={14} /> Reiniciar ahora
+          </button>
+        )}
+      </div>
+      {needsRestart && (
+        <p className="text-xs text-amber-400">⚠️ Los cambios de modo se aplican recién al reiniciar la app.</p>
+      )}
+    </div>
   )
 }
 
