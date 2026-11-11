@@ -234,7 +234,9 @@ export default function Dashboard() {
     return () => clearInterval(t)
   }, [])
 
-  // ── Carga de datos que cambian seguido (ventas, caja) ─────────────────────
+  // ── Carga de datos que cambian seguido (ventas, caja) — TODO local/SQL, rápido.
+  // La venta de Tienda Nube (red) se carga aparte en loadTnToday para NO frenar
+  // el primer render: el KPI muestra el total local y suma TN cuando llega.
   const loadLive = useCallback(async () => {
     const res = await Promise.allSettled([
       api.dashboard.stats(),
@@ -245,7 +247,6 @@ export default function Dashboard() {
       api.cashbox.todaySummary(),
       api.mainCashbox.balance(),
       api.cashbox.current(),
-      api.tn.salesToday(),
     ])
     const v = (i) => (res[i].status === 'fulfilled' ? res[i].value : undefined)
     if (v(0) !== undefined) setStats(v(0))
@@ -256,8 +257,12 @@ export default function Dashboard() {
     if (v(5) !== undefined) setTodayCash(v(5))
     if (v(6) !== undefined) setMainCash(v(6))
     if (v(7) !== undefined) setCashOpen(!!v(7))
-    if (v(8) !== undefined) setTnToday(v(8))
     setLastUpdated(Date.now())
+  }, [])
+
+  // Ventas de Tienda Nube de hoy (API en vivo por red) — fuera del gate de carga.
+  const loadTnToday = useCallback(async () => {
+    try { setTnToday(await api.tn.salesToday()) } catch { /* TN sin conexión: KPI queda en local */ }
   }, [])
 
   // ── Carga de datos más pesados / estables ─────────────────────────────────
@@ -306,13 +311,18 @@ export default function Dashboard() {
     lastLoad.current = Date.now()
     setTimedOut(false)
     setRefreshing(true)
+    // El gate solo espera lo rápido (SQL local). Lo de red no esencial —el total
+    // de TN del día y los badges de conexión— se carga en segundo plano y aparece
+    // cuando está, sin demorar el primer render del panel.
+    loadTnToday()
+    loadConn()
     try {
-      await Promise.all([loadLive(), loadHeavy(), loadRange(period), loadConn()])
+      await Promise.all([loadLive(), loadHeavy(), loadRange(period)])
     } finally {
       setRefreshing(false)
       setLoading(false)
     }
-  }, [loadLive, loadHeavy, loadRange, loadConn, period])
+  }, [loadLive, loadHeavy, loadRange, loadConn, loadTnToday, period])
 
   // Carga inicial
   useEffect(() => { loadAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -326,9 +336,9 @@ export default function Dashboard() {
 
   // Auto-refresh cada 60s de la parte "en vivo" (cache implícito: no recargamos lo pesado)
   useEffect(() => {
-    const t = setInterval(() => { loadLive() }, 60000)
+    const t = setInterval(() => { loadLive(); loadTnToday() }, 60000)
     return () => clearInterval(t)
-  }, [loadLive])
+  }, [loadLive, loadTnToday])
 
   // Cambio de período → recargar solo el gráfico
   useEffect(() => { if (!loading) loadRange(period) }, [period]) // eslint-disable-line react-hooks/exhaustive-deps

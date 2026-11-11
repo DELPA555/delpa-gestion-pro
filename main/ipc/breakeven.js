@@ -1,7 +1,8 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { cachedHandle } = require('../lib/dash-cache')
 
-ipcMain.handle('breakeven:data', async () => {
+cachedHandle('breakeven:data', 60 * 1000, async () => {
   const db = getDB()
 
   // Fixed costs
@@ -18,8 +19,8 @@ ipcMain.handle('breakeven:data', async () => {
   // Ventas de Tienda Nube del mes (API en vivo, aditivo) para el avance al breakeven.
   let tnSales = 0
   try {
-    const { getTnSalesForPeriod } = require('./tiendanube')
-    const tn = await getTnSalesForPeriod('month')
+    const { getTnSalesForPeriodCapped } = require('./tiendanube')
+    const tn = await getTnSalesForPeriodCapped('month', 3000)
     if (tn?.connected && !tn.error) tnSales = tn.total || 0
   } catch {}
   const monthlySales = monthlySalesLocal + tnSales

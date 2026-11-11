@@ -248,6 +248,8 @@ function createTables(db) {
     CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
     CREATE INDEX IF NOT EXISTS idx_product_sizes_product_id ON product_sizes(product_id);
     CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
+    -- Compuesto para los filtros del dashboard (voided=0 AND created_at rango/día)
+    CREATE INDEX IF NOT EXISTS idx_sales_voided_created ON sales(voided, created_at);
     CREATE INDEX IF NOT EXISTS idx_sales_client_id ON sales(client_id);
     CREATE INDEX IF NOT EXISTS idx_sales_cashbox_id ON sales(cashbox_id);
     CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
@@ -846,6 +848,12 @@ function createTables(db) {
     "ALTER TABLE product_sizes ADD COLUMN size_barcode TEXT DEFAULT NULL",
   ]
   for (const sql of migrations) { try { db.exec(sql) } catch {} }
+
+  // Índice de variantes de color — va DESPUÉS de las migraciones porque
+  // parent_product_id / is_variant se agregan como columnas ahí arriba.
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_products_variant ON products(parent_product_id, is_variant)')
+  } catch {}
 
   // Set sensible defaults for category_size_groups; always merge known categories
   try {

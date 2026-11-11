@@ -220,6 +220,20 @@ async function getTnSalesForPeriod(period = 'day') {
   return getTnSalesRange(arPeriodMinIso(period), null)
 }
 
+// Igual que getTnSalesForPeriod pero con timeout: si la API de TN tarda más de
+// `timeoutMs`, devuelve total 0 (marca timeout:true) sin bloquear al dashboard.
+// La búsqueda real sigue corriendo en segundo plano y queda en _tnSalesCache,
+// así que el próximo pedido (o la recarga) ya tiene el dato. Pensado para el
+// dashboard, donde el total de TN es aditivo y no debe frenar el primer render.
+function getTnSalesForPeriodCapped(period = 'day', timeoutMs = 3000) {
+  const real = getTnSalesForPeriod(period)
+  let timer
+  const capped = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ connected: true, total: 0, count: 0, timeout: true }), timeoutMs)
+  })
+  return Promise.race([real.then((v) => { clearTimeout(timer); return v }), capped])
+}
+
 ipcMain.handle('tn:salesToday', async () => getTnSalesForPeriod('day'))
 
 // ─── Ventas TN por período (day/week/month) ──────────────────────────────────
@@ -871,4 +885,4 @@ async function autoSync() {
   }
 }
 
-module.exports = { syncStockAfterSale, autoSync, getTnSalesRange, getTnSalesForPeriod }
+module.exports = { syncStockAfterSale, autoSync, getTnSalesRange, getTnSalesForPeriod, getTnSalesForPeriodCapped }

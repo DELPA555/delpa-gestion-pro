@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { cachedHandle } = require('../lib/dash-cache')
 
 // ── Límites anuales Monotributo 2025 ─────────────────────────────────────────
 
@@ -31,7 +32,7 @@ function getSettings(db) {
 // ── fiscal:stats ─────────────────────────────────────────────────────────────
 // Devuelve datos de facturación del mes y año actual para el widget fiscal
 
-ipcMain.handle('fiscal:stats', () => {
+cachedHandle('fiscal:stats', 60 * 1000, () => {
   const db   = getDB()
   const cfg  = getSettings(db)
   const now  = new Date()

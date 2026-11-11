@@ -1,7 +1,12 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { cachedHandle } = require('../lib/dash-cache')
 
-ipcMain.handle('dashboard:stats', () => {
+// TTL del caché: canales "en vivo" (se invalidan igual al vender) vs. pesados.
+const LIVE = 20 * 1000
+const HEAVY = 60 * 1000
+
+cachedHandle('dashboard:stats', LIVE, () => {
   const db = getDB()
   const ventas = db.prepare(`
     SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count
@@ -63,7 +68,7 @@ ipcMain.handle('dashboard:stats', () => {
 })
 
 // Top productos vendidos HOY (por defecto 8)
-ipcMain.handle('dashboard:topProductsToday', (_, arg) => {
+cachedHandle('dashboard:topProductsToday', LIVE, (_, arg) => {
   const limit = Math.max(1, Math.min(50, Number(typeof arg === 'object' ? arg?.limit : arg) || 8))
   return getDB().prepare(`
     SELECT p.name, p.category, SUM(si.quantity) as qty,
@@ -76,7 +81,7 @@ ipcMain.handle('dashboard:topProductsToday', (_, arg) => {
 })
 
 // Últimas ventas (tiempo real, por defecto 8), con el producto principal de cada venta
-ipcMain.handle('dashboard:recentSales', (_, arg) => {
+cachedHandle('dashboard:recentSales', LIVE, (_, arg) => {
   const db = getDB()
   const limit = Math.max(1, Math.min(50, Number(typeof arg === 'object' ? arg?.limit : arg) || 8))
   const rows = db.prepare(`
@@ -106,7 +111,7 @@ ipcMain.handle('dashboard:recentSales', (_, arg) => {
 })
 
 // Ventas por rango flexible (para el gráfico principal): ventana actual + ventana anterior alineada
-ipcMain.handle('dashboard:salesRange', (_, arg) => {
+cachedHandle('dashboard:salesRange', LIVE, (_, arg) => {
   const db = getDB()
   const days = Math.max(1, Math.min(400, Number(typeof arg === 'object' ? arg?.days : arg) || 30))
   const rows = db.prepare(`
@@ -139,7 +144,7 @@ ipcMain.handle('dashboard:salesRange', (_, arg) => {
 
 // Extras en tiempo real: ventas por hora hoy, promedio neto 7d, promedio del día de semana,
 // clientas de hoy (nuevas/recurrentes/top), puntos globales y altas de clientas.
-ipcMain.handle('dashboard:realtimeExtras', () => {
+cachedHandle('dashboard:realtimeExtras', LIVE, () => {
   const db = getDB()
 
   const hourly = db.prepare(`
@@ -217,7 +222,7 @@ ipcMain.handle('dashboard:realtimeExtras', () => {
 })
 
 // Top 3 clientas del mes con puntos
-ipcMain.handle('dashboard:topClientsMonth', () => {
+cachedHandle('dashboard:topClientsMonth', HEAVY, () => {
   const db = getDB()
   const rows = db.prepare(`
     SELECT c.id, c.name, c.points, COUNT(*) as count, COALESCE(SUM(s.total),0) as total
@@ -230,7 +235,7 @@ ipcMain.handle('dashboard:topClientsMonth', () => {
 })
 
 // Clientes con deuda (cuenta corriente) — top con teléfono para WhatsApp
-ipcMain.handle('dashboard:overdueDebt', () =>
+cachedHandle('dashboard:overdueDebt', HEAVY, () =>
   getDB().prepare(`
     SELECT id, name, phone, balance
     FROM clients WHERE balance > 0 AND active=1
@@ -259,7 +264,7 @@ ipcMain.handle('dashboard:localSalesPeriod', (_, period = 'day') => {
   return { total: r.total, count: r.count }
 })
 
-ipcMain.handle('dashboard:salesByPayment', () =>
+cachedHandle('dashboard:salesByPayment', LIVE, () =>
   getDB().prepare(`
     SELECT payment_method, COUNT(*) as count, SUM(total) as total
     FROM sales WHERE voided=0 AND date(created_at,'localtime')=date('now','localtime')
@@ -287,7 +292,7 @@ ipcMain.handle('dashboard:weekComparison', () =>
 )
 
 // ── Comparativa mensual día a día: este mes vs mes anterior ───────────────────
-ipcMain.handle('dashboard:monthComparison', () => {
+cachedHandle('dashboard:monthComparison', HEAVY, () => {
   const db = getDB()
 
   // Este mes
@@ -366,7 +371,7 @@ ipcMain.handle('dashboard:heatmap', () =>
   `).all()
 )
 
-ipcMain.handle('dashboard:monthlyProfit', async () => {
+cachedHandle('dashboard:monthlyProfit', HEAVY, async () => {
   const db = getDB()
   const monthlySales = db.prepare(`
     SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count
@@ -412,8 +417,8 @@ ipcMain.handle('dashboard:monthlyProfit', async () => {
   // pero NO a la ganancia/margen (no tenemos costo de las ventas web).
   let tnMonthlySales = 0
   try {
-    const { getTnSalesForPeriod } = require('./tiendanube')
-    const tn = await getTnSalesForPeriod('month')
+    const { getTnSalesForPeriodCapped } = require('./tiendanube')
+    const tn = await getTnSalesForPeriodCapped('month', 3000)
     if (tn?.connected && !tn.error) tnMonthlySales = tn.total || 0
   } catch {}
   return {

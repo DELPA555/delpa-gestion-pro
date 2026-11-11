@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { invalidateDashCache } = require('../lib/dash-cache')
 
 ipcMain.handle('sales:create', (_, {
   clientId, items, total, subtotal, subtotalSinRecargo, discount, paymentMethod, notes,
@@ -196,6 +197,7 @@ ipcMain.handle('sales:create', (_, {
     const { syncStockAfterSale } = require('./tiendanube')
     syncStockAfterSale(result.itemsForSync)
   } catch {}
+  invalidateDashCache() // la venta nueva debe reflejarse ya en el dashboard
   return { saleId: result.saleId, saleNumber: result.saleNumber }
 })
 
@@ -258,5 +260,7 @@ ipcMain.handle('sales:void', (_, payload) => {
       .run(id, `Venta anulada $${sale.total}`, JSON.stringify({ reason, saleNumber: sale.sale_number }))
     return true
   })
-  return run()
+  const ok = run()
+  invalidateDashCache() // la anulación cambia totales del dashboard
+  return ok
 })

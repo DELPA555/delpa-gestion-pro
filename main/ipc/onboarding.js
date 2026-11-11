@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { cachedHandle } = require('../lib/dash-cache')
 
 // Cada check devuelve una fila con n>0 SOLO si el paso está cumplido (uniforme:
 // tanto para conteos como para presencia de un setting de texto).
@@ -42,7 +43,7 @@ ipcMain.handle('onboarding:reset', () => {
 
 // ── Business Health Score ──────────────────────────────────────────────────────
 
-ipcMain.handle('health:score', () => {
+cachedHandle('health:score', 60 * 1000, () => {
   const db = getDB()
   const scores = []
 

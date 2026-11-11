@@ -1,7 +1,8 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { cachedHandle } = require('../lib/dash-cache')
 
-ipcMain.handle('intelligence:recommendations', () => {
+cachedHandle('intelligence:recommendations', 60 * 1000, () => {
   const db = getDB()
   const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -128,7 +129,7 @@ ipcMain.handle('intelligence:recommendations', () => {
   return results.slice(0, 5)
 })
 
-ipcMain.handle('intelligence:stockBreaks', () => {
+cachedHandle('intelligence:stockBreaks', 60 * 1000, () => {
   const db = getDB()
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -182,7 +183,7 @@ ipcMain.handle('intelligence:stockBreaks', () => {
   return results.slice(0, 30)
 })
 
-ipcMain.handle('intelligence:stockSpecular', () => {
+cachedHandle('intelligence:stockSpecular', 60 * 1000, () => {
   const db = getDB()
   const cutoff60 = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 

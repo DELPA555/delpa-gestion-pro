@@ -1,7 +1,8 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { cachedHandle } = require('../lib/dash-cache')
 
-ipcMain.handle('cashflow:projection', () => {
+cachedHandle('cashflow:projection', 60 * 1000, () => {
   const db = getDB()
 
   // Last 60 days of daily sales
