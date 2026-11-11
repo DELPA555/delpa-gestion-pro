@@ -1,7 +1,9 @@
 import { cn } from '@/lib/utils'
 
 export function SkeletonPulse({ className }) {
-  return <div className={cn('animate-pulse bg-white/[0.06] rounded', className)} />
+  // bg-white/10 sobre el fondo oscuro del tema (#070707) queda claramente visible
+  // como gris animado; antes era bg-white/[0.06] y se veía casi negro.
+  return <div className={cn('animate-pulse bg-white/10 rounded', className)} />
 }
 
 export function SkeletonCard() {

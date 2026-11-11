@@ -222,6 +222,7 @@ export default function Dashboard() {
   const [tnToday, setTnToday] = useState(null) // ventas de Tienda Nube de hoy (API en vivo)
 
   const [loading, setLoading] = useState(true)
+  const [timedOut, setTimedOut] = useState(false) // carga inicial tardó > 5s
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [now, setNow] = useState(Date.now())
@@ -303,6 +304,7 @@ export default function Dashboard() {
 
   const loadAll = useCallback(async () => {
     lastLoad.current = Date.now()
+    setTimedOut(false)
     setRefreshing(true)
     try {
       await Promise.all([loadLive(), loadHeavy(), loadRange(period), loadConn()])
@@ -314,6 +316,13 @@ export default function Dashboard() {
 
   // Carga inicial
   useEffect(() => { loadAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Si la carga inicial tarda más de 5s, mostrar aviso de error con reintento
+  useEffect(() => {
+    if (!loading) return undefined
+    const t = setTimeout(() => setTimedOut(true), 5000)
+    return () => clearTimeout(t)
+  }, [loading])
 
   // Auto-refresh cada 60s de la parte "en vivo" (cache implícito: no recargamos lo pesado)
   useEffect(() => {
@@ -394,20 +403,33 @@ export default function Dashboard() {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: AR_TZ,
   }))
 
-  // ── Skeleton inicial ─────────────────────────────────────────────────────────
-  if (loading) {
+  // ── Carga lenta (> 5s): aviso de error con reintento ──────────────────────────
+  if (loading && timedOut) {
     return (
-      <div className="p-6 space-y-5">
-        <SkeletonPulse className="h-16 w-full rounded-2xl" />
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 5 }).map((_, i) => <SkeletonPulse key={i} className="h-32 rounded-2xl" />)}
+      <div className="p-6 flex flex-col items-center justify-center text-center gap-4 min-h-[60vh]">
+        <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center">
+          <AlertTriangle size={28} className="text-amber-400" />
         </div>
-        <SkeletonPulse className="h-72 w-full rounded-2xl" />
-        <div className="grid md:grid-cols-3 gap-3">
-          {Array.from({ length: 3 }).map((_, i) => <SkeletonPulse key={i} className="h-64 rounded-2xl" />)}
+        <div>
+          <p className="text-white font-semibold text-lg">El panel está tardando más de lo normal</p>
+          <p className="text-sm text-zinc-500 mt-1 max-w-sm">
+            No pudimos cargar los datos. Puede ser un problema de conexión o que
+            el servidor de datos esté iniciando. Podés seguir esperando o reintentar.
+          </p>
         </div>
+        <button
+          onClick={loadAll}
+          className="flex items-center gap-2 text-sm text-white px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover transition-colors no-drag"
+        >
+          <RefreshCw size={15} /> Reintentar
+        </button>
       </div>
     )
+  }
+
+  // ── Skeleton inicial (tiles con fondo del tema visible desde el primer render) ─
+  if (loading) {
+    return <DashboardSkeleton />
   }
 
   return (
@@ -1030,6 +1052,73 @@ export default function Dashboard() {
         ))}
       </div>
     </motion.div>
+  )
+}
+
+// ── Skeleton del dashboard ────────────────────────────────────────────────────
+// Cada tile usa bg-card + border (color del tema) para que tenga fondo visible
+// desde el primer render, en vez de bloques vacíos que se veían negros.
+function SkelTile({ className }) {
+  return (
+    <div className={cn('bg-card border border-border rounded-2xl p-4 space-y-3', className)}>
+      <SkeletonPulse className="h-3 w-24" />
+      <SkeletonPulse className="h-7 w-28" />
+      <SkeletonPulse className="h-3 w-20" />
+    </div>
+  )
+}
+
+function SkelPanel({ children, className }) {
+  return (
+    <div className={cn('bg-card border border-border rounded-2xl p-4 space-y-3', className)}>
+      {children}
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-2">
+          <SkeletonPulse className="h-7 w-56" />
+          <SkeletonPulse className="h-3 w-40" />
+        </div>
+        <SkeletonPulse className="h-9 w-32 rounded-lg" />
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {Array.from({ length: 5 }).map((_, i) => <SkelTile key={i} className="h-36" />)}
+      </div>
+
+      {/* Gráfico principal */}
+      <SkelPanel>
+        <SkeletonPulse className="h-4 w-40" />
+        <SkeletonPulse className="h-[300px] w-full rounded-xl" />
+      </SkelPanel>
+
+      {/* Fila de 3 */}
+      <div className="grid lg:grid-cols-3 gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <SkelPanel key={i}>
+            <SkeletonPulse className="h-4 w-32" />
+            {Array.from({ length: 4 }).map((_, j) => <SkeletonPulse key={j} className="h-3 w-full" />)}
+          </SkelPanel>
+        ))}
+      </div>
+
+      {/* Fila de 2 */}
+      <div className="grid lg:grid-cols-2 gap-3">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <SkelPanel key={i}>
+            <SkeletonPulse className="h-4 w-36" />
+            <SkeletonPulse className="h-40 w-full rounded-xl" />
+          </SkelPanel>
+        ))}
+      </div>
+    </div>
   )
 }
 
