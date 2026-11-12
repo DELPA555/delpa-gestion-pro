@@ -200,6 +200,8 @@ export default function Dashboard() {
   const [extras, setExtras] = useState(null)
   const [byPayment, setByPayment] = useState([])
   const [topProd, setTopProd] = useState([])
+  const [topProdMonth, setTopProdMonth] = useState([])
+  const [lowStockT, setLowStockT] = useState([])
   const [recent, setRecent] = useState([])
   const [rangeData, setRangeData] = useState(null)
   const [period, setPeriod] = useState(30)
@@ -279,6 +281,8 @@ export default function Dashboard() {
       api.fiscal.stats(),
       api.dashboard.topClientsMonth(),
       api.dashboard.overdueDebt(),
+      api.dashboard.topProductsMonth(5),
+      api.dashboard.lowStockTotal(3),
     ])
     const v = (i) => (res[i].status === 'fulfilled' ? res[i].value : undefined)
     if (v(0) !== undefined) setMonthlyProfit(v(0))
@@ -292,6 +296,8 @@ export default function Dashboard() {
     if (v(8) !== undefined) setFiscal(v(8))
     if (v(9) !== undefined) setTopClients(v(9) || [])
     if (v(10) !== undefined) setOverdue(v(10) || [])
+    if (v(11) !== undefined) setTopProdMonth(v(11) || [])
+    if (v(12) !== undefined) setLowStockT(v(12) || [])
   }, [])
 
   const loadRange = useCallback(async (d) => {
@@ -686,6 +692,29 @@ export default function Dashboard() {
           )}
         </Card>
 
+        {/* C) Top 5 productos del mes */}
+        <Card className="p-4">
+          <SectionTitle icon={Package}>Top 5 productos del mes</SectionTitle>
+          {topProdMonth.length === 0 ? <EmptyMini>Sin ventas este mes</EmptyMini> : (
+            <div className="space-y-2">
+              {topProdMonth.map((p, i) => {
+                const max = topProdMonth[0]?.qty || 1
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-xs mb-0.5">
+                      <span className="text-zinc-200 truncate flex items-center gap-1">
+                        <span className="text-zinc-500 tabular-nums w-4 shrink-0">{i + 1}.</span>{p.name || 'Producto'}
+                      </span>
+                      <span className="text-zinc-400 tabular-nums shrink-0 ml-2">{p.qty} u · {formatCurrency(p.revenue)}</span>
+                    </div>
+                    <ProgressBar pct={(p.qty / max) * 100} color={i === 0 ? '#e91e8c' : '#6366f1'} className="h-2" />
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+
         {/* Medios de pago */}
         <Card className="p-4">
           <SectionTitle icon={Wallet}>Medios de pago (hoy)</SectionTitle>
@@ -826,6 +855,34 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      {/* D) Alerta de stock bajo — stock TOTAL del producto (suma de talles) < 3 unidades */}
+      <Card className="p-4">
+        <SectionTitle icon={AlertTriangle} right={
+          lowStockT.length > 0
+            ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400">{lowStockT.length} producto{lowStockT.length !== 1 ? 's' : ''}</span>
+            : null
+        }>Stock bajo (menos de 3 unidades)</SectionTitle>
+        {lowStockT.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-green-400 py-4">
+            <CheckCircle2 size={16} /> Ningún producto con stock crítico
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-[240px] overflow-y-auto pr-1">
+            {lowStockT.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-2 bg-surface border border-border rounded-lg px-2.5 py-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-white truncate">{p.name}</p>
+                  {p.category && <p className="text-[10px] text-zinc-500 truncate">{p.category}</p>}
+                </div>
+                <span className={cn('text-xs font-bold tabular-nums shrink-0', p.total_stock === 0 ? 'text-red-400' : 'text-amber-400')}>
+                  {p.total_stock} u
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* ══ SECCIÓN 7 — FINANCIERO DEL MES ══ */}
       <div className="grid lg:grid-cols-3 gap-3">

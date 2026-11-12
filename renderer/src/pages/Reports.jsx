@@ -5,9 +5,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend,
 } from 'recharts'
-import { BarChart3, RefreshCw, Download, Package, Users, Printer, TrendingDown, TrendingUp, MessageCircle, Clock, Search, Receipt, AlertTriangle } from 'lucide-react'
+import { BarChart3, RefreshCw, Download, Package, Users, Printer, TrendingDown, TrendingUp, MessageCircle, Clock, Search, Receipt, AlertTriangle, Wallet, RotateCcw } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatCurrency, cn } from '@/lib/utils'
+import { exportXlsx } from '@/lib/xlsx'
 import PageHeader from '@/components/shared/PageHeader'
 import HelpButton from '@/components/HelpButton'
 import EmptyState from '@/components/shared/EmptyState'
@@ -258,6 +259,159 @@ function FiscalTab({ fiscalSubTab, setFiscalSubTab, fiscalFrom, setFiscalFrom, f
           </button>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+// ── F) Informe de métodos de pago (filtrable por rango de fechas) ─────────────
+function PaymentMethodsTab({ inputCls }) {
+  const [from, setFrom] = useState(defaultFrom())
+  const [to, setTo] = useState(defaultTo())
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { setData((await api.reports.paymentMethods({ from, to })) || []) }
+    catch { toast.error('No se pudo cargar métodos de pago') }
+    finally { setLoading(false) }
+  }, [from, to])
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const chartData = data.map((r, i) => ({ ...r, fill: PIE_COLORS[i % PIE_COLORS.length] }))
+  const total = data.reduce((s, r) => s + r.total, 0)
+  const totalSales = data.reduce((s, r) => s + r.sales, 0)
+  const exportar = () => {
+    const ok = exportXlsx(`metodos_pago_${from}_${to}`, data, [
+      { key: 'method', header: 'Método' },
+      { key: 'sales', header: 'Ventas' },
+      { key: 'total', header: 'Total', format: v => Math.round(v * 100) / 100 },
+      { key: 'pct', header: '% del total', format: v => Math.round(v * 10) / 10 },
+    ])
+    if (!ok) toast.error('No hay datos para exportar')
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inputCls} />
+        <span className="text-zinc-600">→</span>
+        <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inputCls} />
+        <button onClick={load} disabled={loading} className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
+        </button>
+        <button onClick={exportar} disabled={!data.length} className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white disabled:opacity-50">
+          <Download size={13} /> Excel
+        </button>
+      </div>
+      {data.length === 0 ? (
+        <EmptyState icon={Wallet} title="Sin datos de pagos" subtitle="No hay ventas en el período seleccionado" />
+      ) : (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-center">
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={chartData} dataKey="total" nameKey="method" cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2}>
+                  {chartData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                </Pie>
+                <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ background: '#000', border: '1px solid #1e1e1e', borderRadius: 8, fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-zinc-500 text-xs uppercase border-b border-border">
+                  <th className="text-left px-4 py-2.5">Método</th>
+                  <th className="text-right px-4 py-2.5">Ventas</th>
+                  <th className="text-right px-4 py-2.5">Total</th>
+                  <th className="text-right px-4 py-2.5">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartData.map((r, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    <td className="px-4 py-2.5 text-zinc-200"><span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: r.fill }} />{r.method}</span></td>
+                    <td className="px-4 py-2.5 text-right text-zinc-400 tabular-nums">{r.sales}</td>
+                    <td className="px-4 py-2.5 text-right text-white tabular-nums">{formatCurrency(r.total)}</td>
+                    <td className="px-4 py-2.5 text-right text-zinc-400 tabular-nums">{r.pct.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold border-t border-border">
+                  <td className="px-4 py-2.5 text-zinc-300">Total</td>
+                  <td className="px-4 py-2.5 text-right text-zinc-400 tabular-nums">{totalSales}</td>
+                  <td className="px-4 py-2.5 text-right text-white tabular-nums">{formatCurrency(total)}</td>
+                  <td className="px-4 py-2.5 text-right text-zinc-400">100%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── G) Cambios y devoluciones: productos más devueltos / cambiados ────────────
+function ReturnsAnalysisTab({ inputCls }) {
+  const [from, setFrom] = useState(defaultFrom())
+  const [to, setTo] = useState(defaultTo())
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(false)
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { setData((await api.reports.returnsAnalysis({ from, to })) || []) }
+    catch { toast.error('No se pudo cargar el informe') }
+    finally { setLoading(false) }
+  }, [from, to])
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const exportar = () => {
+    const ok = exportXlsx(`devoluciones_cambios_${from}_${to}`, data, [
+      { key: 'name', header: 'Producto' },
+      { key: 'devuelto', header: 'Veces devuelto' },
+      { key: 'cambiado', header: 'Veces cambiado' },
+      { key: 'total', header: 'Total' },
+    ])
+    if (!ok) toast.error('No hay datos para exportar')
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inputCls} />
+        <span className="text-zinc-600">→</span>
+        <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inputCls} />
+        <button onClick={load} disabled={loading} className="btn-primary no-drag flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
+        </button>
+        <button onClick={exportar} disabled={!data.length} className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white disabled:opacity-50">
+          <Download size={13} /> Excel
+        </button>
+      </div>
+      {data.length === 0 ? (
+        <EmptyState icon={RotateCcw} title="Sin devoluciones ni cambios" subtitle="No hay registros en el período seleccionado" />
+      ) : (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-zinc-500 text-xs uppercase border-b border-border">
+                <th className="text-left px-4 py-2.5">Producto</th>
+                <th className="text-right px-4 py-2.5">Veces devuelto</th>
+                <th className="text-right px-4 py-2.5">Veces cambiado</th>
+                <th className="text-right px-4 py-2.5">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((r, i) => (
+                <tr key={i} className="border-b border-border/50 hover:bg-white/[0.02]">
+                  <td className="px-4 py-2.5 text-zinc-200">{r.name}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-amber-400">{r.devuelto || 0}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-indigo-400">{r.cambiado || 0}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-bold text-white">{r.total}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -658,6 +812,8 @@ export default function Reports() {
           { id: 'precios',    label: 'Historial precios' },
           { id: 'fiscal',     label: '⚖ Fiscal' },
           { id: 'comisiones', label: 'Comisiones' },
+          { id: 'metodospago', label: 'Métodos de pago' },
+          { id: 'devoluciones', label: 'Devoluciones' },
           { id: 'sinmov',      label: 'Sin movimiento' },
           { id: 'vendedoras',  label: 'Vendedoras' },
           { id: 'rentcat',     label: 'Rentabilidad' },
@@ -1208,6 +1364,21 @@ export default function Reports() {
             </button>
             {sinMovData?.rows?.length > 0 && (
               <button onClick={() => {
+                const ok = exportXlsx(`sin_movimiento_${sinMovDays}dias`, sinMovData.rows, [
+                  { key: 'name', header: 'Producto' },
+                  { key: 'category', header: 'Categoría' },
+                  { key: 'total_stock', header: 'Stock' },
+                  { key: 'last_sold', header: 'Última venta', format: v => v || 'Nunca' },
+                  { key: 'days_inactive', header: 'Días inactivo', format: v => v === 9999 ? 'Nunca' : v },
+                  { key: 'price', header: 'Precio', format: v => Math.round((v || 0) * 100) / 100 },
+                ])
+                if (!ok) toast.error('No hay datos para exportar')
+              }} className="no-drag ml-auto flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                <Download size={13} /> Excel
+              </button>
+            )}
+            {sinMovData?.rows?.length > 0 && (
+              <button onClick={() => {
                 const rows = (sinMovData?.rows || []).map(r =>
                   `<tr><td>${r.name}</td><td>${r.category}</td><td style="text-align:right">${r.total_stock}</td><td style="text-align:right">${r.last_sold || '—'}</td><td style="text-align:right">${r.days_inactive === 9999 ? 'Nunca' : r.days_inactive}</td><td style="text-align:right">$${(r.price||0).toLocaleString('es-AR')}</td><td style="text-align:right">$${((r.total_stock||0)*(r.cost||0)).toLocaleString('es-AR')}</td></tr>`
                 ).join('')
@@ -1728,6 +1899,10 @@ export default function Reports() {
           )}
         </div>
 
+      ) : tab === 'metodospago' ? (
+        <PaymentMethodsTab inputCls={inputCls} />
+      ) : tab === 'devoluciones' ? (
+        <ReturnsAnalysisTab inputCls={inputCls} />
       ) : (
         /* Artículos tab */
         <div className="space-y-4">
@@ -1747,6 +1922,22 @@ export default function Reports() {
               <button onClick={exportArticulosCSV} disabled={filteredArt.length === 0}
                 className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
                 <Download size={13} /> CSV
+              </button>
+              <button onClick={() => {
+                  const ok = exportXlsx(`articulos_${artFrom}_${artTo}`, filteredArt, [
+                    { key: 'product_name', header: 'Producto' },
+                    { key: 'color', header: 'Color' },
+                    { key: 'size', header: 'Talle' },
+                    { key: 'qty_sold', header: 'Unidades' },
+                    { key: 'avg_price', header: 'Precio promedio', format: v => Math.round((v || 0) * 100) / 100 },
+                    { key: 'revenue', header: 'Total ventas', format: v => Math.round((v || 0) * 100) / 100 },
+                    { key: 'avg_cost', header: 'Costo promedio', format: v => Math.round((v || 0) * 100) / 100 },
+                    { key: 'profit', header: 'Ganancia', format: v => Math.round((v || 0) * 100) / 100 },
+                  ])
+                  if (!ok) toast.error('No hay datos para exportar')
+                }} disabled={filteredArt.length === 0}
+                className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">
+                <Download size={13} /> Excel
               </button>
               <button onClick={printArticulosPDF} disabled={filteredArt.length === 0}
                 className="no-drag flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-50">

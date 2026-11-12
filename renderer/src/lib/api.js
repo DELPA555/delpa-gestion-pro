@@ -18,6 +18,8 @@ export const api = {
     recentSales:        (limit) => inv('dashboard:recentSales', { limit }),
     salesRange:         (days)  => inv('dashboard:salesRange', { days }),
     realtimeExtras:     ()      => inv('dashboard:realtimeExtras'),
+    topProductsMonth:   (limit) => inv('dashboard:topProductsMonth', { limit }),
+    lowStockTotal:      (threshold) => inv('dashboard:lowStockTotal', { threshold }),
   },
   products: {
     list:            (p)       => inv('products:list', p),
@@ -161,6 +163,8 @@ export const api = {
     liquidarProductos:   (p) => inv('reports:liquidarProductos', p),
     vendedoras:          (p) => inv('reports:vendedoras', p),
     rentabilidadCategorias: (p) => inv('reports:rentabilidadCategorias', p),
+    paymentMethods:      (p) => inv('reports:paymentMethods', p),
+    returnsAnalysis:     (p) => inv('reports:returnsAnalysis', p),
   },
   orders: {
     list: (p) => inv('orders:list', p),

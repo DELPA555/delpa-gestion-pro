@@ -427,3 +427,80 @@ ipcMain.handle('reports:rentabilidadCategorias', (_, { from, to } = {}) => {
     return { ...r, margin, prev_profit, trend }
   })
 })
+
+// ── F) Métodos de pago (totales por método, filtrable por fecha) ──────────────
+// Combina ventas con pago dividido (sale_payments) y ventas de pago único
+// (sales.payment_method). Las divididas se excluyen del tramo de pago único con
+// NOT EXISTS para no contarlas dos veces.
+ipcMain.handle('reports:paymentMethods', (_, { from, to } = {}) => {
+  const db = getDB()
+  const f = from || defaultFrom(), t = to || defaultTo()
+  const split = db.prepare(`
+    SELECT sp.payment_method as method,
+           COALESCE(SUM(sp.final_amount),0) as total,
+           COUNT(DISTINCT sp.sale_id) as sales
+    FROM sale_payments sp JOIN sales s ON s.id=sp.sale_id
+    WHERE s.voided=0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
+    GROUP BY sp.payment_method
+  `).all(f, t)
+  const single = db.prepare(`
+    SELECT s.payment_method as method,
+           COALESCE(SUM(s.total),0) as total, COUNT(*) as sales
+    FROM sales s
+    WHERE s.voided=0 AND date(s.created_at,'localtime') BETWEEN ? AND ?
+      AND NOT EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id=s.id)
+    GROUP BY s.payment_method
+  `).all(f, t)
+  const map = {}
+  for (const r of [...split, ...single]) {
+    const m = r.method || 'Sin especificar'
+    if (!map[m]) map[m] = { method: m, total: 0, sales: 0 }
+    map[m].total += r.total
+    map[m].sales += r.sales
+  }
+  const rows = Object.values(map).sort((a, b) => b.total - a.total)
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0)
+  return rows.map(r => ({ ...r, pct: grandTotal > 0 ? (r.total / grandTotal * 100) : 0 }))
+})
+
+// ── G) Cambios y devoluciones: productos más devueltos / cambiados ────────────
+ipcMain.handle('reports:returnsAnalysis', (_, { from, to } = {}) => {
+  const db = getDB()
+  const f = from || defaultFrom(), t = to || defaultTo()
+  const dateCl = "date(created_at,'localtime') BETWEEN ? AND ?"
+  const tally = {}
+  const add = (pid, name, field, qty) => {
+    const key = pid != null ? 'id:' + pid : 'nm:' + (name || 'Producto')
+    if (!tally[key]) tally[key] = { product_id: pid ?? null, name: name || 'Producto', devuelto: 0, cambiado: 0 }
+    tally[key][field] += qty
+    if (name && (tally[key].name === 'Producto')) tally[key].name = name
+  }
+  // Devoluciones (product_returns.items_json)
+  const returns = db.prepare(`SELECT items_json FROM product_returns WHERE ${dateCl}`).all(f, t)
+  for (const r of returns) {
+    let items = []
+    try { items = JSON.parse(r.items_json || '[]') } catch {}
+    for (const it of items) {
+      const pid = it.product_id ?? it.productId ?? null
+      add(pid, it.product_name ?? it.productName, 'devuelto', Number(it.qty ?? it.quantity) || 1)
+    }
+  }
+  // Cambios (product_exchanges — lado devuelto). Prefiere returned_items_json si existe,
+  // si no usa las columnas legacy (returned_product_*). SELECT * tolera DBs sin la columna.
+  const exchanges = db.prepare(`SELECT * FROM product_exchanges WHERE ${dateCl}`).all(f, t)
+  for (const ex of exchanges) {
+    let items = []
+    try { items = JSON.parse(ex.returned_items_json || '[]') } catch {}
+    if (Array.isArray(items) && items.length) {
+      for (const it of items) {
+        const pid = it.product_id ?? it.productId ?? null
+        add(pid, it.product_name ?? it.productName, 'cambiado', Number(it.qty ?? it.quantity) || 1)
+      }
+    } else if (ex.returned_product_id || ex.returned_product_name) {
+      add(ex.returned_product_id ?? null, ex.returned_product_name, 'cambiado', Number(ex.returned_qty) || 1)
+    }
+  }
+  return Object.values(tally)
+    .map(r => ({ ...r, total: r.devuelto + r.cambiado }))
+    .sort((a, b) => b.total - a.total)
+})

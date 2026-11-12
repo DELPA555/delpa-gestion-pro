@@ -90,6 +90,8 @@ const CHANNELS = [
   'dashboard:monthComparison', 'dashboard:categoryComparison',
   'dashboard:topProductsToday', 'dashboard:recentSales', 'dashboard:topClientsMonth', 'dashboard:overdueDebt',
   'dashboard:salesRange', 'dashboard:realtimeExtras',
+  'dashboard:topProductsMonth', 'dashboard:lowStockTotal',
+  'reports:paymentMethods', 'reports:returnsAnalysis',
   'backup:create', 'backup:restore',
   'products:priceHistory',
   'fiscal:stats', 'fiscal:ivaVentas', 'fiscal:ivaCompras', 'fiscal:posicion', 'fiscal:monotributo12m',

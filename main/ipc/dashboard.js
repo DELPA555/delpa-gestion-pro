@@ -438,3 +438,33 @@ cachedHandle('dashboard:monthlyProfit', HEAVY, async () => {
     daysLeft,
   }
 })
+
+// ── C) Top productos MÁS vendidos del mes (por defecto 5) ─────────────────────
+cachedHandle('dashboard:topProductsMonth', HEAVY, (_, arg) => {
+  const limit = Math.max(1, Math.min(50, Number(typeof arg === 'object' ? arg?.limit : arg) || 5))
+  return getDB().prepare(`
+    SELECT p.name, p.category, SUM(si.quantity) as qty,
+           SUM(COALESCE(si.net_price, si.quantity*si.unit_price)) as revenue
+    FROM sale_items si JOIN sales s ON s.id=si.sale_id
+    LEFT JOIN products p ON p.id=si.product_id
+    WHERE s.voided=0
+      AND strftime('%Y-%m',s.created_at,'localtime')=strftime('%Y-%m','now','localtime')
+    GROUP BY si.product_id ORDER BY qty DESC LIMIT ?
+  `).all(limit)
+})
+
+// ── D) Stock bajo por producto: stock TOTAL (suma de talles) < umbral (3) ─────
+// Solo productos activos. Se agrupa por producto; los talles archivados no suman.
+cachedHandle('dashboard:lowStockTotal', HEAVY, (_, arg) => {
+  const threshold = Math.max(1, Math.min(999, Number(typeof arg === 'object' ? arg?.threshold : arg) || 3))
+  return getDB().prepare(`
+    SELECT p.id, p.name, p.category, p.barcode,
+           COALESCE(SUM(ps.stock),0) as total_stock
+    FROM products p LEFT JOIN product_sizes ps ON ps.product_id=p.id
+    WHERE p.active=1
+    GROUP BY p.id
+    HAVING total_stock < ?
+    ORDER BY total_stock ASC, p.name ASC
+    LIMIT 100
+  `).all(threshold)
+})
