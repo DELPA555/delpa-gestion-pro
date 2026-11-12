@@ -135,7 +135,20 @@ ipcMain.handle('exchanges:create', (_, data) => {
     return lastInsertRowid
   })
 
-  return { ok: true, id: run(), difference, returnedTotal, newTotal, surchargeRate, surchargeAmount, totalPaid }
+  const newId = run()
+
+  // Sync de stock con Tienda Nube — fire-and-forget, NO bloquea la respuesta al
+  // renderer. Afecta al producto devuelto (sube stock) y al entregado (baja stock).
+  // syncStockAfterSale ya corta solo si TN no está configurado (sin token → return).
+  try {
+    const { syncStockAfterSale } = require('./tiendanube')
+    const syncItems = [...returned, ...nuevos]
+      .filter(i => i.product_id && i.size && i.size !== 'N/A')
+      .map(i => ({ productId: i.product_id, size: i.size }))
+    if (syncItems.length) syncStockAfterSale(syncItems)
+  } catch (e) { console.error('[Exchange] TN sync:', e.message) }
+
+  return { ok: true, id: newId, difference, returnedTotal, newTotal, surchargeRate, surchargeAmount, totalPaid }
 })
 
 ipcMain.handle('exchanges:list', (_, { page = 1, limit = 25 } = {}) => {
@@ -198,6 +211,17 @@ ipcMain.handle('returns:create', (_, data) => {
   })
 
   const result = run()
+
+  // Sync de stock con Tienda Nube — fire-and-forget. La devolución sube stock local;
+  // hay que reflejarlo en la tienda online. Sin token TN, syncStockAfterSale no hace nada.
+  try {
+    const { syncStockAfterSale } = require('./tiendanube')
+    const syncItems = (items || [])
+      .filter(i => i.product_id && i.size && i.size !== 'N/A')
+      .map(i => ({ productId: i.product_id, size: i.size }))
+    if (syncItems.length) syncStockAfterSale(syncItems)
+  } catch (e) { console.error('[Return] TN sync:', e.message) }
+
   return { ok: true, ...result }
 })
 
