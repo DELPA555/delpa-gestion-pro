@@ -89,11 +89,23 @@ ipcMain.handle('afip:generarCAE', async (_, {
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
 
     const total = Math.round(Number(importe) * 100) / 100
-    const needsIva = tipoComprobante === 1 || (tipoComprobante === 6 && docTipo === 80)
+
+    // Alícuota de IVA del negocio (RI). AFIP: 21%→Id 5, 10.5%→Id 4, 27%→Id 6.
+    const alicPct = (() => {
+      try { return parseFloat(getDB().prepare("SELECT value FROM settings WHERE key='iva_alicuota'").get()?.value || '21') }
+      catch { return 21 }
+    })()
+    const alicIvaId = { 21: 5, 10.5: 4, 27: 6 }[alicPct] || 5
+
+    // AFIP exige el array Iva cuando ImpNeto > 0 (error 10070). Aplica a Factura A (1)
+    // y Factura B (6) — ambas, sin importar el tipo de documento del receptor. En el
+    // ticket impreso el desglose se muestra SOLO en Factura A (ver Sales.jsx).
+    // Factura C (11, monotributo) NO discrimina IVA.
+    const needsIva = tipoComprobante === 1 || tipoComprobante === 6
     let impNeto = total, impIva = 0
 
     if (needsIva) {
-      impNeto = Math.round((total / 1.21) * 100) / 100
+      impNeto = Math.round((total / (1 + alicPct / 100)) * 100) / 100
       impIva  = Math.round((total - impNeto) * 100) / 100
     }
 
@@ -121,7 +133,7 @@ ipcMain.handle('afip:generarCAE', async (_, {
       MonId: 'PES', MonCotiz: 1,
       CndIVARec: cndIVARec,
     }
-    if (impIva > 0) det.Iva = { AlicIva: { Id: 5, BaseImp: impNeto, Importe: impIva } }
+    if (impIva > 0) det.Iva = { AlicIva: { Id: alicIvaId, BaseImp: impNeto, Importe: impIva } }
 
     console.log('[AFIP] FECAESolicitar request:', JSON.stringify({
       env, pv, cuitN, tipoComprobante, docTipo, docNro,
@@ -193,6 +205,7 @@ ipcMain.handle('afip:generarCAE', async (_, {
       cbteNro, ptoVenta: pv,
       tipoComprobante, docTipo,
       docNro: String(docNro || 0),
+      impNeto, impIva, alicuota: alicPct,
     }
   } catch (e) {
     console.error('[AFIP] generarCAE error:', e.message)

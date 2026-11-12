@@ -157,6 +157,15 @@ ${(sale.items || []).map(it => `
 ${sale.discount > 0 ? `<div class="row"><span>Subtotal:</span><span>${formatCurrency(sale.subtotal)}</span></div>
 <div class="row"><span>Descuento${sale.discount_type === 'percent' && sale.discount_value ? ` (${sale.discount_value}%)` : ''}:</span><span>-${formatCurrency(sale.discount)}</span></div>` : ''}
 ${sale.surcharge_rate > 0 && biz.price_display_mode !== '1' ? `<div class="row"><span>Recargo ${sale.surcharge_rate}%:</span><span>+${formatCurrency(sale.total - (sale.subtotal - (sale.discount||0)))}</span></div>` : ''}
+${sale.tipo_cbte === 1 ? (() => {
+  // Factura A (Resp. Inscripto): se discrimina el IVA en el comprobante.
+  // Factura B: NO se discrimina — el cliente ve solo el total final.
+  const alic = parseFloat(biz.iva_alicuota || '21')
+  const neto = Math.round((sale.total / (1 + alic / 100)) * 100) / 100
+  const iva  = Math.round((sale.total - neto) * 100) / 100
+  return `<div class="row"><span>Neto Gravado:</span><span>${formatCurrency(neto)}</span></div>
+<div class="row"><span>IVA ${alic}%:</span><span>${formatCurrency(iva)}</span></div>`
+})() : ''}
 <div class="row bold total"><span>TOTAL:</span><span>${formatCurrency(sale.total)}</span></div>
 ${sale.payments && sale.payments.length > 0
   ? sale.payments.map(p =>
