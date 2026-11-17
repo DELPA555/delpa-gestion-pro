@@ -1,4 +1,14 @@
 {
+  "v1.44.1": {
+    "fecha": "2026-11-17",
+    "titulo": "Productos sin talle: importación por CSV y edición masiva",
+    "novedades": [
+      "La plantilla y la exportación de productos por CSV ahora incluyen la columna 'no_sizes' (1 = sin talle, para accesorios/cosmética) y 'stock_unico' para cargar el stock de esos productos en una sola cantidad.",
+      "Al importar, si un producto trae no_sizes=1 se marca como sin talle y su stock va a una única unidad; los archivos viejos sin esa columna siguen funcionando igual (se conserva el estado actual de cada producto).",
+      "Nueva edición masiva en el listado de productos: seleccioná varios y usá 'Sin talle' para marcarlos como talle único (consolida el stock) o 'Con talle' para volver a la grilla de talles.",
+      "Todo se aplica en una sola operación sobre la base, de forma segura."
+    ]
+  },
   "v1.43.0": {
     "fecha": "2026-10-27",
     "titulo": "Modo multi-caja: varias PC con la misma base en red local",

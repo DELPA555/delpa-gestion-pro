@@ -465,6 +465,26 @@ ipcMain.handle('products:bulkAction', (_, { ids, action, value }) => {
       db.prepare(`UPDATE products SET tn_sync=? WHERE id IN (${ph})`).run(value ? 1 : 0, ...ids)
     } else if (action === 'setCategory') {
       db.prepare(`UPDATE products SET category=? WHERE id IN (${ph})`).run(value || '', ...ids)
+    } else if (action === 'setNoSizes') {
+      // Marcar/desmarcar "sin talle" (talle único) en lote. Al marcar (value=1) se consolida
+      // todo el stock de cada producto en una única fila genérica 'Único'. Al desmarcar (value=0)
+      // solo se baja el flag: los talles reales se recargan editando el producto.
+      const flag = value ? 1 : 0
+      const tx = db.transaction(() => {
+        db.prepare(`UPDATE products SET no_sizes=?, updated_at=CURRENT_TIMESTAMP WHERE id IN (${ph})`).run(flag, ...ids)
+        if (flag === 1) {
+          const totalStmt = db.prepare('SELECT COALESCE(SUM(stock),0) s, COALESCE(MAX(min_stock),0) m FROM product_sizes WHERE product_id=?')
+          const del = db.prepare('DELETE FROM product_sizes WHERE product_id=?')
+          const ins = db.prepare("INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,?)")
+          for (const id of ids) {
+            const t = totalStmt.get(id)
+            del.run(id)
+            ins.run(id, 'Único', t.s || 0, t.m || 0)
+          }
+        }
+      })
+      tx()
+      if (flag === 1) { for (const id of ids) generateSizeBarcodes(db, id) }
     } else if (action === 'applyDiscount') {
       const pct = Math.max(0, Math.min(99, Number(value) || 0))
       const factor = (100 - pct) / 100
@@ -490,7 +510,8 @@ ipcMain.handle('products:exportCSV', async () => {
 
   const db = getDB()
   const products = db.prepare(
-    `SELECT p.id,p.barcode,p.name,p.brand,p.category,p.color,p.cost,p.price,p.min_stock,COALESCE(p.tn_sync,1) as tn_sync
+    `SELECT p.id,p.barcode,p.name,p.brand,p.category,p.color,p.cost,p.price,p.min_stock,
+            COALESCE(p.tn_sync,1) as tn_sync, COALESCE(p.no_sizes,0) as no_sizes
      FROM products p WHERE p.active=1 ORDER BY p.name ASC`
   ).all()
 
@@ -498,13 +519,15 @@ ipcMain.handle('products:exportCSV', async () => {
   const sizesStmt = db.prepare('SELECT size,stock FROM product_sizes WHERE product_id=?')
   const esc = v => { const s = String(v??''); return s.includes(';')||s.includes('"')||s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s }
 
-  const headers = ['id','barcode','name','brand','category','color','cost','price','min_stock','tn_sync',
+  const headers = ['id','barcode','name','brand','category','color','cost','price','min_stock','tn_sync','no_sizes','stock_unico',
     ...ALL_SIZES.map(s=>`stock_${s}`)]
   const lines = [headers.join(';')]
   for (const p of products) {
     const sm = Object.fromEntries(sizesStmt.all(p.id).map(s=>[s.size,s.stock]))
+    // Productos sin talle: el stock vive en la fila 'Único' → se exporta en stock_unico.
+    const stockUnico = p.no_sizes ? (sm['Único'] ?? 0) : 0
     lines.push([p.id,p.barcode||'',p.name,p.brand||'',p.category||'',p.color||'',
-      p.cost,p.price,p.min_stock,p.tn_sync,...ALL_SIZES.map(s=>sm[s]??0)].map(esc).join(';'))
+      p.cost,p.price,p.min_stock,p.tn_sync,p.no_sizes,stockUnico,...ALL_SIZES.map(s=>sm[s]??0)].map(esc).join(';'))
   }
   fs.writeFileSync(filePath, '﻿' + lines.join('\n'), 'utf8')
   return { ok: true, exported: products.length, filePath }
@@ -520,10 +543,14 @@ ipcMain.handle('products:csvTemplate', async () => {
   })
   if (canceled || !filePath) return { ok: false, canceled: true }
   const ALL_SIZES = ['34','36','38','40','42','44','46','48','50','XS','S','M','L','XL','XXL','XXXL']
-  const h = ['barcode','name','brand','category','color','cost','price','min_stock',...ALL_SIZES.map(s=>`stock_${s}`)]
-  const ex = ['7790001234567','Jean clásico','Levis','Jeans','Azul marino','3500','8900','5',
+  // no_sizes=1 → producto sin talle (accesorios/cosmética); su stock va en stock_unico.
+  const h = ['barcode','name','brand','category','color','cost','price','min_stock','no_sizes','stock_unico',...ALL_SIZES.map(s=>`stock_${s}`)]
+  // Ejemplo 1: prenda con talles. Ejemplo 2: accesorio sin talle (no_sizes=1, stock en stock_unico).
+  const ex1 = ['7790001234567','Jean clásico','Levis','Jeans','Azul marino','3500','8900','5','0','0',
     ...ALL_SIZES.map(s=>['40','42'].includes(s)?'10':'0')]
-  fs.writeFileSync(filePath, '﻿' + [h.join(';'), ex.join(';')].join('\n'), 'utf8')
+  const ex2 = ['7790009876543','Collar plata','','Accesorios','Plata','1200','3500','3','1','25',
+    ...ALL_SIZES.map(()=> '0')]
+  fs.writeFileSync(filePath, '﻿' + [h.join(';'), ex1.join(';'), ex2.join(';')].join('\n'), 'utf8')
   return { ok: true, filePath }
 })
 
@@ -556,6 +583,12 @@ ipcMain.handle('products:importCSV', async () => {
   const headers = parseRow(lines[0]).map(h => h.toLowerCase().trim())
   const ALL_SIZES = ['34','36','38','40','42','44','46','48','50','XS','S','M','L','XL','XXL','XXXL']
   const col = n => headers.indexOf(n)
+  // Resuelve el índice de la primera cabecera presente entre varios alias.
+  const colAny = (...names) => { for (const n of names) { const i = headers.indexOf(n); if (i>=0) return i } return -1 }
+  const TRUE_VALS = new Set(['1','si','sí','true','x','yes','verdadero'])
+  // Columnas "sin talle": acepta no_sizes/sin_talle y stock_unico/stock_único/stock_total.
+  const nsCol = colAny('no_sizes','sin_talle')
+  const suCol = colAny('stock_unico','stock_único','stock_total')
 
   let imported=0, updated=0, errors=0, errorList=[]
   const upsertSize = db.prepare(`INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,2) ON CONFLICT(product_id,size) DO UPDATE SET stock=excluded.stock`)
@@ -572,26 +605,38 @@ ipcMain.handle('products:importCSV', async () => {
       const cost     = parseFloat(row[col('cost')]||'0')||0
       const price    = parseFloat(row[col('price')]||'0')||0
       const minStock = parseInt(row[col('min_stock')]||'5',10)||5
+      // Flag sin talle: si la columna no está en el CSV → null (no se toca; nuevos = 0).
+      const noSizesVal = nsCol>=0 ? (TRUE_VALS.has(String(row[nsCol]||'').trim().toLowerCase()) ? 1 : 0) : null
 
-      let productId
+      let productId, effNoSizes
       const existing = barcode
-        ? db.prepare('SELECT id FROM products WHERE barcode=? AND active=1').get(barcode)
-        : db.prepare('SELECT id FROM products WHERE lower(trim(name))=lower(trim(?)) AND active=1').get(name)
+        ? db.prepare('SELECT id, COALESCE(no_sizes,0) as no_sizes FROM products WHERE barcode=? AND active=1').get(barcode)
+        : db.prepare('SELECT id, COALESCE(no_sizes,0) as no_sizes FROM products WHERE lower(trim(name))=lower(trim(?)) AND active=1').get(name)
 
       if (existing) {
-        db.prepare(`UPDATE products SET name=?,brand=?,category=?,color=?,cost=?,price=?,min_stock=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-          .run(name,brand,category,color,cost,price,minStock,existing.id)
+        // Si el CSV no trae la columna, se conserva el flag actual del producto.
+        effNoSizes = noSizesVal !== null ? noSizesVal : existing.no_sizes
+        db.prepare(`UPDATE products SET name=?,brand=?,category=?,color=?,cost=?,price=?,min_stock=?,no_sizes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+          .run(name,brand,category,color,cost,price,minStock,effNoSizes,existing.id)
         productId=existing.id; updated++
       } else {
+        effNoSizes = noSizesVal === 1 ? 1 : 0
         const {lastInsertRowid} = db.prepare(
-          `INSERT INTO products (barcode,name,brand,category,color,cost,price,min_stock) VALUES (?,?,?,?,?,?,?,?)`
-        ).run(barcode,name,brand,category,color,cost,price,minStock)
+          `INSERT INTO products (barcode,name,brand,category,color,cost,price,min_stock,no_sizes) VALUES (?,?,?,?,?,?,?,?,?)`
+        ).run(barcode,name,brand,category,color,cost,price,minStock,effNoSizes)
         productId=lastInsertRowid; imported++
       }
-      for (const sz of ALL_SIZES) {
-        const c=col(`stock_${sz}`); if(c<0) continue
-        const stk=parseInt(row[c]||'0',10)||0
-        if(stk>0) upsertSize.run(productId,sz,stk)
+      if (effNoSizes === 1) {
+        // Producto sin talle: todo el stock en la fila única 'Único'.
+        const stk = suCol>=0 ? (parseInt(row[suCol]||'0',10)||0) : 0
+        db.prepare("DELETE FROM product_sizes WHERE product_id=? AND size<>'Único'").run(productId)
+        upsertSize.run(productId,'Único',stk)
+      } else {
+        for (const sz of ALL_SIZES) {
+          const c=col(`stock_${sz}`); if(c<0) continue
+          const stk=parseInt(row[c]||'0',10)||0
+          if(stk>0) upsertSize.run(productId,sz,stk)
+        }
       }
       generateSizeBarcodes(db, productId)
     } catch(e) { errors++; errorList.push(`Fila ${i+1}: ${e.message}`) }

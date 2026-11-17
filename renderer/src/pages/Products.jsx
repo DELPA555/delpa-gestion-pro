@@ -1290,6 +1290,15 @@ export default function Products() {
     load()
   }
 
+  const bulkSetNoSizes = async (value) => {
+    if (value && !confirm(`Marcar ${selected.size} producto(s) como SIN TALLE consolidará su stock en una sola cantidad. ¿Continuar?`)) return
+    await api.products.bulkAction({ action: 'setNoSizes', ids: [...selected], value })
+    toast.success(value
+      ? `${selected.size} producto(s) marcados como sin talle`
+      : `${selected.size} producto(s) marcados con talle`)
+    load()
+  }
+
   // Variants
   const loadVariants = async (productId) => {
     try {
@@ -1472,6 +1481,14 @@ export default function Products() {
             <button onClick={() => setBulkModal('discount')}
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
               <Percent size={12} /> Descuento
+            </button>
+            <button onClick={() => bulkSetNoSizes(1)} title="Accesorios, cosmética, etc. — consolida el stock en una sola cantidad"
+              className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
+              <Package size={12} /> Sin talle
+            </button>
+            <button onClick={() => bulkSetNoSizes(0)} title="Vuelve a tratar el producto con grilla de talles"
+              className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
+              <Ruler size={12} /> Con talle
             </button>
             <button onClick={() => setBulkModal('labels')}
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
