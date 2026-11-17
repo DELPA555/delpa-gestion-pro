@@ -633,6 +633,16 @@ export default function Sales() {
     return unsub
   }, [])
 
+  // Devuelve el foco al buscador de productos para que SIEMPRE quede listo para escribir
+  // (tras agregar al carrito, cerrar un modal, confirmar una venta, etc.). Usa un pequeño
+  // timeout para correr después de que React re-renderice / desmonte el modal.
+  const focusSearch = useCallback(() => {
+    setTimeout(() => {
+      const el = searchRef.current
+      if (el && !el.disabled && !el.readOnly) { try { el.focus() } catch {} }
+    }, 60)
+  }, [])
+
   const addItemDirect = useCallback((p, sz) => {
     const sizeInfo = (p.sizes || []).find(s => s.size === sz)
     if (!sizeInfo || sizeInfo.stock < 1) { playBeep('error'); toast.error('Stock insuficiente'); return false }
@@ -671,6 +681,7 @@ export default function Sales() {
     } else {
       toast.success(`${p.name} T.${sz} agregado`)
       setQuery(''); setSelectedProduct(null); setSelectedSize(null); setQty(1)
+      focusSearch()
     }
     return true
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -768,6 +779,30 @@ export default function Sales() {
   }, [barcodeEnabled, handleBarcodeInput])
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // Red de seguridad anti "buscador bloqueado": al cerrar un modal o completar una acción,
+  // el elemento que tenía el foco se desmonta y el foco cae al <body>; el buscador queda
+  // visualmente normal pero no recibe teclas hasta hacer click. Si el foco se pierde del
+  // todo estando en la pestaña de venta y sin modales abiertos, se lo devolvemos al buscador.
+  useEffect(() => {
+    if (tab !== 'nueva') return
+    const onFocusOut = (e) => {
+      if (e.relatedTarget) return // el foco pasó a otro elemento real: no interferir
+      setTimeout(() => {
+        if (tab !== 'nueva') return
+        const ae = document.activeElement
+        const typeable = ae && ae !== document.body &&
+          (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)
+        if (typeable) return // ya hay foco en algo donde se puede escribir
+        if (document.querySelector('.modal-overlay')) return // hay un modal abierto: no robar el foco
+        const el = searchRef.current
+        if (el && !el.disabled && !el.readOnly) { try { el.focus() } catch {} }
+      }, 180) // > duración de la animación de salida del modal (150ms)
+    }
+    document.addEventListener('focusout', onFocusOut)
+    return () => document.removeEventListener('focusout', onFocusOut)
+  }, [tab])
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const selectProduct = (p) => {
     setSelectedProduct(p)
     const sizesArr = p.sizes || []
@@ -814,6 +849,7 @@ export default function Sales() {
     }
     setQuery(''); setSelectedProduct(null); setSelectedSize(null); setQty(1)
     toast.success(`${selectedProduct.name} T.${selectedSize} agregado`)
+    focusSearch()
   }
 
   const updateQty = (key, delta) =>
@@ -892,6 +928,7 @@ export default function Sales() {
     setSplitPayment(false); setPaymentRows([{ method: 'Efectivo', baseAmount: '', installments: 1 }])
     setRedeemPoints(false)
     setValeCode(''); setValeInput(''); setValeDiscount(0); setValeKind(null); setValeInfo(null); setValeError('')
+    focusSearch()
   }
 
   // ── Mejora 2: persistencia del carrito + ventas pausadas ────────────────────

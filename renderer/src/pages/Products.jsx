@@ -1006,6 +1006,9 @@ export default function Products() {
 
   // Bulk select state
   const [selected, setSelected] = useState(new Set())
+  // Selección global ("todos del sistema", al estilo Gmail): ignora la paginación y actúa
+  // sobre todos los productos que matchean los filtros activos (búsqueda/categoría).
+  const [selectAllGlobal, setSelectAllGlobal] = useState(false)
   const [bulkModal, setBulkModal] = useState(null) // 'category' | 'discount' | 'labels'
   const [suppliers, setSuppliers] = useState([])
   const [consignmentIds, setConsignmentIds] = useState(new Set())
@@ -1085,6 +1088,7 @@ export default function Products() {
       const res = await api.products.list({ page, search: debouncedSearch, category: debouncedCategory, limit: 25 })
       setData(res)
       setSelected(new Set())
+      setSelectAllGlobal(false)
     } finally {
       setLoading(false)
     }
@@ -1248,6 +1252,7 @@ export default function Products() {
   // Bulk select
   const toggleSelect = (e, id) => {
     e.stopPropagation()
+    setSelectAllGlobal(false) // al tocar una fila se sale del modo "todos del sistema"
     setSelected(s => {
       const n = new Set(s)
       n.has(id) ? n.delete(id) : n.add(id)
@@ -1257,45 +1262,65 @@ export default function Products() {
 
   const selectAll = () => {
     if (selected.size === data.products.length) {
-      setSelected(new Set())
+      setSelected(new Set()); setSelectAllGlobal(false)
     } else {
       setSelected(new Set(data.products.map(p => p.id)))
     }
   }
 
+  // Selecciona TODOS los productos del sistema que matchean los filtros (no solo la página).
+  const selectAllGlobalFn = () => { setSelected(new Set(data.products.map(p => p.id))); setSelectAllGlobal(true) }
+  const clearSelection = () => { setSelected(new Set()); setSelectAllGlobal(false) }
+
+  // Arma el payload de la acción masiva: en modo global manda selectAll+filtros; si no, los ids de la página.
+  const bulkPayload = (action, value) =>
+    selectAllGlobal
+      ? { action, value, selectAll: true, filters: { search: debouncedSearch, category: debouncedCategory } }
+      : { action, value, ids: [...selected] }
+  // Cantidad afectada (para confirmaciones): en global, el total filtrado del sistema.
+  const bulkCount = () => (selectAllGlobal ? (data.total || 0) : selected.size)
+
   const bulkDelete = async () => {
-    if (!confirm(`¿Eliminar ${selected.size} productos?`)) return
-    await api.products.bulkAction({ action: 'delete', ids: [...selected] })
-    toast.success(`${selected.size} productos eliminados`)
+    const n = bulkCount()
+    if (!confirm(`¿Eliminar ${n} productos?`)) return
+    const res = await api.products.bulkAction(bulkPayload('delete'))
+    if (res?.ok === false) { toast.error(res.error || 'Error'); return }
+    toast.success(`${res?.affected ?? n} productos eliminados`)
     load()
   }
 
   const bulkSetTnSync = async (value) => {
-    await api.products.bulkAction({ action: 'setTnSync', ids: [...selected], value })
-    toast.success(`Sync TN ${value ? 'activado' : 'desactivado'} para ${selected.size} productos`)
+    const res = await api.products.bulkAction(bulkPayload('setTnSync', value))
+    if (res?.ok === false) { toast.error(res.error || 'Error'); return }
+    toast.success(`Sync TN ${value ? 'activado' : 'desactivado'} para ${res?.affected ?? bulkCount()} productos`)
     load()
   }
 
   const bulkSetCategory = async (cat) => {
-    await api.products.bulkAction({ action: 'setCategory', ids: [...selected], value: cat })
-    toast.success(`Categoría actualizada para ${selected.size} productos`)
+    const res = await api.products.bulkAction(bulkPayload('setCategory', cat))
+    if (res?.ok === false) { toast.error(res.error || 'Error'); return }
+    toast.success(`Categoría actualizada para ${res?.affected ?? bulkCount()} productos`)
     setBulkModal(null)
     load()
   }
 
   const bulkApplyDiscount = async (pct) => {
-    await api.products.bulkAction({ action: 'applyDiscount', ids: [...selected], value: pct })
-    toast.success(`Descuento del ${pct}% aplicado a ${selected.size} productos`)
+    const res = await api.products.bulkAction(bulkPayload('applyDiscount', pct))
+    if (res?.ok === false) { toast.error(res.error || 'Error'); return }
+    toast.success(`Descuento del ${pct}% aplicado a ${res?.affected ?? bulkCount()} productos`)
     setBulkModal(null)
     load()
   }
 
   const bulkSetNoSizes = async (value) => {
-    if (value && !confirm(`Marcar ${selected.size} producto(s) como SIN TALLE consolidará su stock en una sola cantidad. ¿Continuar?`)) return
-    await api.products.bulkAction({ action: 'setNoSizes', ids: [...selected], value })
+    const n = bulkCount()
+    if (value && !confirm(`Marcar ${n} producto(s) como SIN TALLE consolidará su stock en una sola cantidad. ¿Continuar?`)) return
+    const res = await api.products.bulkAction(bulkPayload('setNoSizes', value))
+    if (res?.ok === false) { toast.error(res.error || 'Error'); return }
+    const aff = res?.affected ?? n
     toast.success(value
-      ? `${selected.size} producto(s) marcados como sin talle`
-      : `${selected.size} producto(s) marcados con talle`)
+      ? `${aff} producto(s) marcados como sin talle`
+      : `${aff} producto(s) marcados con talle`)
     load()
   }
 
@@ -1459,9 +1484,29 @@ export default function Products() {
         {someSelected && isAdmin && !sizeFilter && (
           <motion.div
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-2.5 mb-4"
+            className="flex flex-col gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-2.5 mb-4"
           >
-            <span className="text-sm text-accent font-medium mr-2">{selected.size} seleccionados</span>
+            {/* Banner estilo Gmail: ofrecer seleccionar TODOS los del sistema (no solo la página) */}
+            {!selectAllGlobal && selected.size === data.products.length && data.total > data.products.length && (
+              <div className="flex items-center gap-2 text-xs text-zinc-300 flex-wrap">
+                <span>Seleccionaste los {selected.size} productos de esta página.</span>
+                <button onClick={selectAllGlobalFn}
+                  className="font-semibold text-accent hover:text-accent/80 underline underline-offset-2 no-drag">
+                  Seleccionar todos ({data.total} productos)
+                </button>
+              </div>
+            )}
+            {selectAllGlobal && (
+              <div className="flex items-center gap-2 text-xs text-zinc-300 flex-wrap">
+                <span>Los <span className="font-semibold text-accent">{data.total}</span> productos del sistema están seleccionados{(debouncedSearch || debouncedCategory) ? ' (según el filtro activo)' : ''}.</span>
+                <button onClick={clearSelection}
+                  className="font-semibold text-accent hover:text-accent/80 underline underline-offset-2 no-drag">
+                  Limpiar selección
+                </button>
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-accent font-medium mr-2">{selectAllGlobal ? `Todos (${data.total})` : `${selected.size} seleccionados`}</span>
             <button onClick={bulkDelete}
               className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 border border-red-500/20 transition-colors no-drag">
               <Trash2 size={12} /> Eliminar
@@ -1494,10 +1539,11 @@ export default function Products() {
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
               <Tag size={12} /> Etiquetas
             </button>
-            <button onClick={() => setSelected(new Set())}
+            <button onClick={clearSelection}
               className="ml-auto text-xs text-zinc-600 hover:text-zinc-300 no-drag">
               <X size={14} />
             </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

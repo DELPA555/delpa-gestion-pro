@@ -453,24 +453,44 @@ ipcMain.handle('products:setTnSync', (_, { id, value }) => {
 
 // ─── Bulk actions ─────────────────────────────────────────────────────────────
 
-ipcMain.handle('products:bulkAction', (_, { ids, action, value }) => {
-  if (!Array.isArray(ids) || ids.length === 0) return { ok: false, error: 'Sin productos seleccionados' }
+// Reconstruye el WHERE del listado (products:list) para resolver TODOS los ids que matchean
+// los filtros activos, ignorando la paginación. Solo productos lógicos (padres), no variantes.
+function resolveFilteredIds(db, filters = {}) {
+  const { search = '', category = '', brand = '' } = filters || {}
+  let where = 'WHERE p.active=1 AND (p.parent_product_id IS NULL OR p.is_variant=0)'
+  const params = []
+  if (search) {
+    where += ' AND (p.name LIKE ? OR p.barcode LIKE ? OR p.external_barcode LIKE ? OR p.brand LIKE ?)'
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`)
+  }
+  if (category) { where += ' AND p.category=?'; params.push(category) }
+  if (brand)    { where += ' AND p.brand=?';    params.push(brand) }
+  return db.prepare(`SELECT p.id FROM products p ${where} ORDER BY p.id`).all(...params).map(r => r.id)
+}
+
+ipcMain.handle('products:bulkAction', (_, payload = {}) => {
+  const { action, value, selectAll = false, filters = {} } = payload
   const db = getDB()
+  // Con selectAll, los ids salen de los filtros (toda la tabla o el resultado del filtro),
+  // no de la selección de la página. Si no, se usan los ids que mandó el renderer.
+  const ids = selectAll ? resolveFilteredIds(db, filters) : payload.ids
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: false, error: 'Sin productos seleccionados' }
   const ph = ids.map(() => '?').join(',')
   try {
-    if (action === 'delete') {
-      db.prepare(`UPDATE products SET active=0 WHERE id IN (${ph})`).run(...ids)
-      db.prepare(`UPDATE products SET active=0 WHERE parent_product_id IN (${ph})`).run(...ids)
-    } else if (action === 'setTnSync') {
-      db.prepare(`UPDATE products SET tn_sync=? WHERE id IN (${ph})`).run(value ? 1 : 0, ...ids)
-    } else if (action === 'setCategory') {
-      db.prepare(`UPDATE products SET category=? WHERE id IN (${ph})`).run(value || '', ...ids)
-    } else if (action === 'setNoSizes') {
-      // Marcar/desmarcar "sin talle" (talle único) en lote. Al marcar (value=1) se consolida
-      // todo el stock de cada producto en una única fila genérica 'Único'. Al desmarcar (value=0)
-      // solo se baja el flag: los talles reales se recargan editando el producto.
-      const flag = value ? 1 : 0
-      const tx = db.transaction(() => {
+    // Todo en una sola transacción: atómico tanto para la página como para "todos".
+    const tx = db.transaction(() => {
+      if (action === 'delete') {
+        db.prepare(`UPDATE products SET active=0 WHERE id IN (${ph})`).run(...ids)
+        db.prepare(`UPDATE products SET active=0 WHERE parent_product_id IN (${ph})`).run(...ids)
+      } else if (action === 'setTnSync') {
+        db.prepare(`UPDATE products SET tn_sync=? WHERE id IN (${ph})`).run(value ? 1 : 0, ...ids)
+      } else if (action === 'setCategory') {
+        db.prepare(`UPDATE products SET category=? WHERE id IN (${ph})`).run(value || '', ...ids)
+      } else if (action === 'setNoSizes') {
+        // Marcar/desmarcar "sin talle" (talle único) en lote. Al marcar (value=1) se consolida
+        // todo el stock de cada producto en una única fila genérica 'Único'. Al desmarcar (value=0)
+        // solo se baja el flag: los talles reales se recargan editando el producto.
+        const flag = value ? 1 : 0
         db.prepare(`UPDATE products SET no_sizes=?, updated_at=CURRENT_TIMESTAMP WHERE id IN (${ph})`).run(flag, ...ids)
         if (flag === 1) {
           const totalStmt = db.prepare('SELECT COALESCE(SUM(stock),0) s, COALESCE(MAX(min_stock),0) m FROM product_sizes WHERE product_id=?')
@@ -482,16 +502,16 @@ ipcMain.handle('products:bulkAction', (_, { ids, action, value }) => {
             ins.run(id, 'Único', t.s || 0, t.m || 0)
           }
         }
-      })
-      tx()
-      if (flag === 1) { for (const id of ids) generateSizeBarcodes(db, id) }
-    } else if (action === 'applyDiscount') {
-      const pct = Math.max(0, Math.min(99, Number(value) || 0))
-      const factor = (100 - pct) / 100
-      db.prepare(`UPDATE products SET price=ROUND(price*?,2) WHERE id IN (${ph})`).run(factor, ...ids)
-    } else {
-      return { ok: false, error: 'Acción desconocida' }
-    }
+      } else if (action === 'applyDiscount') {
+        const pct = Math.max(0, Math.min(99, Number(value) || 0))
+        const factor = (100 - pct) / 100
+        db.prepare(`UPDATE products SET price=ROUND(price*?,2) WHERE id IN (${ph})`).run(factor, ...ids)
+      } else {
+        throw new Error('Acción desconocida')
+      }
+    })
+    tx()
+    if (action === 'setNoSizes' && (value ? 1 : 0) === 1) { for (const id of ids) generateSizeBarcodes(db, id) }
     return { ok: true, affected: ids.length }
   } catch (e) {
     return { ok: false, error: e.message }
