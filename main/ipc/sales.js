@@ -76,8 +76,8 @@ ipcMain.handle('sales:create', (_, {
     }
 
     const insItem = db.prepare(`
-      INSERT INTO sale_items (sale_id,product_id,product_name,size,quantity,unit_price,unit_cost,discount,net_price,profit)
-      VALUES (?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO sale_items (sale_id,product_id,product_name,size,quantity,unit_price,unit_cost,discount,net_price,profit,price_mode)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
     `)
     const updStock = db.prepare(`UPDATE product_sizes SET stock=MAX(0,stock-?) WHERE product_id=? AND size=?`)
     const updModTime = db.prepare(`UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?`)
@@ -91,7 +91,7 @@ ipcMain.handle('sales:create', (_, {
       const lineDisc  = grossItems > 0 ? saleDiscount * lineGross / grossItems : 0
       const netLine   = lineGross - lineDisc
       const profitLine = netLine - (Number(it.unitCost) || 0) * (Number(it.quantity) || 0)
-      insItem.run(saleId, it.productId, it.productName, it.size, it.quantity, it.unitPrice, it.unitCost || 0, lineDisc, netLine, profitLine)
+      insItem.run(saleId, it.productId, it.productName, it.size, it.quantity, it.unitPrice, it.unitCost || 0, lineDisc, netLine, profitLine, it.priceMode === 'tarjeta' ? 'tarjeta' : 'normal')
       const sz = it.size || 'N/A'
       console.log('[SALE] Descontando stock:', { product_id: it.productId, size: sz, qty: it.quantity })
       const r = updStock.run(it.quantity, it.productId, sz)

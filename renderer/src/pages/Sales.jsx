@@ -150,7 +150,7 @@ ${sale.seller_name ? `<div class="row"><span>Vendedora:</span><span>${sale.selle
 ${sale.price_list && sale.price_list !== 'publico' ? `<div class="row"><span>Lista:</span><span>${sale.price_list === 'mayorista' ? 'Mayorista' : 'Distribuidor'}</span></div>` : ''}
 <div class="divider"></div>
 ${(sale.items || []).map(it => `
-<div class="row"><span>${it.product_name}${hasRealSize(it.size) ? ` T.${it.size}` : ''}</span><span>x${it.quantity}</span></div>
+<div class="row"><span>${it.product_name}${hasRealSize(it.size) ? ` T.${it.size}` : ''}${it.price_mode === 'tarjeta' ? ' (precio lista)' : ''}</span><span>x${it.quantity}</span></div>
 <div class="row" style="padding-left:8px"><span>@ ${formatCurrency(it.unit_price)}</span><span>${formatCurrency(it.unit_price * it.quantity)}</span></div>
 `).join('')}
 <div class="divider"></div>
@@ -378,11 +378,18 @@ export default function Sales() {
   // Ref para leer el cliente actual dentro de addItemDirect (deps []), sin closure obsoleto.
   const selectedClientRef = useRef(null)
   useEffect(() => { selectedClientRef.current = selectedClient }, [selectedClient])
+  // Espejo del carrito para chequear existencia de un ítem dentro de callbacks memoizados.
+  const cartRef = useRef([])
+  useEffect(() => { cartRef.current = cart }, [cart])
+  // Precio de lista (v1.45.0): cuando un producto tiene price_tarjeta>0, se pregunta qué precio usar.
+  // { productName, size, normal, tarjeta, onPick(mode) } | null
+  const [priceChoice, setPriceChoice] = useState(null)
   const activeList = selectedClient?.price_list || 'publico'
   // Re-precia el carrito al cambiar la lista del cliente (preserva precios editados a mano).
   useEffect(() => {
     setCart(c => c.map(it => {
       if (!it.basePrices) return it
+      if (it.priceMode === 'tarjeta') return it   // precio de lista fijo: no se re-precia por el tier del cliente
       const newUnit = priceForList(it.basePrices, activeList)
       const wasEdited = Number(it.editedPrice) !== Number(it.unitPrice)
       return { ...it, unitPrice: newUnit, editedPrice: wasEdited ? it.editedPrice : newUnit }
@@ -643,10 +650,21 @@ export default function Sales() {
     }, 60)
   }, [])
 
-  const addItemDirect = useCallback((p, sz) => {
+  const addItemDirect = useCallback((p, sz, mode) => {
     const sizeInfo = (p.sizes || []).find(s => s.size === sz)
     if (!sizeInfo || sizeInfo.stock < 1) { playBeep('error'); toast.error('Stock insuficiente'); return false }
     const key = `${p.id}-${sz}`
+    // Precio de lista: si el producto tiene price_tarjeta>0 y el ítem es NUEVO, preguntar qué precio usar.
+    const resolvedMode = (mode === 'tarjeta' || mode === 'normal') ? mode : null
+    const existsInCart = cartRef.current.some(it => it.key === key)
+    if (!resolvedMode && !existsInCart && Number(p.price_tarjeta) > 0) {
+      const normal = priceForList(basePricesOf(p), selectedClientRef.current?.price_list || 'publico')
+      setPriceChoice({
+        productName: p.name, size: sz, normal, tarjeta: Number(p.price_tarjeta),
+        onPick: (chosen) => { setPriceChoice(null); addItemDirect(p, sz, chosen) },
+      })
+      return false
+    }
     let wasIncrement = false
     setCart(c => {
       const existing = c.find(it => it.key === key)
@@ -657,15 +675,20 @@ export default function Sales() {
       }
       const basePrices = basePricesOf(p)
       const listPrice = priceForList(basePrices, selectedClientRef.current?.price_list || 'publico')
+      const tarjeta = Number(p.price_tarjeta) || 0
+      const useTarjeta = resolvedMode === 'tarjeta' && tarjeta > 0
+      const unit = useTarjeta ? tarjeta : listPrice
       return [...c, {
         key,
         productId: p.id,
         productName: p.name,
         editedName: p.name,
         size: sz,
-        unitPrice: listPrice,
-        editedPrice: listPrice,
+        unitPrice: unit,
+        editedPrice: unit,
         basePrices,
+        priceTarjeta: tarjeta,
+        priceMode: useTarjeta ? 'tarjeta' : 'normal',
         unitCost: p.cost || 0,
         qty: 1,
         maxStock: sizeInfo.stock,
@@ -818,7 +841,7 @@ export default function Sales() {
     setShowResults(false)
   }
 
-  const addToCart = () => {
+  const addToCart = (mode) => {
     if (!selectedProduct || !selectedSize) return toast.error('Seleccioná un talle')
     const sizeInfo = selectedProduct.sizes?.find(s => s.size === selectedSize)
     const isNA = selectedSize === 'N/A'
@@ -826,21 +849,38 @@ export default function Sales() {
 
     const key = `${selectedProduct.id}-${selectedSize}`
     const existing = cart.find(c => c.key === key)
+    // Precio de lista: si el producto tiene price_tarjeta>0 y el ítem es NUEVO, preguntar qué precio usar.
+    // (mode puede llegar como el event del onClick; solo aceptamos 'normal'/'tarjeta'.)
+    const resolvedMode = (mode === 'tarjeta' || mode === 'normal') ? mode : null
+    if (!resolvedMode && !existing && Number(selectedProduct.price_tarjeta) > 0) {
+      const normal = priceForList(basePricesOf(selectedProduct), selectedClient?.price_list || 'publico')
+      setPriceChoice({
+        productName: selectedProduct.name, size: selectedSize,
+        normal, tarjeta: Number(selectedProduct.price_tarjeta),
+        onPick: (chosen) => { setPriceChoice(null); addToCart(chosen) },
+      })
+      return
+    }
     if (existing) {
       if (!isNA && existing.qty + qty > sizeInfo.stock) return toast.error('Stock insuficiente')
       setCart(c => c.map(it => it.key === key ? { ...it, qty: it.qty + qty } : it))
     } else {
       const basePrices = basePricesOf(selectedProduct)
       const listPrice = priceForList(basePrices, selectedClient?.price_list || 'publico')
+      const tarjeta = Number(selectedProduct.price_tarjeta) || 0
+      const useTarjeta = resolvedMode === 'tarjeta' && tarjeta > 0
+      const unit = useTarjeta ? tarjeta : listPrice
       setCart(c => [...c, {
         key,
         productId: selectedProduct.id,
         productName: selectedProduct.name,
         editedName: selectedProduct.name,
         size: selectedSize,
-        unitPrice: listPrice,
-        editedPrice: listPrice,
+        unitPrice: unit,
+        editedPrice: unit,
         basePrices,
+        priceTarjeta: tarjeta,
+        priceMode: useTarjeta ? 'tarjeta' : 'normal',
         unitCost: selectedProduct.cost || 0,
         qty,
         maxStock: isNA ? 999 : sizeInfo.stock,
@@ -860,6 +900,15 @@ export default function Sales() {
 
   const updateCartField = (key, field, value) =>
     setCart(c => c.map(it => it.key === key ? { ...it, [field]: value } : it))
+
+  // Alterna una línea del carrito entre precio normal (tier) y precio de lista (price_tarjeta).
+  const switchPriceMode = (key, mode) =>
+    setCart(c => c.map(it => {
+      if (it.key !== key) return it
+      const normal = priceForList(it.basePrices, activeList)
+      const unit = mode === 'tarjeta' ? (Number(it.priceTarjeta) || normal) : normal
+      return { ...it, priceMode: mode, unitPrice: unit, editedPrice: unit }
+    }))
 
   const removeItem = (key) => { setCart(c => c.filter(it => it.key !== key)); toast('Producto quitado del carrito', { duration: 2000 }) }
 
@@ -1057,6 +1106,7 @@ export default function Sales() {
     const items = cart.map((it) => ({
       product_name: it.editedName || it.productName, size: it.size,
       quantity: it.qty, unit_price: Number(it.editedPrice) || it.unitPrice,
+      price_mode: it.priceMode === 'tarjeta' ? 'tarjeta' : 'normal',
     }))
     const saleData = {
       id: 0, sale_number: 'PRÁCTICA', created_at: new Date().toISOString(),
@@ -1099,6 +1149,7 @@ export default function Sales() {
           quantity: it.qty,
           unitPrice: Number(it.editedPrice) || it.unitPrice,
           unitCost: it.unitCost,
+          priceMode: it.priceMode === 'tarjeta' ? 'tarjeta' : 'normal',
         })),
         total,
         subtotal,
@@ -2002,6 +2053,17 @@ export default function Sales() {
                       <span className="text-xs text-zinc-500 shrink-0">
                         {hasRealSize(it.size) ? `T.${it.size}` : ''}{it.color ? `${hasRealSize(it.size) ? ' · ' : ''}${it.color}` : ''}
                       </span>
+                      {Number(it.priceTarjeta) > 0 && (
+                        <button
+                          onClick={() => switchPriceMode(it.key, it.priceMode === 'tarjeta' ? 'normal' : 'tarjeta')}
+                          title="Cambiar entre precio normal y precio de lista"
+                          className={cn('shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded border no-drag transition-colors',
+                            it.priceMode === 'tarjeta'
+                              ? 'text-accent bg-accent/10 border-accent/30'
+                              : 'text-zinc-500 bg-white/5 border-border hover:text-zinc-300')}>
+                          {it.priceMode === 'tarjeta' ? 'LISTA' : 'NORMAL'}
+                        </button>
+                      )}
                       <button onClick={() => removeItem(it.key)}
                         className="text-zinc-600 hover:text-red-400 transition-colors p-1 shrink-0">
                         <Trash2 size={12} />
@@ -3381,6 +3443,34 @@ export default function Sales() {
             {voiding ? 'Anulando...' : 'Confirmar anulación'}
           </button>
         </div>
+      </Modal>
+
+      {/* ── Modal: elegir precio (normal vs. precio de lista) ── */}
+      <Modal open={!!priceChoice} onClose={() => setPriceChoice(null)} title="¿Qué precio usás?" width="max-w-sm">
+        {priceChoice && (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-300">
+              <span className="font-medium text-white">{priceChoice.productName}</span>
+              {hasRealSize(priceChoice.size) ? <span className="text-zinc-500"> · T.{priceChoice.size}</span> : null}
+            </p>
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => priceChoice.onPick('normal')}
+                className="no-drag flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-[#0a0a0a] hover:border-accent/50 hover:bg-accent/5 transition-colors text-left">
+                <span className="text-sm text-zinc-300">Precio normal</span>
+                <span className="text-lg font-bold text-white tabular-nums">{formatCurrency(priceChoice.normal)}</span>
+              </button>
+              <button
+                onClick={() => priceChoice.onPick('tarjeta')}
+                className="no-drag flex items-center justify-between px-4 py-3 rounded-xl border border-accent/40 bg-accent/10 hover:bg-accent/20 transition-colors text-left">
+                <span className="text-sm text-accent font-medium">Precio de lista</span>
+                <span className="text-lg font-bold text-accent tabular-nums">{formatCurrency(priceChoice.tarjeta)}</span>
+              </button>
+            </div>
+            <button onClick={() => setPriceChoice(null)}
+              className="w-full text-xs text-zinc-500 hover:text-zinc-300 no-drag pt-1">Cancelar</button>
+          </div>
+        )}
       </Modal>
 
       {/* ── Modal: Mercado Pago QR ── */}

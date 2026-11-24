@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, Package, ImagePlus, X, ChevronDown,
   Cloud, CloudOff, CheckSquare, Square, Download, Upload, FileText,
   Layers, Palette, Tag, Percent, Printer, RefreshCw, TrendingUp, TrendingDown,
-  PackageCheck, Ruler, ShoppingCart, ScanLine,
+  PackageCheck, Ruler, ShoppingCart, ScanLine, Truck,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -58,7 +58,8 @@ function sizesForGroup(group, jeansArr, clothingArr, americanArr = DEFAULT_AMERI
 function emptyForm(allSizes) {
   return {
     barcode: '', external_barcode: '', name: '', brand: '', category: 'Jeans', color: '',
-    cost: '', price: '', price_wholesale: '', price_distributor: '', min_stock: '5', image_data: '',
+    cost: '', price: '', price_wholesale: '', price_distributor: '', price_tarjeta: '', min_stock: '5', image_data: '',
+    supplier_id: '',
     tn_sync: 1, no_sizes: 0,
     is_consignment: false, consignment_supplier_id: '', consignment_cost: '',
     sizes: allSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })),
@@ -273,6 +274,14 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
         </div>
       </div>
 
+      <div>
+        <label className={labelCls}>Proveedor</label>
+        <select className={inputCls} value={form.supplier_id} onChange={e => field('supplier_id', e.target.value)}>
+          <option value="">— Sin proveedor —</option>
+          {(suppliers || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </div>
+
       {isAdmin ? (
         <>
         <div className="grid grid-cols-4 gap-3">
@@ -308,6 +317,14 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
             <input type="number" min="0" step="0.01" className={inputCls} value={form.price_distributor}
               onChange={e => field('price_distributor', e.target.value)} placeholder="0,00" />
           </div>
+        </div>
+        <div>
+          <label className={labelCls}>Precio de lista $ <span className="text-zinc-600 normal-case tracking-normal">(ej: sin descuento / precio tarjeta — opcional)</span></label>
+          <input type="number" min="0" step="0.01" className={inputCls} value={form.price_tarjeta}
+            onChange={e => field('price_tarjeta', e.target.value)} placeholder="0,00" />
+          <p className="text-[11px] text-zinc-500 mt-1">
+            Si cargás un valor, en la venta vas a poder elegir entre <b className="text-zinc-300">precio normal</b> y <b className="text-zinc-300">precio de lista</b>. En 0 no aparece.
+          </p>
         </div>
         {(!(Number(form.price) > 0) || !(Number(form.price_wholesale) > 0) || !(Number(form.price_distributor) > 0)) && (
           <div className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
@@ -494,6 +511,28 @@ function BulkCategoryModal({ open, onClose, categories, onApply }) {
       <div className="flex justify-end gap-3 mt-4">
         <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
         <button onClick={() => cat && onApply(cat)} className="btn-primary px-4 py-2 text-sm rounded-lg no-drag">Aplicar</button>
+      </div>
+    </Modal>
+  )
+}
+
+// Bulk action: assign supplier modal
+function BulkSupplierModal({ open, onClose, suppliers, onApply }) {
+  const [sup, setSup] = useState('')
+  useEffect(() => { if (open) setSup('') }, [open])
+  return (
+    <Modal open={open} onClose={onClose} title="Asignar proveedor en lote" width="max-w-sm">
+      <p className="text-xs text-zinc-500 mb-3">Asigná (o quitá) el proveedor de los productos seleccionados.</p>
+      <select
+        className="input-field w-full bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white no-drag"
+        value={sup} onChange={e => setSup(e.target.value)}
+      >
+        <option value="">— Quitar proveedor —</option>
+        {(suppliers || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+      <div className="flex justify-end gap-3 mt-4">
+        <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
+        <button onClick={() => onApply(sup)} className="btn-primary px-4 py-2 text-sm rounded-lg no-drag">Aplicar</button>
       </div>
     </Modal>
   )
@@ -785,8 +824,8 @@ function ImportResultModal({ open, onClose, result }) {
   )
 }
 
-const COLS = '28px 2fr 1fr 1fr 1fr 72px 44px auto'
-const COLS_VENDEDORA = '28px 2fr 1fr 1fr 72px 44px auto'  // sin columna Margen (oculta el costo)
+const COLS = '28px 2fr 1fr 1fr 1fr 1fr 72px 44px auto'
+const COLS_VENDEDORA = '28px 2fr 1fr 1fr 1fr 72px 44px auto'  // sin columna Margen (oculta el costo)
 
 // ── Historial de precios (dentro del modal de edición) ────────────────────────
 
@@ -1131,6 +1170,8 @@ export default function Products() {
       price: p.price,
       price_wholesale: p.price_wholesale ?? '',
       price_distributor: p.price_distributor ?? '',
+      price_tarjeta: p.price_tarjeta ?? '',
+      supplier_id: p.supplier_id ? String(p.supplier_id) : '',
       min_stock: p.min_stock,
       image_data: undefined,
       tn_sync: p.tn_sync ?? 1,
@@ -1154,6 +1195,8 @@ export default function Products() {
         ...rest,
         cost: Number(form.cost) || 0,
         price: Number(form.price),
+        price_tarjeta: Number(form.price_tarjeta) || 0,
+        supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
         min_stock: Number(form.min_stock) || 5,
         // El talle único 'Único' (rubros sin talle) se conserva aunque tenga stock 0,
         // para que el producto tenga su fila de stock y sea vendible/reponible.
@@ -1321,6 +1364,18 @@ export default function Products() {
     toast.success(value
       ? `${aff} producto(s) marcados como sin talle`
       : `${aff} producto(s) marcados con talle`)
+    load()
+  }
+
+  // value = id del proveedor (string/number) o '' para quitar proveedor.
+  const bulkSetSupplier = async (supplierId) => {
+    const res = await api.products.bulkAction(bulkPayload('setSupplier', supplierId || ''))
+    if (res?.ok === false) { toast.error(res.error || 'Error'); return }
+    const name = supplierId ? (suppliers.find(s => String(s.id) === String(supplierId))?.name || 'proveedor') : null
+    toast.success(name
+      ? `Proveedor "${name}" asignado a ${res?.affected ?? bulkCount()} productos`
+      : `Proveedor quitado de ${res?.affected ?? bulkCount()} productos`)
+    setBulkModal(null)
     load()
   }
 
@@ -1523,6 +1578,10 @@ export default function Products() {
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
               <Tag size={12} /> Categoría
             </button>
+            <button onClick={() => setBulkModal('supplier')}
+              className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
+              <Truck size={12} /> Proveedor
+            </button>
             <button onClick={() => setBulkModal('discount')}
               className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 px-2.5 py-1.5 rounded-lg hover:bg-white/5 border border-border transition-colors no-drag">
               <Percent size={12} /> Descuento
@@ -1585,6 +1644,7 @@ export default function Products() {
           ) : <span />}
           <span>Producto</span>
           <span>Categoría</span>
+          <span>Proveedor</span>
           <span className="text-right">Precio</span>
           {isAdmin && <span className="text-right">Margen</span>}
           <span className="text-right">Stock</span>
@@ -1653,6 +1713,7 @@ export default function Products() {
                     </div>
 
                     <span className="text-xs text-zinc-400">{p.category || '—'}</span>
+                    <span className="text-xs text-zinc-400 truncate" title={p.supplier_name || ''}>{p.supplier_name || '—'}</span>
                     {isAdmin ? (
                       <span className="text-sm text-white text-right font-medium tabular-nums">{formatCurrency(p.price)}</span>
                     ) : (
@@ -1893,6 +1954,12 @@ export default function Products() {
         onClose={() => setBulkModal(null)}
         categories={allCategories}
         onApply={bulkSetCategory}
+      />
+      <BulkSupplierModal
+        open={bulkModal === 'supplier'}
+        onClose={() => setBulkModal(null)}
+        suppliers={suppliers}
+        onApply={bulkSetSupplier}
       />
       <BulkDiscountModal
         open={bulkModal === 'discount'}

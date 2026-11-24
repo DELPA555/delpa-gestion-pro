@@ -989,6 +989,11 @@ function createTables(db) {
   addColumnIfMissing(db, 'products', 'price_distributor', 'REAL NOT NULL DEFAULT 0')
   addColumnIfMissing(db, 'clients',  'price_list',         "TEXT NOT NULL DEFAULT 'publico'")
   addColumnIfMissing(db, 'sales',    'price_list',         "TEXT DEFAULT 'publico'")
+  // Precio de lista (v1.45.0): segundo precio por producto (ej. "precio tarjeta / sin descuento").
+  // Distinto del tier price_list del cliente. Si es 0 no se ofrece en la venta.
+  addColumnIfMissing(db, 'products', 'price_tarjeta',      'REAL NOT NULL DEFAULT 0')
+  // Por ítem de venta: qué precio se usó ('normal' = precio del tier / público; 'tarjeta' = precio de lista).
+  addColumnIfMissing(db, 'sale_items', 'price_mode',       "TEXT DEFAULT 'normal'")
   // Talle único / N/A (v1.42.8): productos sin talles (accesorios, bijouterie, etc.).
   // no_sizes=1 → se maneja una sola fila genérica ('Único'), sin grilla de talles.
   addColumnIfMissing(db, 'products', 'no_sizes', 'INTEGER DEFAULT 0')
