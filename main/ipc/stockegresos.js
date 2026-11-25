@@ -1,5 +1,6 @@
 const { ipcMain, BrowserWindow, dialog, app } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 const path = require('path')
 const fs   = require('fs')
 const os   = require('os')
@@ -78,6 +79,9 @@ ipcMain.handle('egreso:create', (_, data) => {
       VALUES (?,?,?,?,?,?,?,?)
     `)
 
+    // Estas bajas de stock son un EGRESO de mercadería.
+    setCtx(db, { tipo: 'egreso', referencia_id: egresoId, referencia_tipo: 'stock_egreso', usuario: supplier_name || null, detalle: `Egreso ${number}${reason ? ' — ' + reason : ''}` })
+
     for (const item of items) {
       const qty  = Number(item.quantity) || 0
       const cost = Number(item.cost_price) || 0
@@ -105,6 +109,8 @@ ipcMain.handle('egreso:create', (_, data) => {
         }
       }
     }
+
+    resetCtx(db)
 
     // Update totals
     db.prepare('UPDATE stock_egresos SET total_amount=?, total_units=? WHERE id=?')
@@ -142,12 +148,15 @@ ipcMain.handle('egreso:updateStatus', (_, { id, status }) => {
   if (status === 'cancelled') {
     db.transaction(() => {
       const items = db.prepare('SELECT * FROM stock_egreso_items WHERE egreso_id=?').all(id)
+      // El stock que vuelve por cancelar un egreso queda registrado como tal.
+      setCtx(db, { tipo: 'egreso_cancelado', referencia_id: id, referencia_tipo: 'stock_egreso', detalle: `Egreso ${egreso.number} cancelado — stock restaurado` })
       for (const item of items) {
         if (item.product_id && item.size) {
           db.prepare('UPDATE product_sizes SET stock=stock+?, stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?')
             .run(item.quantity, item.product_id, item.size)
         }
       }
+      resetCtx(db)
       db.prepare('UPDATE stock_egresos SET status=? WHERE id=?').run('cancelled', id)
       db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('UPDATE','egresos',?,?)`)
         .run(id, `Egreso ${egreso.number} cancelado — stock restaurado (${items.length} items)`)

@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 ipcMain.handle('senas:list', (_, { page = 1, limit = 25, status = '' } = {}) => {
   const db = getDB()
@@ -36,12 +37,14 @@ ipcMain.handle('senas:create', (_, data) => {
   const vuelto = metodo === 'Efectivo' ? (Number(changeGiven) || 0) : 0
 
   const run = db.transaction(() => {
-    // Reserve stock
+    // Reserve stock — la mercadería señada sale del stock (reservada para el cliente).
     if (productId && size && size !== 'N/A') {
       const row = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(productId, size)
       if (!row || row.stock < 1) throw new Error(`Sin stock de ${productName} T.${size}`)
+      setCtx(db, { tipo: 'seña', referencia_tipo: 'sena', usuario: sellerName || null, detalle: `Seña — ${clientName || 'cliente'}` })
       db.prepare('UPDATE product_sizes SET stock=stock-1 WHERE product_id=? AND size=?').run(productId, size)
       db.prepare('UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?').run(productId, size)
+      resetCtx(db)
     }
 
     // Generate correlative seña number
@@ -158,9 +161,11 @@ ipcMain.handle('senas:cancel', (_, { id, refundAdvance }) => {
   if (seña.status !== 'pendiente') return { ok: false, error: 'La seña no está pendiente' }
 
   const run = db.transaction(() => {
-    // Restore stock
+    // Restore stock — se cancela la seña, la mercadería vuelve al stock.
     if (seña.product_id && seña.size && seña.size !== 'N/A') {
+      setCtx(db, { tipo: 'seña_cancelada', referencia_id: id, referencia_tipo: 'sena', detalle: `Seña cancelada — ${seña.client_name || 'cliente'}` })
       db.prepare('UPDATE product_sizes SET stock=stock+1 WHERE product_id=? AND size=?').run(seña.product_id, seña.size)
+      resetCtx(db)
     }
     db.prepare('UPDATE senas SET status=?,refunded=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
       .run('cancelada', refundAdvance ? 1 : 0, id)

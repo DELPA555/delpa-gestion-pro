@@ -1,5 +1,6 @@
 const { ipcMain, BrowserWindow, dialog } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -258,9 +259,12 @@ ipcMain.handle('inventory:close', (_, { sessionId, applyAdjustments }) => {
   if (applyAdjustments) {
     const upd = db.prepare('UPDATE product_sizes SET stock=? WHERE product_id=? AND size=?')
     db.transaction(() => {
+      // Ajuste por recuento de inventario: cada diferencia queda en el historial.
+      setCtx(db, { tipo: 'ajuste', referencia_id: sessionId, referencia_tipo: 'inventory', detalle: `Recuento de inventario #${sessionId}` })
       for (const it of items) {
         if (it.difference !== 0) upd.run(it.real_stock, it.product_id, it.size)
       }
+      resetCtx(db)
     })()
     db.prepare("INSERT INTO audit_log (action,module,entity_id,description) VALUES ('ADJUST','inventory',?,?)")
       .run(sessionId, `Ajuste de inventario: ${items.filter(i => i.difference !== 0).length} diferencias ajustadas`)

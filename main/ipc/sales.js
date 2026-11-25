@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 const { invalidateDashCache } = require('../lib/dash-cache')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 ipcMain.handle('sales:create', (_, {
   clientId, items, total, subtotal, subtotalSinRecargo, discount, paymentMethod, notes,
@@ -86,6 +87,8 @@ ipcMain.handle('sales:create', (_, {
     // proporción al importe bruto de cada línea para que la ganancia refleje el precio real.
     const grossItems = items.reduce((s, it) => s + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0), 0)
     const saleDiscount = discount || 0
+    // Contexto para el historial de movimientos: estas bajas de stock son una VENTA.
+    setCtx(db, { tipo: 'venta', referencia_id: saleId, referencia_tipo: 'sale', usuario: sellerName || null, detalle: `Venta ${saleNumber}` })
     for (const it of items) {
       const lineGross = (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0)
       const lineDisc  = grossItems > 0 ? saleDiscount * lineGross / grossItems : 0
@@ -101,6 +104,7 @@ ipcMain.handle('sales:create', (_, {
       }
       updModTime.run(it.productId, sz)
     }
+    resetCtx(db)
 
     // Auto-record consignment sales
     try {
@@ -246,9 +250,12 @@ ipcMain.handle('sales:void', (_, payload) => {
   const items = db.prepare('SELECT * FROM sale_items WHERE sale_id=?').all(id)
 
   const run = db.transaction(() => {
+    // El stock que vuelve por anular una venta se registra como devolución.
+    setCtx(db, { tipo: 'devolucion', referencia_id: id, referencia_tipo: 'sale', detalle: `Anulación venta ${sale.sale_number || id}${reason ? ' — ' + reason : ''}` })
     for (const it of items)
       if (it.size !== 'N/A')
         db.prepare('UPDATE product_sizes SET stock=stock+? WHERE product_id=? AND size=?').run(it.quantity, it.product_id, it.size)
+    resetCtx(db)
 
     if (sale.payment_method === 'Cuenta Corriente' && sale.client_id) {
       db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(sale.total, sale.client_id)

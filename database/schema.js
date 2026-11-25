@@ -808,6 +808,93 @@ function createTables(db) {
     CREATE INDEX IF NOT EXISTS idx_saved_reports_kind ON saved_reports(kind, created_at DESC);
   `)
 
+  // ─── Historial de movimientos de mercadería (v1.46.0) ──────────────────────
+  // stock_movements: una fila por cada cambio de stock (la escribe un trigger).
+  // stock_ctx (fila única id=1): contexto del cambio actual que setea la operación.
+  // Los triggers se recrean en cada arranque (DROP+CREATE) para poder evolucionar.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      tipo TEXT NOT NULL DEFAULT 'ajuste',   -- venta | cambio | devolucion | ajuste | ingreso | egreso | alta | seña | ...
+      product_id INTEGER,
+      product_name TEXT DEFAULT '',          -- snapshot del nombre (sobrevive a borrados/renombres)
+      size TEXT DEFAULT '',
+      color TEXT DEFAULT '',
+      cantidad INTEGER NOT NULL,             -- negativo = salida, positivo = entrada
+      stock_anterior INTEGER NOT NULL,
+      stock_nuevo INTEGER NOT NULL,
+      referencia_id INTEGER,                 -- id del comprobante (venta, cambio, egreso, …)
+      referencia_tipo TEXT,                  -- 'sale' | 'exchange' | 'stock_egreso' | 'inventory' | …
+      usuario TEXT,
+      detalle TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_mov_created ON stock_movements(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_stock_mov_product ON stock_movements(product_id);
+    CREATE INDEX IF NOT EXISTS idx_stock_mov_tipo    ON stock_movements(tipo);
+
+    CREATE TABLE IF NOT EXISTS stock_ctx (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      tipo TEXT DEFAULT 'ajuste',
+      referencia_id INTEGER,
+      referencia_tipo TEXT,
+      usuario TEXT,
+      detalle TEXT,
+      suppress INTEGER DEFAULT 0            -- 1 = no registrar (reestructuras internas)
+    );
+    INSERT OR IGNORE INTO stock_ctx (id, tipo, suppress) VALUES (1, 'ajuste', 0);
+
+    DROP TRIGGER IF EXISTS trg_stock_mov_update;
+    CREATE TRIGGER trg_stock_mov_update
+    AFTER UPDATE OF stock ON product_sizes
+    FOR EACH ROW
+    WHEN NEW.stock <> OLD.stock
+      AND COALESCE((SELECT suppress FROM stock_ctx WHERE id = 1), 0) = 0
+    BEGIN
+      INSERT INTO stock_movements
+        (tipo, product_id, product_name, size, color, cantidad, stock_anterior, stock_nuevo, referencia_id, referencia_tipo, usuario, detalle)
+      VALUES (
+        COALESCE((SELECT tipo FROM stock_ctx WHERE id = 1), 'ajuste'),
+        NEW.product_id,
+        COALESCE((SELECT name  FROM products WHERE id = NEW.product_id), ''),
+        NEW.size,
+        COALESCE((SELECT color FROM products WHERE id = NEW.product_id), ''),
+        NEW.stock - OLD.stock,
+        OLD.stock,
+        NEW.stock,
+        (SELECT referencia_id   FROM stock_ctx WHERE id = 1),
+        (SELECT referencia_tipo FROM stock_ctx WHERE id = 1),
+        (SELECT usuario         FROM stock_ctx WHERE id = 1),
+        (SELECT detalle         FROM stock_ctx WHERE id = 1)
+      );
+    END;
+
+    DROP TRIGGER IF EXISTS trg_stock_mov_insert;
+    CREATE TRIGGER trg_stock_mov_insert
+    AFTER INSERT ON product_sizes
+    FOR EACH ROW
+    WHEN NEW.stock <> 0
+      AND COALESCE((SELECT suppress FROM stock_ctx WHERE id = 1), 0) = 0
+    BEGIN
+      INSERT INTO stock_movements
+        (tipo, product_id, product_name, size, color, cantidad, stock_anterior, stock_nuevo, referencia_id, referencia_tipo, usuario, detalle)
+      VALUES (
+        COALESCE(NULLIF((SELECT tipo FROM stock_ctx WHERE id = 1), 'ajuste'), 'alta'),
+        NEW.product_id,
+        COALESCE((SELECT name  FROM products WHERE id = NEW.product_id), ''),
+        NEW.size,
+        COALESCE((SELECT color FROM products WHERE id = NEW.product_id), ''),
+        NEW.stock,
+        0,
+        NEW.stock,
+        (SELECT referencia_id   FROM stock_ctx WHERE id = 1),
+        (SELECT referencia_tipo FROM stock_ctx WHERE id = 1),
+        (SELECT usuario         FROM stock_ctx WHERE id = 1),
+        (SELECT detalle         FROM stock_ctx WHERE id = 1)
+      );
+    END;
+  `)
+
   const migrations = [
     "ALTER TABLE clients ADD COLUMN points INTEGER DEFAULT 0",
     "ALTER TABLE sales ADD COLUMN installments INTEGER DEFAULT 1",

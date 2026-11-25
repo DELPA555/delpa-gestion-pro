@@ -402,6 +402,10 @@ export const api = {
   valuation: {
     data: () => inv('valuation:data'),
   },
+  stockMovements: {
+    list:    (f) => inv('stockmov:list', f),
+    filters: ()  => inv('stockmov:filters'),
+  },
   vouchers: {
     list:     (p)    => inv('voucher:list', p),
     create:   (d)    => inv('voucher:create', d),

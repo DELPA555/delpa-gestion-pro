@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 function getOrderNumber(db) {
   const year = new Date().getFullYear()
@@ -107,6 +108,8 @@ ipcMain.handle('supplierorders:convertToEntry', (_, id) => {
       grouped[key].sizes.push({ size: it.size || 'N/A', qty: Number(it.qty) || 0 })
     }
 
+    // Recepción de pedido a proveedor = INGRESO de mercadería.
+    setCtx(db, { tipo: 'ingreso', referencia_tipo: 'stock_entry', usuario: order.supplier_name || null, detalle: `Ingreso desde pedido ${order.order_number}` })
     for (const item of Object.values(grouped)) {
       if (!item.product_id) continue
       for (const sz of item.sizes) {
@@ -121,6 +124,7 @@ ipcMain.handle('supplierorders:convertToEntry', (_, id) => {
         try { db.prepare('UPDATE product_sizes SET stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?').run(item.product_id, size) } catch {}
       }
     }
+    resetCtx(db)
 
     const { lastInsertRowid } = db.prepare(`
       INSERT INTO stock_entries (supplier_id,supplier_name,date,notes,total,items_json)

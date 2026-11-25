@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 function nextRemitoNumber(db) {
   const year = new Date().getFullYear()
@@ -70,6 +71,7 @@ ipcMain.handle('remito:updateStatus', (_, { id, status, applyStock }) => {
     if (status === 'entregado' && applyStock && remito.type === 'transferencia') {
       let items = []
       try { items = JSON.parse(remito.items_json || '[]') } catch {}
+      setCtx(db, { tipo: 'transferencia', referencia_id: id, referencia_tipo: 'remito', detalle: `Remito ${remito.number} (transferencia)` })
       for (const item of items) {
         const pid = item.product_id
         const sz = item.size
@@ -86,6 +88,7 @@ ipcMain.handle('remito:updateStatus', (_, { id, status, applyStock }) => {
             .run(qty, pid, sz)
         }
       }
+      resetCtx(db)
     }
 
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('UPDATE','remitos',?,?)`)

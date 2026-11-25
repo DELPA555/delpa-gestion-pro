@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 // Columnas para multi-producto (idempotente — DBs viejas siguen funcionando)
 function ensureExchangeColumns(db) {
@@ -59,7 +60,26 @@ ipcMain.handle('exchanges:create', (_, data) => {
   const totalPaid       = difference + surchargeAmount
 
   const run = db.transaction(() => {
+    // Insertamos el cambio PRIMERO para tener su id y referenciarlo en el historial
+    // de movimientos de stock (ambos lados del cambio apuntan a este comprobante).
+    const finalResolution = difference > 0 ? 'paid' : difference < 0 ? (resolution === 'credit' ? 'credit' : 'cash') : 'even'
+    const r0 = returned[0], n0 = nuevos[0]
+    const { lastInsertRowid } = db.prepare(`
+      INSERT INTO product_exchanges
+        (client_id,client_name,returned_product_id,returned_product_name,returned_size,returned_qty,returned_price,
+         new_product_id,new_product_name,new_size,new_qty,new_price,difference,resolution,notes,seller_name,
+         returned_items_json,new_items_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      clientId || null, clientName || '',
+      r0.product_id, r0.product_name, r0.size, returned.reduce((s, i) => s + i.qty, 0), r0.price,
+      n0.product_id, n0.product_name, n0.size, nuevos.reduce((s, i) => s + i.qty, 0), n0.price,
+      difference, finalResolution, notes || '', sellerName || '',
+      JSON.stringify(returned), JSON.stringify(nuevos)
+    )
+
     // ── Productos devueltos: SUMAR stock (UPSERT — el talle puede no existir) ──
+    setCtx(db, { tipo: 'cambio', referencia_id: lastInsertRowid, referencia_tipo: 'exchange', usuario: sellerName || null, detalle: `Cambio #${lastInsertRowid} — devuelto por ${clientName || 'cliente'}` })
     for (const it of returned) {
       if (!it.size || it.size === 'N/A') continue
       const before = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
@@ -73,6 +93,7 @@ ipcMain.handle('exchanges:create', (_, data) => {
     }
 
     // ── Productos nuevos: RESTAR stock (MAX 0, no negativo) ───────────────────
+    setCtx(db, { tipo: 'cambio', referencia_id: lastInsertRowid, referencia_tipo: 'exchange', usuario: sellerName || null, detalle: `Cambio #${lastInsertRowid} — entregado a ${clientName || 'cliente'}` })
     for (const it of nuevos) {
       if (!it.size || it.size === 'N/A') continue
       const row = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
@@ -87,6 +108,7 @@ ipcMain.handle('exchanges:create', (_, data) => {
       const after = db.prepare('SELECT stock FROM product_sizes WHERE product_id=? AND size=?').get(it.product_id, it.size)
       console.log(`[Exchange] NUEVO: "${it.product_name}" T.${it.size} x${it.qty} | ${row.stock} → ${after?.stock}`)
     }
+    resetCtx(db)
 
     // ── Diferencia ────────────────────────────────────────────────────────────
     const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
@@ -109,25 +131,6 @@ ipcMain.handle('exchanges:create', (_, data) => {
           .run(cashbox.id, `Devolución dif. cambio — ${clientName || 'cliente'}`, owed, paymentMethod || 'Efectivo')
       }
     }
-
-    // Resolución final calculada
-    const finalResolution = difference > 0 ? 'paid' : difference < 0 ? (resolution === 'credit' ? 'credit' : 'cash') : 'even'
-
-    // Primer item de cada lado en columnas legacy (compat con listados existentes)
-    const r0 = returned[0], n0 = nuevos[0]
-    const { lastInsertRowid } = db.prepare(`
-      INSERT INTO product_exchanges
-        (client_id,client_name,returned_product_id,returned_product_name,returned_size,returned_qty,returned_price,
-         new_product_id,new_product_name,new_size,new_qty,new_price,difference,resolution,notes,seller_name,
-         returned_items_json,new_items_json)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).run(
-      clientId || null, clientName || '',
-      r0.product_id, r0.product_name, r0.size, returned.reduce((s, i) => s + i.qty, 0), r0.price,
-      n0.product_id, n0.product_name, n0.size, nuevos.reduce((s, i) => s + i.qty, 0), n0.price,
-      difference, finalResolution, notes || '', sellerName || '',
-      JSON.stringify(returned), JSON.stringify(nuevos)
-    )
 
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description,new_data) VALUES ('CREATE','exchanges',?,'Cambio de mercadería',?)`)
       .run(lastInsertRowid, JSON.stringify({ returned: returned.length, nuevos: nuevos.length, difference, resolution: finalResolution }))
@@ -174,12 +177,16 @@ ipcMain.handle('returns:create', (_, data) => {
   const total = (items || []).reduce((s, it) => s + (it.qty || 1) * (it.unit_price || 0), 0)
 
   const run = db.transaction(() => {
+    // La mercadería que vuelve al stock por una devolución queda referenciada a la
+    // venta de origen (de qué venta proviene, según pide la vista de historial).
+    setCtx(db, { tipo: 'devolucion', referencia_id: originalSaleId || null, referencia_tipo: 'sale', usuario: sellerName || null, detalle: `Devolución${clientName ? ' — ' + clientName : ''}${reason ? ' (' + reason + ')' : ''}` })
     for (const it of items || []) {
       if (it.size && it.size !== 'N/A') {
         db.prepare('UPDATE product_sizes SET stock=stock+? WHERE product_id=? AND size=?')
           .run(it.qty || 1, it.product_id, it.size)
       }
     }
+    resetCtx(db)
 
     if (resolution === 'credit' && clientId) {
       db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(total, clientId)

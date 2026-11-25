@@ -1,4 +1,14 @@
 {
+  "v1.46.0": {
+    "fecha": "2026-11-25",
+    "titulo": "Historial de movimientos de mercadería",
+    "novedades": [
+      "Nueva pantalla 'Mov. Stock' (menú lateral, solo administrador): un historial completo de todos los cambios de stock. Cada fila muestra la fecha y hora, el tipo de movimiento, el producto (nombre, talle y color), la cantidad que entró o salió, el stock anterior y el nuevo, y a qué comprobante corresponde.",
+      "Registra automáticamente las ventas (incluidas las de Tienda Nube), los cambios (lo que vuelve y lo que sale), las devoluciones, los ingresos de mercadería (remitos, compras y pedidos a proveedores), los egresos, las señas y los ajustes manuales o por recuento de inventario.",
+      "Filtros por rango de fechas, tipo de movimiento, categoría y búsqueda por texto, con botón para exportar todo a Excel.",
+      "Empieza a registrar desde esta actualización en adelante (los movimientos anteriores no se reconstruyen). No necesitás hacer nada: se activa solo."
+    ]
+  },
   "v1.44.2": {
     "fecha": "2026-11-17",
     "titulo": "Buscador de ventas siempre listo + seleccionar todos los productos",

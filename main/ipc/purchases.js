@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 ipcMain.handle('purchases:list', (_, { page = 1, limit = 25, supplierId } = {}) => {
   const db = getDB()
@@ -33,6 +34,8 @@ ipcMain.handle('purchases:create', (_, { supplierId, invoiceNumber, items, total
     `).run(supplierId || null, invoiceNumber || '', total, paid || 0, dueDate || '', notes || '',
         (paid || 0) >= total ? 'paid' : 'pending')
 
+    // El stock que suma una compra es un INGRESO de mercadería.
+    setCtx(db, { tipo: 'ingreso', referencia_id: purchaseId, referencia_tipo: 'purchase', detalle: `Compra${invoiceNumber ? ' ' + invoiceNumber : ''}` })
     for (const it of items) {
       db.prepare('INSERT INTO purchase_items (purchase_id,product_id,product_name,size,quantity,unit_cost) VALUES (?,?,?,?,?,?)')
         .run(purchaseId, it.productId, it.productName, it.size, it.quantity, it.unitCost)
@@ -40,6 +43,7 @@ ipcMain.handle('purchases:create', (_, { supplierId, invoiceNumber, items, total
       db.prepare('UPDATE product_sizes SET stock=stock+? WHERE product_id=? AND size=?').run(it.quantity, it.productId, it.size)
       if (it.unitCost > 0) db.prepare('UPDATE products SET cost=? WHERE id=?').run(it.unitCost, it.productId)
     }
+    resetCtx(db)
 
     const remaining = total - (paid || 0)
     if (supplierId && remaining > 0)

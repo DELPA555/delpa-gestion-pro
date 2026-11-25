@@ -1,5 +1,6 @@
 const { ipcMain, shell, BrowserWindow } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 const http = require('http')
 
 const APP_ID = '32496'
@@ -615,6 +616,9 @@ ipcMain.handle('tn:importOrder', async (_, tnOrderId) => {
       const notFound = []   // productos que no se pudieron mapear a DELPA
       const lowStock = []   // productos mapeados sin stock suficiente al descontar
 
+      // Las bajas de stock de una orden web se registran como venta online.
+      setCtx(db, { tipo: 'venta_online', referencia_tipo: 'tn_order', detalle: `Tienda Nube #${order.number}` })
+
       for (const p of order.products || []) {
         const pName = String(p.name || '').trim()
         const size  = p.variant_values?.join(' / ') || 'N/A'
@@ -670,6 +674,7 @@ ipcMain.handle('tn:importOrder', async (_, tnOrderId) => {
           }
         }
       }
+      resetCtx(db)
 
       const importStatus = lowStock.length > 0 ? 'warning' : 'ok'
       const { lastInsertRowid } = db.prepare(`

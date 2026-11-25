@@ -1,6 +1,7 @@
 const { ipcMain, dialog } = require('electron')
 const fs   = require('fs')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 function genEAN13(id) {
   const base = '779' + String(id).padStart(9, '0')
@@ -397,7 +398,10 @@ ipcMain.handle('products:update', (_, { id, ...data }) => {
     if (sizes.length > 0) {
       const validSizes = sizes.filter(s => s.size && String(s.size).trim() !== '')
       const upsert = db.prepare(`INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,?) ON CONFLICT(product_id,size) DO UPDATE SET stock=excluded.stock,min_stock=excluded.min_stock`)
+      // Un cambio de stock al editar el producto es un ajuste manual (atribuido al usuario).
+      setCtx(db, { tipo: 'ajuste', usuario: changedBy || null, detalle: `Ajuste manual — ${name}` })
       for (const s of validSizes) upsert.run(id, s.size, s.stock || 0, s.min_stock || 2)
+      resetCtx(db)
       if (validSizes.length > 0) {
         const names = validSizes.map(s => s.size)
         db.prepare(`DELETE FROM product_sizes WHERE product_id=? AND size NOT IN (${names.map(() => '?').join(',')})`)
@@ -517,11 +521,15 @@ ipcMain.handle('products:bulkAction', (_, payload = {}) => {
           const totalStmt = db.prepare('SELECT COALESCE(SUM(stock),0) s, COALESCE(MAX(min_stock),0) m FROM product_sizes WHERE product_id=?')
           const del = db.prepare('DELETE FROM product_sizes WHERE product_id=?')
           const ins = db.prepare("INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,?)")
+          // Reestructura interna (consolidar talles en 'Único'): el stock total no cambia,
+          // así que NO se registra como movimiento.
+          setCtx(db, { suppress: 1 })
           for (const id of ids) {
             const t = totalStmt.get(id)
             del.run(id)
             ins.run(id, 'Único', t.s || 0, t.m || 0)
           }
+          resetCtx(db)
         }
       } else if (action === 'applyDiscount') {
         const pct = Math.max(0, Math.min(99, Number(value) || 0))

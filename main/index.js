@@ -170,6 +170,7 @@ function bootServerOrStandalone(mc, mode) {
   require('./ipc/supplieranalytics')
   require('./ipc/supplierStock')
   require('./ipc/stockReport')
+  require('./ipc/stockmovements')
   require('./ipc/valuation')
   require('./ipc/informes')
   require('./ipc/onboarding')

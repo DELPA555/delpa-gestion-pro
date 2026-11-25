@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
+const { setCtx, resetCtx } = require('../lib/stockMovements')
 
 function genEAN13(id) {
   const base = '779' + String(id).padStart(9, '0')
@@ -85,6 +86,9 @@ ipcMain.handle('stockentry:create', (_, data) => {
   const run = db.transaction(() => {
     const processedItems = []
 
+    // Estas altas de stock son un INGRESO de mercadería (remito/proveedor).
+    setCtx(db, { tipo: 'ingreso', referencia_tipo: 'stock_entry', usuario: supplier_name || null, detalle: `Ingreso de mercadería${supplier_name ? ' — ' + supplier_name : ''}` })
+
     for (const item of items) {
       let productId = Number(item.product_id) || null
       let productName = item.product_name || ''
@@ -149,6 +153,8 @@ ipcMain.handle('stockentry:create', (_, data) => {
         is_consignment: !!item.is_consignment,
       })
     }
+
+    resetCtx(db)
 
     const entryIsConsignment = processedItems.some(i => i.is_consignment) ? 1 : 0
     const { lastInsertRowid } = db.prepare(`
