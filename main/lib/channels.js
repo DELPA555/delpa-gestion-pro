@@ -123,6 +123,8 @@ const CHANNELS = [
   'reset:info', 'reset:execute', 'reset:factory', 'reset:relaunch',
   // Multi-caja / red local (v1.43.0)
   'multicaja:get', 'multicaja:set', 'multicaja:testConnection', 'multicaja:regenToken',
+  // Portal web (v1.47.0)
+  'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin',
 ]
 
 /* Canales que en modo CLIENTE NO se reenvían por HTTP: operan sobre la propia PC
@@ -133,6 +135,7 @@ const LOCAL_CHANNELS = new Set([
   'updater:checkManual', 'updater:openReleasePage', 'updater:downloadAndInstall', 'updater:getCurrentVersion',
   'reset:relaunch',
   'multicaja:get', 'multicaja:set', 'multicaja:testConnection', 'multicaja:regenToken',
+  'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin',
 ])
 
 module.exports = { CHANNELS, LOCAL_CHANNELS }

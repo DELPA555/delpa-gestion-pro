@@ -475,4 +475,11 @@ export const api = {
     testConnection: (p)   => inv('multicaja:testConnection', p),
     regenToken:     ()    => inv('multicaja:regenToken'),
   },
+  portal: {
+    status: ()    => inv('portal:status'),
+    start:  ()    => inv('portal:start'),
+    stop:   ()    => inv('portal:stop'),
+    setPin: (pin) => inv('portal:setPin', pin),
+    getPin: ()    => inv('portal:getPin'),
+  },
 }

@@ -1,4 +1,13 @@
 {
+  "v1.47.0": {
+    "fecha": "2026-11-25",
+    "titulo": "Red por código entre sucursales + Portal web desde el celular",
+    "novedades": [
+      "Red de locales por 'código de red': ahora podés compartir el stock entre sucursales aunque tengan CUITs distintos. En Configuración → Red de locales poné el mismo código en cada local (ej: DELPA-MARIA-2026) y en Sucursales → 'Stock de red' ves el stock de todas. Cada local sigue con su propia base y su propio CUIT para facturar en AFIP.",
+      "Nuevo Portal web (Configuración → Portal web, solo administrador): activá un enlace para ver tu negocio desde el celular o la tablet, sin instalar nada. Muestra las ventas del día, la caja, el stock y los últimos movimientos.",
+      "El portal es de SOLO LECTURA (desde ahí no se puede vender ni modificar nada) y está protegido por un PIN de 4 a 6 dígitos que elegís vos. El enlace se puede apagar cuando quieras y su dirección cambia cada vez que lo reiniciás."
+    ]
+  },
   "v1.46.0": {
     "fecha": "2026-11-25",
     "titulo": "Historial de movimientos de mercadería",

@@ -45,6 +45,7 @@ ipcMain.handle('network:status', () => {
   return {
     hardwareId: String(getHardwareId() || ''),
     cuit: getSetting('business_cuit').trim(),
+    networkCode: getSetting('network_code').trim(),
     branchName: getSetting('branch_name').trim() || getSetting('business_name').trim(),
     branchType: getSetting('branch_type').trim(),
     shareStock: getSetting('branch_share_stock') !== '0',
@@ -62,9 +63,16 @@ ipcMain.handle('network:syncNow', () => {
 // Usa action=getNetwork (el script viejo ya tiene un getStock propio, el de Drive).
 // Devuelve { ok, cuit, nodes:[{ hwid, branchName, branchType, version, updatedAt, stock:[...] }] }.
 ipcMain.handle('network:getStock', async () => {
+  // Se agrupa por "código de red" si está configurado (permite CUITs distintos);
+  // si no, por CUIT (comportamiento clásico de la red de locales).
+  const networkCode = getSetting('network_code').trim()
   const cuit = getSetting('business_cuit').trim()
-  if (!cuit) throw new Error('Configurá el CUIT del negocio en Configuración → Negocio para usar la red de locales.')
-  const url = `${PING_URL}?action=getNetwork&cuit=${encodeURIComponent(cuit)}`
+  if (!networkCode && !cuit) {
+    throw new Error('Configurá un "código de red" (Configuración → Red de locales) o el CUIT del negocio para usar la red de locales.')
+  }
+  const url = networkCode
+    ? `${PING_URL}?action=getNetwork&code=${encodeURIComponent(networkCode)}`
+    : `${PING_URL}?action=getNetwork&cuit=${encodeURIComponent(cuit)}`
   let res
   try {
     res = await httpGetJson(url)
@@ -78,6 +86,7 @@ ipcMain.handle('network:getStock', async () => {
   return {
     ok: true,
     cuit,
+    networkCode,
     thisHwid,
     nodes: Array.isArray(res.nodes) ? res.nodes : [],
   }

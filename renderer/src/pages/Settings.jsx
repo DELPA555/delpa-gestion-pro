@@ -53,6 +53,7 @@ const TAB_GROUPS = [
       { id: 'modulos',           label: 'Módulos activos', Icon: ToggleRight, adminOnly: true },
       { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
       { id: 'multicaja',         label: 'Multi-caja',      Icon: Network, adminOnly: true, mod: 'multicaja' },
+      { id: 'portal',            label: 'Portal web',      Icon: Globe, adminOnly: true },
       { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
       { id: 'logstecnicos',      label: 'Logs técnicos',   Icon: ScrollText, adminOnly: true },
       { id: 'ayuda',             label: 'Tutorial y ayuda', Icon: HelpCircle },
@@ -253,7 +254,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
 
   // Red de locales (multi-nodo por CUIT)
-  const [netCfg, setNetCfg] = useState({ branch_type: '', branch_name: '', branch_share_stock: '1' })
+  const [netCfg, setNetCfg] = useState({ branch_type: '', branch_name: '', branch_share_stock: '1', network_code: '' })
   const [netInfo, setNetInfo] = useState(null)   // { hardwareId, cuit, lastSyncAt }
   const [netSaving, setNetSaving] = useState(false)
   const [netSyncing, setNetSyncing] = useState(false)
@@ -376,6 +377,7 @@ export default function Settings() {
         branch_type:        all.branch_type        || '',
         branch_name:        all.branch_name         || '',
         branch_share_stock: all.branch_share_stock ?? '1',
+        network_code:       all.network_code        || '',
       })
       api.network.status().then(setNetInfo).catch(() => {})
       setEmailForm({
@@ -2453,26 +2455,44 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
           <div>
             <h3 className="text-white font-medium flex items-center gap-2"><Network size={16} className="text-accent" /> Red de locales</h3>
             <p className="text-sm text-zinc-500 mt-1">
-              Conectá esta instalación con tus otras sucursales y depósito. Cada local tiene su propia base de datos;
-              se comparten el stock a través del CUIT. Configurá qué tipo de nodo es este local.
+              Conectá esta instalación con tus otras sucursales y depósito. Cada local tiene su propia base de datos
+              y su propio CUIT para facturar. Para compartir el stock, poné el mismo <span className="text-zinc-300">código de red</span>
+              en todas las sucursales (así se agrupan aunque tengan CUITs distintos). Si no usás código, se agrupan por CUIT.
             </p>
           </div>
 
-          {/* CUIT (identificador de la red) */}
-          {netInfo && !netInfo.cuit ? (
+          {/* Identificador de la red: código de red o, si no hay, CUIT */}
+          {netInfo && !netInfo.cuit && !netCfg.network_code ? (
             <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-sm text-amber-300 flex items-start gap-3">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-amber-200">Falta el CUIT del negocio</p>
-                <p className="mt-1 text-amber-300/80">La red identifica a tus locales por el CUIT. Cargalo en <span className="font-medium">Configuración → Negocio</span> (el mismo CUIT en todas las sucursales).</p>
+                <p className="font-medium text-amber-200">Falta un identificador de red</p>
+                <p className="mt-1 text-amber-300/80">Poné un <span className="font-medium">código de red</span> abajo (para sucursales con CUITs distintos) o cargá el CUIT del negocio en <span className="font-medium">Configuración → Negocio</span>.</p>
               </div>
             </div>
           ) : netInfo && (
             <div className="flex items-center gap-2 text-sm text-zinc-400 bg-card border border-border rounded-lg px-4 py-2.5">
               <ShieldCheck size={14} className="text-emerald-400" />
-              CUIT de la red: <span className="text-white font-mono">{netInfo.cuit}</span>
+              {netCfg.network_code
+                ? <>Red por código: <span className="text-white font-mono">{netCfg.network_code}</span></>
+                : <>CUIT de la red: <span className="text-white font-mono">{netInfo.cuit}</span></>}
             </div>
           )}
+
+          {/* Código de red (multi-CUIT) */}
+          <div>
+            <label className={labelCls}>Código de red <span className="text-zinc-500 font-normal">(opcional, para sucursales con CUITs distintos)</span></label>
+            <input
+              className={cn(inputCls, 'font-mono tracking-wide')}
+              value={netCfg.network_code}
+              onChange={e => setNetCfg(p => ({ ...p, network_code: e.target.value.toUpperCase().replace(/[^A-Z0-9\-]/g, '') }))}
+              placeholder="Ej: DELPA-MARIA-2026" maxLength={40} />
+            <p className="text-xs text-zinc-600 mt-1">
+              Poné el <span className="text-zinc-400">mismo código</span> en cada sucursal que quiera compartir stock.
+              Funciona como clave de la red: solo los locales con el mismo código se ven entre sí, sin importar su CUIT.
+              Dejalo vacío para agrupar por CUIT (como antes).
+            </p>
+          </div>
 
           {/* Tipo de nodo */}
           <div>
@@ -2524,7 +2544,7 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
             <button onClick={saveNet} disabled={netSaving} className="btn-primary no-drag px-5 py-2 text-sm rounded-lg disabled:opacity-50">
               {netSaving ? 'Guardando...' : 'Guardar configuración'}
             </button>
-            <button onClick={netSyncNow} disabled={netSyncing || (netInfo && !netInfo.cuit)}
+            <button onClick={netSyncNow} disabled={netSyncing || (netInfo && !netInfo.cuit && !netCfg.network_code)}
               className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-300 hover:text-white hover:bg-white/[0.05] disabled:opacity-50">
               <RefreshCw size={14} className={netSyncing ? 'animate-spin' : ''} /> {netSyncing ? 'Enviando...' : 'Subir mi stock ahora'}
             </button>
@@ -2810,6 +2830,7 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
 
       {/* ── Tab: Multi-caja / red local (solo admin) ── */}
       {tab === 'multicaja' && sessionUser?.role === 'admin' && <TabMultiCaja />}
+      {tab === 'portal' && sessionUser?.role === 'admin' && <TabPortal />}
 
       {/* ── Tab: Datos y reseteo (solo admin) ── */}
       {tab === 'reseteo' && sessionUser?.role === 'admin' && <TabReseteo />}
@@ -2828,6 +2849,118 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
         finishLabel={guide?.finishLabel || '✅ Entendido'}
       />
     </motion.div>
+  )
+}
+
+// ── Portal web (solo lectura, túnel Cloudflare) ───────────────────────────────────
+
+function TabPortal() {
+  const [status, setStatus] = useState(null)
+  const [pin, setPin] = useState('')
+  const [savingPin, setSavingPin] = useState(false)
+  const [working, setWorking] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const reload = () => api.portal.status().then(setStatus).catch(() => {})
+  useEffect(() => {
+    reload()
+    api.portal.getPin().then(r => setPin(r?.pin || '')).catch(() => {})
+  }, [])
+
+  const savePin = async () => {
+    setSavingPin(true)
+    try {
+      const r = await api.portal.setPin(pin)
+      if (r?.ok) { toast.success('PIN guardado'); reload() }
+      else toast.error(r?.error || 'PIN inválido')
+    } finally { setSavingPin(false) }
+  }
+
+  const start = async () => {
+    setWorking(true)
+    try {
+      const r = await api.portal.start()
+      if (r?.ok) toast.success('Portal activado')
+      else toast.error(r?.error || 'No se pudo activar')
+    } catch (e) { toast.error(e.message || 'Error') }
+    finally { setWorking(false); reload() }
+  }
+  const stop = async () => {
+    setWorking(true)
+    try { await api.portal.stop(); toast.success('Portal desactivado') }
+    finally { setWorking(false); reload() }
+  }
+  const copy = async () => {
+    if (!status?.url) return
+    try { await navigator.clipboard.writeText(status.url); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch {}
+  }
+
+  const active = !!status?.active
+  const pinValid = /^\d{4,6}$/.test(pin)
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div>
+        <h3 className="text-base font-semibold text-white flex items-center gap-2"><Globe size={16} className="text-accent" /> Portal web</h3>
+        <p className="text-sm text-zinc-500 mt-1">
+          Un enlace web para ver tu negocio desde el celular o la tablet, sin instalar nada.
+          Muestra ventas del día, caja, stock y últimos movimientos. Es <span className="text-zinc-300">solo lectura</span>:
+          desde el portal no se puede vender ni modificar nada.
+        </p>
+      </div>
+
+      {/* PIN */}
+      <div>
+        <label className={labelCls}>PIN de acceso (4 a 6 dígitos)</label>
+        <div className="flex gap-2 mt-1">
+          <input className={cn(inputCls, 'max-w-[160px] font-mono tracking-widest')} value={pin} inputMode="numeric"
+            onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Ej: 1234" />
+          <button onClick={savePin} disabled={savingPin || !pinValid}
+            className="btn-primary no-drag px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+            {savingPin ? 'Guardando…' : 'Guardar PIN'}
+          </button>
+        </div>
+        <p className="text-xs text-zinc-600 mt-1">Quien entre al portal necesita este PIN. Cambialo cuando quieras.</p>
+      </div>
+
+      {/* Activar / estado */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-white text-sm font-medium">Portal web</p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {active ? 'Activo — el enlace de abajo funciona.' : 'Apagado.'}
+            </p>
+          </div>
+          {active
+            ? <button onClick={stop} disabled={working} className="no-drag text-sm px-4 py-2 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50">{working ? '…' : 'Desactivar'}</button>
+            : <button onClick={start} disabled={working || !status?.hasPin} className="btn-primary no-drag px-4 py-2 text-sm rounded-lg disabled:opacity-50">{working ? 'Abriendo túnel…' : 'Activar portal'}</button>}
+        </div>
+
+        {!status?.hasPin && !active && (
+          <p className="text-xs text-amber-400">Guardá un PIN antes de activar el portal.</p>
+        )}
+
+        {active && status?.url && (
+          <div className="flex items-center gap-2 bg-[#0a0a0a] border border-border rounded-lg px-3 py-2">
+            <Globe size={14} className="text-emerald-400 shrink-0" />
+            <a href={status.url} target="_blank" rel="noreferrer" className="text-sm text-emerald-300 hover:underline truncate flex-1">{status.url}</a>
+            <button onClick={copy} className="no-drag text-zinc-400 hover:text-white">{copied ? <CheckCircle size={14} className="text-accent" /> : <Copy size={14} />}</button>
+          </div>
+        )}
+
+        {status?.lastError && !active && (
+          <p className="text-xs text-red-400">{status.lastError}</p>
+        )}
+      </div>
+
+      <div className="text-xs text-zinc-600 space-y-1 border-t border-border pt-4">
+        <p>• El enlace es público pero secreto y protegido por tu PIN. Compartilo solo con quien quieras.</p>
+        <p>• La dirección cambia cada vez que reiniciás el portal o la app (es normal del túnel gratuito).</p>
+        <p>• La primera activación descarga un componente (~30 MB) una sola vez; puede tardar un momento.</p>
+        <p>• Podés desactivarlo cuando quieras: el enlace deja de funcionar al instante.</p>
+      </div>
+    </div>
   )
 }
 

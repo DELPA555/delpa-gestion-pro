@@ -23,7 +23,9 @@ const STOCK_FILE_ID = '1V0czSGrD_kGTqKLIcrO40XihljxzDQU-';
 
 // Hoja de la red de locales (segunda hoja del Sheet).
 const RED_SHEET = 'Red';
-const RED_HEADERS = ['hwid', 'cuit', 'businessName', 'branchName', 'branchType', 'version', 'stockJson', 'updatedAt'];
+// networkCode se agrega al final (col 9) para no mover los indices existentes.
+// Permite agrupar sucursales con CUITs distintos por un "codigo de red" compartido.
+const RED_HEADERS = ['hwid', 'cuit', 'businessName', 'branchName', 'branchType', 'version', 'stockJson', 'updatedAt', 'networkCode'];
 
 // Hoja principal (telemetria/licencias): SIEMPRE la primera hoja del Sheet.
 function getMainSheet_() {
@@ -40,6 +42,9 @@ function getRedSheet_() {
     sh.getRange(1, 1, 1, RED_HEADERS.length).setValues([RED_HEADERS]);
     ss.setActiveSheet(ss.getSheets()[0]); // restaurar activa = principal
   } else if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, RED_HEADERS.length).setValues([RED_HEADERS]);
+  } else if (sh.getLastColumn() < RED_HEADERS.length) {
+    // Migracion: hojas creadas antes de agregar 'networkCode' tienen menos columnas.
     sh.getRange(1, 1, 1, RED_HEADERS.length).setValues([RED_HEADERS]);
   }
   return sh;
@@ -77,7 +82,8 @@ function upsertRedNode_(data) {
     String(data.branchType || (existing ? existing[4] : '') || ''),
     String(data.version || (existing ? existing[5] : '') || ''),
     stockJson,
-    new Date().toISOString()
+    new Date().toISOString(),
+    String(data.networkCode || (existing ? existing[8] : '') || '')
   ];
 
   if (rowIndex > 0) {
@@ -122,7 +128,7 @@ function doPost(e) {
     // --- Red de locales: si el ping trae CUIT, guardamos tambien en la hoja "Red".
     // Envuelto en su propio try para que un error de red NUNCA rompa la telemetria.
     try {
-      if (data.hardwareId && String(data.cuit || '').trim()) {
+      if (data.hardwareId && (String(data.cuit || '').trim() || String(data.networkCode || '').trim())) {
         upsertRedNode_(data);
       }
     } catch(errRed) { /* ignorar: la telemetria ya se guardo */ }
@@ -156,8 +162,10 @@ function doGet(e) {
   // Sin contrasena (lo consume cada instalacion cliente).
   if (e.parameter.action === 'getNetwork') {
     try {
+      // Se puede filtrar por "code" (codigo de red, multi-CUIT) o por "cuit" (clasico).
+      const code = String(e.parameter.code || '').trim();
       const cuit = String(e.parameter.cuit || '').trim();
-      if (!cuit) return respond({ok:false, error:'cuit requerido'});
+      if (!code && !cuit) return respond({ok:false, error:'code o cuit requerido'});
       const sh = getRedSheet_();
       const lastRow = sh.getLastRow();
       const nodes = [];
@@ -165,7 +173,11 @@ function doGet(e) {
         const rows = sh.getRange(2, 1, lastRow - 1, RED_HEADERS.length).getValues();
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
-          if (String(r[1]).trim() !== cuit) continue; // columna cuit
+          if (code) {
+            if (String(r[8] || '').trim() !== code) continue; // columna networkCode
+          } else {
+            if (String(r[1]).trim() !== cuit) continue;        // columna cuit
+          }
           let stock = [];
           try { stock = JSON.parse(r[6] || '[]'); } catch(_) { stock = []; }
           nodes.push({
@@ -178,7 +190,7 @@ function doGet(e) {
           });
         }
       }
-      return respond({ok:true, cuit: cuit, nodes: nodes});
+      return respond({ok:true, code: code, cuit: cuit, nodes: nodes});
     } catch(err) {
       return respond({ok:false, error: err.message});
     }

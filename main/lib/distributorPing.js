@@ -80,8 +80,12 @@ function pingDistributor() {
     const { licenseStatus, daysLeft } = getLicenseData(db)
     const pkg = require('../../package.json')
 
-    // ── Red de locales (multi-nodo por CUIT) ──
+    // ── Red de locales (multi-nodo) ──
+    // Agrupación por CUIT (clásico) o por "código de red" (multi-CUIT): si hay código,
+    // los nodos se agrupan por código sin importar el CUIT de cada uno (cada local
+    // mantiene su CUIT propio para facturar en AFIP).
     const cuit = getSetting(db, 'business_cuit').trim()
+    const networkCode = getSetting(db, 'network_code').trim()
     const branchType = getSetting(db, 'branch_type').trim()          // sucursal | deposito | ambos
     const branchName = getSetting(db, 'branch_name').trim() || businessName
     const shareStock = getSetting(db, 'branch_share_stock') !== '0'
@@ -96,12 +100,13 @@ function pingDistributor() {
       lastSale: lastSale ? lastSale.created_at : null,
       // Campos de red — el Apps Script los ignora si no están definidos
       cuit,
+      networkCode,
       branchName,
       branchType,
     }
 
-    // Solo subimos stock si hay CUIT y el nodo tiene compartir habilitado
-    if (cuit && shareStock) {
+    // Subimos stock si el nodo comparte y pertenece a una red (por código o por CUIT).
+    if (shareStock && (networkCode || cuit)) {
       payload.stockSnapshot = buildStockSnapshot(db)
       try {
         db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('network_last_sync',?)")

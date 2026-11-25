@@ -178,7 +178,14 @@ function bootServerOrStandalone(mc, mode) {
   require('./ipc/pausedsales')
   require('./ipc/training')
   require('./ipc/reset')
+  require('./ipc/portal') // portal web de solo lectura (túnel Cloudflare)
   ipcMain.handle = origHandle // fin de la captura del registro de handlers
+
+  // Al cerrar la app, bajar el portal/túnel si quedó abierto.
+  try {
+    const { app } = require('electron')
+    app.on('before-quit', () => { try { require('./ipc/portal').stopPortalOnQuit() } catch {} })
+  } catch {}
 
   const { runPointsExpiry } = require('./ipc/pointsMaintenance')
   try { runPointsExpiry() } catch (e) { console.error('[POINTS] expiry on startup:', e.message) }
