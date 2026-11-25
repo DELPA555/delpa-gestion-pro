@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
+import { hiddenRoutes, isModuleEnabled } from '@/lib/modules'
 
 const NAV_ADMIN = [
   { to: '/dashboard',    label: 'Dashboard',       Icon: LayoutDashboard },
@@ -53,16 +54,23 @@ const NAV_VENDEDOR = [
 
 export default function Sidebar() {
   const { user, logout } = useAuth()
-  const NAV = user?.role === 'admin' ? NAV_ADMIN : NAV_VENDEDOR
+  const NAV_ALL = user?.role === 'admin' ? NAV_ADMIN : NAV_VENDEDOR
   const [biz, setBiz] = useState({ name: 'DELPA', logo: '' })
+  const [hidden, setHidden] = useState(() => new Set())
+  const [tnEnabled, setTnEnabled] = useState(false)
   const [tnOrderCount, setTnOrderCount] = useState(0)
   const [senasPending, setSenasPending] = useState(0)
   const [waitlistPending, setWaitlistPending] = useState(0)
+
+  // Oculta del menú las entradas de los módulos desactivados (los datos no se tocan).
+  const NAV = NAV_ALL.filter(item => !hidden.has(item.to))
 
   const loadBiz = useCallback(async () => {
     try {
       const all = await api.settings.getAll()
       setBiz({ name: all.business_name || 'DELPA', logo: all.business_logo || '' })
+      setHidden(hiddenRoutes(all))
+      setTnEnabled(isModuleEnabled(all, 'tiendanube'))
     } catch {}
   }, [])
 
@@ -123,7 +131,7 @@ export default function Sidebar() {
                   className={isActive ? 'text-accent' : ''}
                 />
                 {label}
-                {to === '/ventas' && tnOrderCount > 0 && (
+                {to === '/ventas' && tnEnabled && tnOrderCount > 0 && (
                   <span
                     title={`${tnOrderCount} ${tnOrderCount === 1 ? 'orden pendiente' : 'órdenes pendientes'} de importar de Tienda Nube`}
                     className="ml-auto text-[10px] bg-red-500 text-white font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0">

@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import QRCodeLib from 'qrcode'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap, Network, Warehouse, Boxes, ScrollText } from 'lucide-react'
+import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap, Network, Warehouse, Boxes, ScrollText, ToggleRight } from 'lucide-react'
 import { api } from '@/lib/api'
+import { MODULES, moduleKey, isModuleEnabled } from '@/lib/modules'
 import { cn, formatDateTime } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
@@ -40,8 +41,8 @@ const TAB_GROUPS = [
     label: 'Integraciones',
     items: [
       { id: 'email',        label: 'Email',         Icon: Mail },
-      { id: 'afip',         label: 'AFIP',          Icon: ShieldCheck },
-      { id: 'tiendanube',   label: 'Tienda Nube',   Icon: Store },
+      { id: 'afip',         label: 'AFIP',          Icon: ShieldCheck, mod: 'afip' },
+      { id: 'tiendanube',   label: 'Tienda Nube',   Icon: Store, mod: 'tiendanube' },
       { id: 'mercadopago',  label: 'Mercado Pago',  Icon: QrCode },
       { id: 'payments',     label: 'Pagos & Drive', Icon: CreditCard },
     ],
@@ -49,8 +50,9 @@ const TAB_GROUPS = [
   {
     label: 'Sistema',
     items: [
+      { id: 'modulos',           label: 'Módulos activos', Icon: ToggleRight, adminOnly: true },
       { id: 'licencia',          label: 'Licencia',        Icon: ShieldAlert },
-      { id: 'multicaja',         label: 'Multi-caja',      Icon: Network, adminOnly: true },
+      { id: 'multicaja',         label: 'Multi-caja',      Icon: Network, adminOnly: true, mod: 'multicaja' },
       { id: 'actualizaciones',   label: 'Actualizaciones', Icon: ArrowUpCircle },
       { id: 'logstecnicos',      label: 'Logs técnicos',   Icon: ScrollText, adminOnly: true },
       { id: 'ayuda',             label: 'Tutorial y ayuda', Icon: HelpCircle },
@@ -325,6 +327,12 @@ export default function Settings() {
   const [licenseActivating, setLicenseActivating] = useState(false)
   const [licenseCopied, setLicenseCopied] = useState(false)
 
+  // Módulos activables/desactivables
+  const [moduleFlags, setModuleFlags] = useState(() => {
+    const mf = {}; for (const m of MODULES) mf[m.key] = m.default === '1'; return mf
+  })
+  const [moduleSaving, setModuleSaving] = useState('')
+
   const load = useCallback(async () => {
     try {
       const all = await api.settings.getAll()
@@ -349,6 +357,8 @@ export default function Settings() {
       setPaymentMethods(JSON.parse(all.custom_payment_methods || '[]'))
       try { setSurcharges({ ...DEFAULT_SURCHARGES, ...JSON.parse(all.surcharges_json || '{}') }) } catch {}
       setPriceDisplayMode(all.price_display_mode || '0')
+      const mf = {}; for (const m of MODULES) mf[m.key] = isModuleEnabled(all, m.key)
+      setModuleFlags(mf)
       api.sellers.list().then(setSellers).catch(() => {})
       setPointsForm({
         points_enabled:   all.points_enabled   || '0',
@@ -765,6 +775,22 @@ export default function Settings() {
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
+  // Activa/desactiva un módulo. Guarda al instante en SQLite; el evento
+  // settings:changed hace que el menú lateral se actualice sin reiniciar.
+  const toggleModule = async (key, val) => {
+    setModuleFlags(p => ({ ...p, [key]: val }))   // optimista
+    setModuleSaving(key)
+    try {
+      await api.settings.set(moduleKey(key), val ? '1' : '0')
+      toast.success(val ? 'Módulo activado' : 'Módulo desactivado')
+    } catch {
+      setModuleFlags(p => ({ ...p, [key]: !val }))  // revertir si falla
+      toast.error('No se pudo guardar el cambio')
+    } finally {
+      setModuleSaving('')
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -782,7 +808,10 @@ export default function Settings() {
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.filter(it => !it.adminOnly || sessionUser?.role === 'admin').map(({ id, label, Icon }) => (
+                {group.items
+                  .filter(it => !it.adminOnly || sessionUser?.role === 'admin')
+                  .filter(it => !it.mod || moduleFlags[it.mod])
+                  .map(({ id, label, Icon }) => (
                   <button
                     key={id}
                     onClick={() => setTab(id)}
@@ -2622,6 +2651,74 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
               {weeklySending ? 'Enviando...' : 'Enviar resumen ahora'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ── Tab: Módulos activos ── */}
+      {tab === 'modulos' && sessionUser?.role === 'admin' && (
+        <div className="max-w-2xl space-y-4">
+          <div className="p-4 rounded-xl border border-border bg-[#0a0a0a]">
+            <div className="flex items-start gap-3">
+              <ToggleRight size={20} className="text-accent shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-semibold text-white">Módulos activos</h3>
+                <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                  Activá sólo las funciones que usa tu negocio para simplificar la interfaz.
+                  Los módulos desactivados desaparecen del menú al instante, sin reiniciar.
+                  <span className="text-zinc-400"> Desactivar nunca borra datos ni credenciales</span>:
+                  si lo volvés a activar, todo sigue como estaba.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-[#0a0a0a] divide-y divide-border">
+            {MODULES.map(m => {
+              const enabled = m.locked ? true : !!moduleFlags[m.key]
+              return (
+                <div key={m.key} className="flex items-center gap-4 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-white">{m.label}</span>
+                      {m.locked && (
+                        <span className="text-[10px] uppercase tracking-wider text-accent bg-accent/10 border border-accent/20 rounded px-1.5 py-0.5">
+                          Siempre activo
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-0.5">{m.desc}</p>
+                  </div>
+                  {m.locked ? (
+                    <Lock size={16} className="text-zinc-600 shrink-0" />
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={moduleSaving === m.key}
+                      onClick={() => toggleModule(m.key, !enabled)}
+                      role="switch"
+                      aria-checked={enabled}
+                      aria-label={`${enabled ? 'Desactivar' : 'Activar'} ${m.label}`}
+                      className={cn(
+                        'no-drag relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50',
+                        enabled ? 'bg-accent' : 'bg-zinc-700'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+                          enabled && 'translate-x-5'
+                        )}
+                      />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-[11px] text-zinc-600 px-1">
+            Ventas y Productos son el núcleo del sistema y no se pueden desactivar.
+          </p>
         </div>
       )}
 

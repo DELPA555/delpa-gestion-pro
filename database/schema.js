@@ -994,6 +994,39 @@ function createTables(db) {
   addColumnIfMissing(db, 'products', 'price_tarjeta',      'REAL NOT NULL DEFAULT 0')
   // Por ítem de venta: qué precio se usó ('normal' = precio del tier / público; 'tarjeta' = precio de lista).
   addColumnIfMissing(db, 'sale_items', 'price_mode',       "TEXT DEFAULT 'normal'")
+
+  // ── Módulos activables/desactivables (v1.45.1) ───────────────────────────────
+  // Cada módulo se guarda como settings mod_<key> = '1' (activo) / '0' (inactivo).
+  // Semilla idempotente (INSERT OR IGNORE): NO pisa lo que el admin ya haya elegido.
+  // Ventas y Productos son núcleo: no tienen flag (siempre activos).
+  // En instalaciones existentes, si un módulo opcional YA se está usando arranca
+  // activado, para no esconderle al negocio una función que tenía en marcha.
+  try {
+    const hasRows = (sql) => { try { return !!db.prepare(sql).get() } catch { return false } }
+    const tnInUse   = hasRows("SELECT 1 FROM settings WHERE key='tn_access_token' AND value<>'' LIMIT 1")
+    const afipInUse = hasRows("SELECT 1 FROM settings WHERE key='afip_cert_cuit' AND value<>'' LIMIT 1")
+    const credInUse = hasRows('SELECT 1 FROM credits LIMIT 1')
+    const consInUse = hasRows('SELECT 1 FROM consignment_products LIMIT 1')
+    let mcInUse = false
+    try {
+      const Store = require('electron-store')
+      const c = new Store({ name: 'multi-caja' }).get('config')
+      mcInUse = !!(c && c.mode && c.mode !== 'standalone')
+    } catch {}
+    const moduleDefaults = [
+      ['mod_clientes',     '1'],
+      ['mod_caja',         '1'],
+      ['mod_proveedores',  '1'],
+      ['mod_informes',     '1'],
+      ['mod_creditos',     credInUse ? '1' : '0'],
+      ['mod_consignacion', consInUse ? '1' : '0'],
+      ['mod_tiendanube',   tnInUse   ? '1' : '0'],
+      ['mod_multicaja',    mcInUse   ? '1' : '0'],
+      ['mod_afip',         afipInUse ? '1' : '0'],
+    ]
+    const insMod = db.prepare('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)')
+    for (const [k, v] of moduleDefaults) insMod.run(k, v)
+  } catch (e) { console.error('[DB Migration] módulos:', e.message) }
   // Talle único / N/A (v1.42.8): productos sin talles (accesorios, bijouterie, etc.).
   // no_sizes=1 → se maneja una sola fila genérica ('Único'), sin grilla de talles.
   addColumnIfMissing(db, 'products', 'no_sizes', 'INTEGER DEFAULT 0')
