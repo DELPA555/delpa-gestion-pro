@@ -1,4 +1,11 @@
 {
+  "v1.48.1": {
+    "fecha": "2026-11-25",
+    "titulo": "Corrección: la pantalla de Ventas no abría",
+    "novedades": [
+      "Se corrige un error que impedía abrir la pantalla de Ventas en la 1.48.0 (\"Cannot access 'I' before initialization\"). Ya funciona normalmente; no se pierde ninguna de las novedades de la 1.48.0."
+    ]
+  },
   "v1.48.0": {
     "fecha": "2026-11-25",
     "titulo": "Rubro del negocio, ajuste manual de inventario y promociones",

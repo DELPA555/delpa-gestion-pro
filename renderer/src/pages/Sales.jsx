@@ -383,15 +383,6 @@ export default function Sales() {
   // Espejo del carrito para chequear existencia de un ítem dentro de callbacks memoizados.
   const cartRef = useRef([])
   useEffect(() => { cartRef.current = cart }, [cart])
-  // Promociones (v1.48.0): al cambiar el carrito, consultar qué promos aplican.
-  useEffect(() => {
-    const enabled = biz.mod_promotions === '1'
-    if (!enabled || cart.length === 0) { setPromoResult({ promos: [], totalDiscount: 0 }); return }
-    let on = true
-    const items = cart.map(it => ({ productId: it.productId, quantity: it.qty, unitPrice: Number(it.editedPrice) || 0 }))
-    api.promotions.check(items).then(r => { if (on) setPromoResult(r || { promos: [], totalDiscount: 0 }) }).catch(() => {})
-    return () => { on = false }
-  }, [cart, biz.mod_promotions])
   // Precio de lista (v1.45.0): cuando un producto tiene price_tarjeta>0, se pregunta qué precio usar.
   // { productName, size, normal, tarjeta, onPick(mode) } | null
   const [priceChoice, setPriceChoice] = useState(null)
@@ -599,6 +590,16 @@ export default function Sales() {
   const [redeemPoints, setRedeemPoints] = useState(false)
 
   const [biz, setBiz] = useState({})
+  // Promociones (v1.48.0): al cambiar el carrito, consultar qué promos aplican.
+  // Va DESPUÉS de declarar `biz` (su dependencia) para no entrar en la TDZ.
+  useEffect(() => {
+    const enabled = biz.mod_promotions === '1'
+    if (!enabled || cart.length === 0) { setPromoResult({ promos: [], totalDiscount: 0 }); return }
+    let on = true
+    const items = cart.map(it => ({ productId: it.productId, quantity: it.qty, unitPrice: Number(it.editedPrice) || 0 }))
+    api.promotions.check(items).then(r => { if (on) setPromoResult(r || { promos: [], totalDiscount: 0 }) }).catch(() => {})
+    return () => { on = false }
+  }, [cart, biz.mod_promotions])
   const [condFiscal, setCondFiscal] = useState('RI')
   const [facturaModal, setFacturaModal] = useState(false)
   // tipoCbte initialises to 0 — always overwritten by handleFacturar before modal opens
