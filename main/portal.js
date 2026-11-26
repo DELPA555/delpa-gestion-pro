@@ -132,14 +132,19 @@ function movementsData() {
 function buildApp() {
   const app = express()
   app.use(express.json({ limit: '256kb' }))
-  // Cabeceras de seguridad básicas.
+  // Cabeceras de seguridad básicas + anti-caché: el navegador no debe servir una
+  // versión vieja/vacía de una URL de túnel anterior (cada túnel es una URL nueva,
+  // pero algunos navegadores reusan la pestaña y cachean el blanco de un intento fallido).
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'no-referrer')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
     next()
   })
 
   app.get('/', (_req, res) => {
+    try { require('./ipc/techLogs').logTech('info', 'portal', 'GET / (portal) — sirviendo página, ' + PORTAL_HTML.length + ' bytes') } catch {}
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.send(PORTAL_HTML)
   })

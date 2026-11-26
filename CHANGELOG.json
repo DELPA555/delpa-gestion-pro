@@ -1,4 +1,11 @@
 {
+  "v1.48.4": {
+    "fecha": "2026-11-26",
+    "titulo": "Portal web: evitar que quede una página en blanco cacheada",
+    "novedades": [
+      "El Portal web ahora le indica al navegador que no guarde en caché la página, para que al abrir un enlace nuevo del túnel nunca muestre una versión vieja o en blanco de un intento anterior. Si alguna vez te apareció en blanco, con esto se soluciona (o probá refrescando la página)."
+    ]
+  },
   "v1.48.3": {
     "fecha": "2026-11-25",
     "titulo": "Corrección: el Portal web ahora abre el túnel correctamente",
