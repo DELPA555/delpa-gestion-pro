@@ -488,6 +488,7 @@ export const api = {
     stop:   ()    => inv('portal:stop'),
     setPin: (pin) => inv('portal:setPin', pin),
     getPin: ()    => inv('portal:getPin'),
+    pingNow: ()   => inv('portal:pingNow'),
   },
   promotions: {
     list:   ()    => inv('promotions:list'),

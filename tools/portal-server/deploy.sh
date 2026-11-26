@@ -38,7 +38,8 @@ cat > "$APP_DIR/package.json" <<'PKG'
   "dependencies": {
     "better-sqlite3": "^11.10.0",
     "express": "^4.21.2",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16"
   }
 }
 PKG
@@ -65,6 +66,7 @@ const crypto = require('crypto')
 const path = require('path')
 const fs = require('fs')
 const multer = require('multer')
+const nodemailer = require('nodemailer')
 
 const PORT = Number(process.env.PORT || 3000)
 const DB_PATH = path.join(__dirname, 'data.db')
@@ -106,7 +108,13 @@ db.exec(`
     updatedAt TEXT,
     PRIMARY KEY (networkCode, hwid)
   );
+  CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
+  CREATE TABLE IF NOT EXISTS email_alerts_sent ( slug TEXT, trigger_type TEXT, fecha TEXT, PRIMARY KEY (slug, trigger_type, fecha) );
 `)
+// Migración: columnas de alertas en nodes (idempotente).
+for (const col of ['alertEmail TEXT', 'ventaThreshold REAL', 'alertsJson TEXT', 'ventaMaxHoy REAL', 'prevStockJson TEXT']) {
+  try { db.exec('ALTER TABLE nodes ADD COLUMN ' + col) } catch {}
+}
 
 // ── PIN hasheado (scrypt, sin dependencias extra) ───────────────────────────────
 function hashPin(pin) {
@@ -167,11 +175,12 @@ app.post('/ping', (req, res) => {
   if (!pinHash) pinHash = hashPin('1234')
 
   db.prepare(`
-    INSERT INTO nodes (hwid,slug,businessName,cuit,networkCode,branchName,pinHash,stockJson,ventasHoy,cajaHoy,version,updatedAt)
-    VALUES (@hwid,@slug,@businessName,@cuit,@networkCode,@branchName,@pinHash,@stockJson,@ventasHoy,@cajaHoy,@version,@updatedAt)
+    INSERT INTO nodes (hwid,slug,businessName,cuit,networkCode,branchName,pinHash,stockJson,ventasHoy,cajaHoy,version,updatedAt,alertEmail,ventaThreshold,alertsJson,ventaMaxHoy)
+    VALUES (@hwid,@slug,@businessName,@cuit,@networkCode,@branchName,@pinHash,@stockJson,@ventasHoy,@cajaHoy,@version,@updatedAt,@alertEmail,@ventaThreshold,@alertsJson,@ventaMaxHoy)
     ON CONFLICT(hwid) DO UPDATE SET
       slug=@slug, businessName=@businessName, cuit=@cuit, networkCode=@networkCode, branchName=@branchName,
-      pinHash=@pinHash, stockJson=@stockJson, ventasHoy=@ventasHoy, cajaHoy=@cajaHoy, version=@version, updatedAt=@updatedAt
+      pinHash=@pinHash, stockJson=@stockJson, ventasHoy=@ventasHoy, cajaHoy=@cajaHoy, version=@version, updatedAt=@updatedAt,
+      alertEmail=@alertEmail, ventaThreshold=@ventaThreshold, alertsJson=@alertsJson, ventaMaxHoy=@ventaMaxHoy
   `).run({
     hwid: String(b.hwid), slug,
     businessName: String(b.businessName || ''), cuit: String(b.cuit || ''),
@@ -179,6 +188,8 @@ app.post('/ping', (req, res) => {
     pinHash, stockJson: JSON.stringify(b.stockSnapshot || []),
     ventasHoy: Number(b.ventasHoy) || 0, cajaHoy: Number(b.cajaHoy) || 0,
     version: String(b.version || ''), updatedAt: new Date().toISOString(),
+    alertEmail: String(b.alertEmail || ''), ventaThreshold: Number(b.ventaThreshold) || 0,
+    alertsJson: JSON.stringify(b.alerts || {}), ventaMaxHoy: Number(b.ventaMaxHoy) || 0,
   })
   res.json({ ok: true, slug, url: 'https://' + req.headers.host + '/portal/' + slug })
 })
@@ -331,6 +342,79 @@ app.get('/backup/:slug/latest', secretAuth, (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="' + latest + '"')
   fs.createReadStream(path.join(dir, latest)).pipe(res)
 })
+
+// ── Alertas por email (v1.52.0) ─────────────────────────────────────────────────
+function getS(key) { const r = db.prepare('SELECT value FROM settings WHERE key=?').get(key); return r ? r.value : '' }
+function setS(key, val) { db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run(key, String(val)) }
+
+// Configurar el SMTP del servidor (lo hace el dueño/proveedor una vez).
+app.post('/admin/smtp', secretAuth, (req, res) => {
+  const b = req.body || {}
+  for (const k of ['host', 'port', 'user', 'pass', 'from']) if (b[k] !== undefined) setS('smtp_' + k, b[k])
+  res.json({ ok: true })
+})
+
+function smtpTransport() {
+  const host = getS('smtp_host'), port = Number(getS('smtp_port')) || 587, user = getS('smtp_user'), pass = getS('smtp_pass')
+  if (!host || !user || !pass) return null
+  return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } })
+}
+function argHour() { try { return Number(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', hour12: false })) } catch { return new Date().getHours() } }
+function today() { return new Date().toISOString().slice(0, 10) }
+function alreadySent(slug, trig) { return !!db.prepare("SELECT 1 FROM email_alerts_sent WHERE slug=? AND trigger_type=? AND fecha=?").get(slug, trig, today()) }
+function markSent(slug, trig) { try { db.prepare('INSERT OR IGNORE INTO email_alerts_sent (slug,trigger_type,fecha) VALUES (?,?,?)').run(slug, trig, today()) } catch {} }
+function money(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-AR') }
+
+async function sendAlert(node, trig, subject, text) {
+  if (!node.alertEmail) return
+  if (alreadySent(node.slug, trig)) return
+  const t = smtpTransport()
+  if (!t) return // SMTP sin configurar → no se manda nada
+  try {
+    await t.sendMail({ from: getS('smtp_from') || getS('smtp_user'), to: node.alertEmail, subject: '[DELPA] ' + subject, text })
+    markSent(node.slug, trig)
+    console.log('[alerts] enviado ' + trig + ' -> ' + node.alertEmail)
+  } catch (e) { console.error('[alerts] error enviando ' + trig + ': ' + e.message) }
+}
+function alertsOn(node) { try { return JSON.parse(node.alertsJson || '{}') } catch { return {} } }
+
+async function runAlerts() {
+  try {
+    const nodes = db.prepare("SELECT * FROM nodes WHERE alertEmail IS NOT NULL AND alertEmail<>''").all()
+    const now = Date.now()
+    for (const n of nodes) {
+      const on = alertsOn(n)
+      const nombre = n.branchName || n.businessName || 'tu local'
+      // 1. Local offline > 2hs
+      if (on.offline !== false && n.updatedAt && (now - new Date(n.updatedAt).getTime()) > 2 * 60 * 60 * 1000) {
+        await sendAlert(n, 'offline', 'Local sin conexión', nombre + ' no reporta datos hace más de 2 horas. Revisá que la PC esté encendida y con internet.')
+      }
+      // 2. Stock a 0 (diff contra el snapshot anterior)
+      if (on.stock0 !== false) {
+        let prev = [], cur = []
+        try { prev = JSON.parse(n.prevStockJson || '[]') } catch {}
+        try { cur = JSON.parse(n.stockJson || '[]') } catch {}
+        if (prev.length) {
+          const curKeys = new Set(cur.map(p => (p.b || p.n || '')))
+          const zeroed = prev.filter(p => !curKeys.has(p.b || p.n || '')).map(p => p.n).filter(Boolean)
+          if (zeroed.length) await sendAlert(n, 'stock0', 'Productos sin stock', 'Estos productos llegaron a 0 unidades en ' + nombre + ': ' + zeroed.slice(0, 30).join(', ') + (zeroed.length > 30 ? '…' : ''))
+        }
+        try { db.prepare('UPDATE nodes SET prevStockJson=? WHERE hwid=?').run(n.stockJson || '[]', n.hwid) } catch {}
+      }
+      // 3. Venta grande (la mayor venta del día supera el umbral)
+      if (on.ventaGrande !== false) {
+        const thr = Number(n.ventaThreshold) || 50000
+        if (Number(n.ventaMaxHoy) > thr) await sendAlert(n, 'venta_grande', 'Venta grande', 'Se registró una venta de ' + money(n.ventaMaxHoy) + ' en ' + nombre + '.')
+      }
+      // 4. Caja cerrada (cajaHoy>0 y después de las 20hs de Argentina)
+      if (on.cajaCerrada !== false && Number(n.cajaHoy) > 0 && argHour() >= 20) {
+        await sendAlert(n, 'caja_cerrada', 'Resumen del día', 'Cierre del día en ' + nombre + ': ventas ' + money(n.ventasHoy) + ', caja ' + money(n.cajaHoy) + '.')
+      }
+    }
+  } catch (e) { console.error('[alerts] runAlerts: ' + e.message) }
+}
+setInterval(runAlerts, 30 * 60 * 1000)
+setTimeout(runAlerts, 60 * 1000)
 
 app.get('/', (_req, res) => res.send('DELPA Portal · OK'))
 

@@ -25,11 +25,13 @@ function getSetting(db, key) {
 
 // Ventas del día (total facturado, sin anuladas) y efectivo en la caja abierta.
 function computeVentasCaja(db) {
-  let ventasHoy = 0, cajaHoy = 0
+  let ventasHoy = 0, cajaHoy = 0, ventaMaxHoy = 0
   try {
-    ventasHoy = db.prepare(
-      "SELECT COALESCE(SUM(total),0) t FROM sales WHERE voided=0 AND date(created_at,'localtime')=date('now','localtime')"
-    ).get().t || 0
+    const r = db.prepare(
+      "SELECT COALESCE(SUM(total),0) t, COALESCE(MAX(total),0) m FROM sales WHERE voided=0 AND date(created_at,'localtime')=date('now','localtime')"
+    ).get()
+    ventasHoy = r.t || 0
+    ventaMaxHoy = r.m || 0
   } catch {}
   try {
     const cb = db.prepare("SELECT id, opening_cash FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
@@ -40,7 +42,7 @@ function computeVentasCaja(db) {
       cajaHoy = (Number(cb.opening_cash) || 0) + (Number(mov.n) || 0)
     }
   } catch {}
-  return { ventasHoy, cajaHoy }
+  return { ventasHoy, cajaHoy, ventaMaxHoy }
 }
 
 // Envía el ping al servidor central. base = { hwid, businessName, cuit, networkCode, branchName, version, stockSnapshot }.
@@ -49,7 +51,9 @@ function pingCentralPortal(db, base) {
     const pin = getSetting(db, 'portal_pin').trim()
     if (!pin) return // sin portal configurado → no registrar ni enviar datos
 
-    const { ventasHoy, cajaHoy } = computeVentasCaja(db)
+    const { ventasHoy, cajaHoy, ventaMaxHoy } = computeVentasCaja(db)
+    let alerts = {}
+    try { alerts = JSON.parse(getSetting(db, 'portal_alerts') || '{}') } catch {}
     const payload = {
       hwid: base.hwid,
       businessName: base.businessName || '',
@@ -57,9 +61,13 @@ function pingCentralPortal(db, base) {
       networkCode: base.networkCode || '',
       branchName: base.branchName || '',
       stockSnapshot: base.stockSnapshot || [],
-      ventasHoy, cajaHoy,
+      ventasHoy, cajaHoy, ventaMaxHoy,
       version: base.version || '',
       pin,
+      // Config de alertas por email (se configura en Ajustes → Portal web).
+      alertEmail: getSetting(db, 'portal_alert_email').trim(),
+      ventaThreshold: Number(getSetting(db, 'portal_venta_threshold')) || 50000,
+      alerts,
     }
     const body = JSON.stringify(payload)
     const u = new URL(CENTRAL_URL)

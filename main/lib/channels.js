@@ -126,7 +126,7 @@ const CHANNELS = [
   // Multi-caja / red local (v1.43.0)
   'multicaja:get', 'multicaja:set', 'multicaja:testConnection', 'multicaja:regenToken',
   // Portal web (v1.47.0)
-  'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin',
+  'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin', 'portal:pingNow',
   // Promociones (v1.48.0)
   'promotions:list', 'promotions:create', 'promotions:update', 'promotions:delete', 'promotions:check',
 ]
@@ -139,7 +139,7 @@ const LOCAL_CHANNELS = new Set([
   'updater:checkManual', 'updater:openReleasePage', 'updater:downloadAndInstall', 'updater:getCurrentVersion',
   'reset:relaunch',
   'multicaja:get', 'multicaja:set', 'multicaja:testConnection', 'multicaja:regenToken',
-  'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin',
+  'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin', 'portal:pingNow',
 ])
 
 module.exports = { CHANNELS, LOCAL_CHANNELS }

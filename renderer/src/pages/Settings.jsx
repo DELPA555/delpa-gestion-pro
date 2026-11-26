@@ -2907,6 +2907,10 @@ function TabPortal() {
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [bkp, setBkp] = useState(null)      // { lastAt, configured }
   const [bkpBusy, setBkpBusy] = useState('')  // '' | 'up' | 'down'
+  const [alertEmail, setAlertEmail] = useState('')
+  const [ventaThreshold, setVentaThreshold] = useState('50000')
+  const [alerts, setAlerts] = useState({ offline: true, stock0: true, ventaGrande: true, cajaCerrada: true })
+  const [savingAlerts, setSavingAlerts] = useState(false)
 
   const reload = () => api.portal.status().then(setStatus).catch(() => {})
   const reloadBkp = () => api.backup.status().then(setBkp).catch(() => {})
@@ -2915,7 +2919,22 @@ function TabPortal() {
     api.portal.getPin().then(r => setPin(r?.pin || '')).catch(() => {})
     api.settings.get('portal_central_url').then(v => setCentralUrl(v || '')).catch(() => {})
     reloadBkp()
+    api.settings.get('portal_alert_email').then(v => setAlertEmail(v || '')).catch(() => {})
+    api.settings.get('portal_venta_threshold').then(v => { if (v) setVentaThreshold(v) }).catch(() => {})
+    api.settings.get('portal_alerts').then(v => { try { if (v) setAlerts(a => ({ ...a, ...JSON.parse(v) })) } catch {} }).catch(() => {})
   }, [])
+  const saveAlerts = async () => {
+    setSavingAlerts(true)
+    try {
+      await api.settings.set('portal_alert_email', alertEmail.trim())
+      await api.settings.set('portal_venta_threshold', String(Number(ventaThreshold) || 50000))
+      await api.settings.set('portal_alerts', JSON.stringify(alerts))
+      try { await api.portal.pingNow() } catch {}
+      toast.success('Notificaciones guardadas')
+    } catch { toast.error('No se pudo guardar') }
+    finally { setSavingAlerts(false) }
+  }
+  const toggleAlert = (k) => setAlerts(a => ({ ...a, [k]: !a[k] }))
   const doBackupNow = async () => {
     setBkpBusy('up')
     try {
@@ -3089,6 +3108,37 @@ function TabPortal() {
           </button>
         </div>
         {!bkp?.configured && <p className="text-[11px] text-amber-400 mt-2">Disponible cuando el equipo esté registrado en el servidor (guardá un PIN de portal y esperá unos minutos).</p>}
+      </div>
+
+      {/* Notificaciones por email */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <p className="text-white text-sm font-medium">Notificaciones por email</p>
+        <p className="text-xs text-zinc-500">El servidor te avisa por mail cuando pasa algo importante en tu negocio.</p>
+        <div>
+          <label className={labelCls}>Email para las alertas</label>
+          <input type="email" className={inputCls} value={alertEmail} onChange={e => setAlertEmail(e.target.value)} placeholder="tucorreo@gmail.com" />
+        </div>
+        <div className="max-w-[220px]">
+          <label className={labelCls}>Avisar ventas mayores a $</label>
+          <input type="number" min="0" className={inputCls} value={ventaThreshold} onChange={e => setVentaThreshold(e.target.value)} />
+        </div>
+        <div className="space-y-1.5 pt-1">
+          {[
+            ['offline', 'Local sin conexión por más de 2 horas'],
+            ['stock0', 'Un producto se quedó sin stock'],
+            ['ventaGrande', 'Venta grande (supera el monto de arriba)'],
+            ['cajaCerrada', 'Resumen del día (al cierre, pasadas las 20hs)'],
+          ].map(([k, label]) => (
+            <label key={k} className="flex items-center gap-2 text-sm text-zinc-300">
+              <input type="checkbox" checked={!!alerts[k]} onChange={() => toggleAlert(k)} className="w-4 h-4 accent-[var(--accent,#6366f1)]" />
+              {label}
+            </label>
+          ))}
+        </div>
+        <button onClick={saveAlerts} disabled={savingAlerts} className="btn-primary no-drag px-5 py-2 text-sm rounded-lg disabled:opacity-50">
+          {savingAlerts ? 'Guardando…' : 'Guardar notificaciones'}
+        </button>
+        <p className="text-[11px] text-zinc-600">Máximo un aviso por tipo por día. Requiere que el servidor tenga configurado el envío de correo.</p>
       </div>
     </div>
   )

@@ -1,4 +1,11 @@
 {
+  "v1.52.0": {
+    "fecha": "2026-11-26",
+    "titulo": "Notificaciones por email al dueño",
+    "novedades": [
+      "El servidor puede avisarte por email cuando pasa algo importante: un local quedó sin conexión por más de 2 horas, un producto se quedó sin stock, se hizo una venta grande (monto configurable), o el resumen del día al cierre. Se configura en Configuración → Portal web: cargás tu email, el monto de 'venta grande' y qué avisos querés recibir. Máximo un aviso por tipo por día."
+    ]
+  },
   "v1.50.1": {
     "fecha": "2026-11-26",
     "titulo": "El enlace permanente del portal aparece al guardar el PIN",

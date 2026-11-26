@@ -36,4 +36,10 @@ ipcMain.handle('portal:setPin', (_e, pin) => {
 
 ipcMain.handle('portal:getPin', () => ({ pin: getSetting('portal_pin'), hasPin: !!getSetting('portal_pin').trim() }))
 
+// Dispara un ping inmediato al servidor central (p. ej. al cambiar la config de alertas).
+ipcMain.handle('portal:pingNow', () => {
+  try { require('../lib/centralPortalPing').pingNow(getDB()); return { ok: true } }
+  catch (e) { return { ok: false, error: e.message } }
+})
+
 module.exports = { stopPortalOnQuit: () => { try { return portal.stopPortal() } catch { return null } } }
