@@ -17,6 +17,7 @@ export default function Accounts() {
   const [movements, setMovements] = useState([])
   const [payModal, setPayModal] = useState(null)
   const [payAmt, setPayAmt] = useState('')
+  const [payMethod, setPayMethod] = useState('Efectivo')
 
   const load = async () => {
     setLoading(true)
@@ -34,7 +35,7 @@ export default function Accounts() {
 
   const registerPayment = async () => {
     if (!payAmt || Number(payAmt) <= 0) return toast.error('Monto inválido')
-    await api.clients.addPayment({ clientId: payModal.id, amount: Number(payAmt) })
+    await api.clients.addPayment({ clientId: payModal.id, amount: Number(payAmt), paymentMethod: payMethod })
     toast.success('Pago registrado')
     setPayModal(null)
     load()
@@ -73,7 +74,7 @@ export default function Accounts() {
                 </span>
                 <div className="flex gap-1">
                   {a.balance > 0 && (
-                    <button onClick={() => { setPayModal(a); setPayAmt('') }} className="p-1.5 text-zinc-600 hover:text-green-400 rounded" title="Registrar pago">
+                    <button onClick={() => { setPayModal(a); setPayAmt(''); setPayMethod('Efectivo') }} className="p-1.5 text-zinc-600 hover:text-green-400 rounded" title="Registrar pago">
                       <DollarSign size={13} />
                     </button>
                   )}
@@ -114,6 +115,15 @@ export default function Accounts() {
           <div>
             <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Monto $</label>
             <input type="number" min="0" step="0.01" className={inputCls} value={payAmt} onChange={e => setPayAmt(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Medio de pago</label>
+            <select className={inputCls} value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+              <option>Efectivo</option>
+              <option>Transferencia</option>
+              <option>Débito</option>
+              <option>Crédito</option>
+            </select>
           </div>
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">

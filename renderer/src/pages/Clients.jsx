@@ -69,6 +69,7 @@ export default function Clients() {
   const [pointsStatus, setPointsStatus] = useState(null)
   const [payModal, setPayModal] = useState(null)
   const [payAmt, setPayAmt] = useState('')
+  const [payMethod, setPayMethod] = useState('Efectivo')
 
   // Import
   const [importing, setImporting] = useState(false)
@@ -123,7 +124,7 @@ export default function Clients() {
     setPointsStatus(st)
     setHistModal(c)
   }
-  const openPayment = (c) => { setPayModal(c); setPayAmt('') }
+  const openPayment = (c) => { setPayModal(c); setPayAmt(''); setPayMethod('Efectivo') }
 
   const save = async () => {
     if (!form.name.trim()) return toast.error('El nombre es requerido')
@@ -143,7 +144,7 @@ export default function Clients() {
 
   const registerPayment = async () => {
     if (!payAmt || Number(payAmt) <= 0) return toast.error('Ingresá un monto válido')
-    await api.clients.addPayment({ clientId:payModal.id, amount:Number(payAmt) })
+    await api.clients.addPayment({ clientId:payModal.id, amount:Number(payAmt), paymentMethod: payMethod })
     toast.success(`Pago de ${formatCurrency(Number(payAmt))} registrado`)
     setPayModal(null); loadList()
   }
@@ -511,6 +512,15 @@ export default function Clients() {
           <div>
             <label className={labelCls}>Monto del pago $</label>
             <input type="number" min="0" step="0.01" className={inputCls} value={payAmt} onChange={e => setPayAmt(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label className={labelCls}>Medio de pago</label>
+            <select className={inputCls} value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+              <option>Efectivo</option>
+              <option>Transferencia</option>
+              <option>Débito</option>
+              <option>Crédito</option>
+            </select>
           </div>
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">

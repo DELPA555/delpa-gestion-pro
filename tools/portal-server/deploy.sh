@@ -166,10 +166,10 @@ app.post('/ping', (req, res) => {
 
 // ── GET /portal/:slug — página del portal (login + dashboard, una sola página) ───
 app.get('/portal/:slug', (req, res) => {
-  const node = db.prepare('SELECT slug, businessName FROM nodes WHERE slug=?').get(req.params.slug)
+  const node = db.prepare('SELECT slug, businessName, networkCode FROM nodes WHERE slug=?').get(req.params.slug)
   if (!node) return res.status(404).send('<p style="font:16px system-ui;padding:24px">Negocio no encontrado.</p>')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
-  res.send(PORTAL_HTML(node.slug, node.businessName))
+  res.send(PORTAL_HTML(node.slug, node.businessName, !!String(node.networkCode || '').trim()))
 })
 
 // ── Login por slug (rate-limited) ────────────────────────────────────────────────
@@ -218,13 +218,29 @@ app.get('/api/:slug/ventas', auth, (req, res) => {
   const n = db.prepare('SELECT ventasHoy, cajaHoy, updatedAt FROM nodes WHERE slug=?').get(req.params.slug)
   res.json(n || {})
 })
+// "Mi Red": todos los locales con el mismo networkCode. No pide PIN extra (ya está
+// autenticado con el PIN del slug). Si el local no tiene networkCode, devuelve vacío.
+app.get('/api/:slug/red', auth, (req, res) => {
+  const me = db.prepare('SELECT networkCode FROM nodes WHERE slug=?').get(req.params.slug)
+  const code = String((me && me.networkCode) || '').trim()
+  if (!code) return res.json({ networkCode: '', nodes: [] })
+  const rows = db.prepare('SELECT slug, businessName, branchName, ventasHoy, cajaHoy, stockJson, updatedAt FROM nodes WHERE networkCode=? ORDER BY branchName, businessName').all(code)
+  const now = Date.now()
+  const nodes = rows.map(r => {
+    let units = 0
+    try { units = (JSON.parse(r.stockJson || '[]')).reduce((s, p) => s + (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0), 0) } catch {}
+    const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 20 * 60 * 1000) : false
+    return { nombre: r.branchName || r.businessName || 'Local', online, ventasHoy: Number(r.ventasHoy) || 0, cajaHoy: Number(r.cajaHoy) || 0, unidades: units, esYo: r.slug === req.params.slug }
+  })
+  res.json({ networkCode: code, nodes })
+})
 
 app.get('/', (_req, res) => res.send('DELPA Portal · OK'))
 
 app.listen(PORT, '127.0.0.1', () => console.log('DELPA Portal escuchando en 127.0.0.1:' + PORT))
 
 // ── HTML del portal (una sola página, mobile-first) ──────────────────────────────
-function PORTAL_HTML(slug, businessName) {
+function PORTAL_HTML(slug, businessName, hasNet) {
   const biz = String(businessName || 'DELPA').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   return `<!doctype html>
 <html lang="es"><head>
@@ -264,7 +280,7 @@ function PORTAL_HTML(slug, businessName) {
       <div><h1 id="biz" style="margin:0">${biz}</h1><span class="mut" style="font-size:12px">Solo lectura</span></div>
       <button class="sec" style="width:auto;padding:8px 12px" id="btnOut">Salir</button>
     </div>
-    <div class="tabs"><button data-t="dash" class="on">Resumen</button><button data-t="stock">Stock</button></div>
+    <div class="tabs"><button data-t="dash" class="on">Resumen</button><button data-t="stock">Stock</button>${hasNet ? '<button data-t="red">Mi Red</button>' : ''}</div>
     <div id="view"></div>
   </div>
 </div>
@@ -288,7 +304,15 @@ function PORTAL_HTML(slug, businessName) {
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'),function(x){x.classList.remove('on')}); b.classList.add('on'); show(b.getAttribute('data-t')); }; });
   function show(t){ var v=document.getElementById('view'); v.innerHTML='<p class="mut">Cargando…</p>';
     if(t==='dash') api('/status').then(renderDash).catch(fail);
-    if(t==='stock') renderStock(); }
+    if(t==='stock') renderStock();
+    if(t==='red') api('/red').then(renderRed).catch(fail); }
+  function renderRed(d){ var ns=d.nodes||[];
+    if(!ns.length){document.getElementById('view').innerHTML='<div class="card mut">Todavía no hay locales reportando en tu red.</div>';return}
+    var tv=ns.reduce(function(s,n){return s+(Number(n.ventasHoy)||0)},0), tc=ns.reduce(function(s,n){return s+(Number(n.cajaHoy)||0)},0);
+    var rows=ns.map(function(n){ var dot=n.online?'<span style="color:var(--ok)">●</span>':'<span style="color:var(--mut)">●</span>';
+      return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>'+esc(n.nombre)+'</b>'+(n.esYo?' <span class="mut" style="font-size:11px">(este local)</span>':'')+'</div><div style="font-size:12px">'+dot+' '+(n.online?'Online':'Offline')+'</div></div>'+
+        '<div class="kpi" style="margin-top:10px"><div class="b"><div class="n">'+money(n.ventasHoy)+'</div><div class="l">Ventas hoy</div></div><div class="b"><div class="n">'+money(n.cajaHoy)+'</div><div class="l">Caja</div></div><div class="b"><div class="n">'+n.unidades+'</div><div class="l">Unid. en stock</div></div></div></div>'; }).join('');
+    document.getElementById('view').innerHTML='<div class="card"><h2>Total de la red</h2><div class="kpi"><div class="b"><div class="n">'+money(tv)+'</div><div class="l">Ventas hoy</div></div><div class="b"><div class="n">'+money(tc)+'</div><div class="l">Caja</div></div><div class="b"><div class="n">'+ns.length+'</div><div class="l">Locales</div></div></div></div>'+rows; }
   function fail(){document.getElementById('view').innerHTML='<p class="neg">No se pudo cargar.</p>'}
   function renderDash(d){ document.getElementById('view').innerHTML=
     '<div class="card"><h2>Hoy</h2><div class="kpi">'+

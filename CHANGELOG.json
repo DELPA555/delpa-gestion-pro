@@ -1,4 +1,12 @@
 {
+  "v1.49.2": {
+    "fecha": "2026-11-26",
+    "titulo": "Medio de pago al cobrar cuenta corriente + Mi Red en el portal",
+    "novedades": [
+      "Al cobrar una deuda de cuenta corriente ahora elegís el medio de pago (Efectivo, Transferencia, Débito o Crédito). El ingreso entra a la caja con ese medio, así el arqueo refleja correctamente cómo pagó el cliente.",
+      "Portal web: si tu negocio tiene varias sucursales en red (mismo código de red), el dueño ve una sección 'Mi Red' con todos los locales — estado online/offline, ventas del día, caja y unidades en stock de cada uno — entrando una sola vez con su PIN."
+    ]
+  },
   "v1.49.1": {
     "fecha": "2026-11-26",
     "titulo": "El cobro de cuenta corriente entra a la caja",
