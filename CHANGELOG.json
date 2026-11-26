@@ -1,4 +1,11 @@
 {
+  "v1.50.1": {
+    "fecha": "2026-11-26",
+    "titulo": "El enlace permanente del portal aparece al guardar el PIN",
+    "novedades": [
+      "Corrección del Portal web: al guardar el PIN, ahora el enlace permanente (https://portal.delpagestion.com.ar/tu-negocio) aparece en unos segundos, sin tener que esperar ni reiniciar. Antes solo se registraba cada 15 minutos."
+    ]
+  },
   "v1.50.0": {
     "fecha": "2026-11-26",
     "titulo": "Sincronización de red propia + Backup en la nube",

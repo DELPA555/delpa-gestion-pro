@@ -83,15 +83,41 @@ function pingCentralPortal(db, base) {
             // Guardar el slug y la URL fija para mostrarlos en Ajustes → Portal web.
             db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('portal_central_slug',?)").run(String(j.slug))
             db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('portal_central_url',?)").run(String(j.url || ('https://portal.delpagestion.com.ar/portal/' + j.slug)))
+            console.log('[portal] ping OK — slug=' + j.slug)
+          } else {
+            console.error('[portal] ping sin slug (HTTP ' + res.statusCode + '): ' + String(data).slice(0, 200))
           }
-        } catch {}
+        } catch (e) {
+          console.error('[portal] ping respuesta inválida (HTTP ' + res.statusCode + '): ' + e.message)
+        }
       })
     })
-    req.on('timeout', () => req.destroy())
-    req.on('error', () => {})
+    req.on('timeout', () => { console.error('[portal] ping timeout (VPS no respondió en 15s)'); req.destroy() })
+    req.on('error', (e) => { console.error('[portal] ping error de red: ' + (e && e.message || e) + ' (¿servidor desplegado? ¿DNS/SSL ok?)') })
     req.write(body)
     req.end()
-  } catch {}
+  } catch (e) { try { console.error('[portal] pingCentralPortal:', e.message) } catch {} }
+}
+
+// Reúne los datos del local y pinguea el servidor central YA (no espera a los 15 min).
+// Se llama al guardar el PIN del portal, para que el enlace permanente aparezca enseguida.
+function pingNow(db) {
+  try {
+    let hwid = ''
+    try { hwid = String(require('../ipc/license').getHardwareId() || '') } catch {}
+    const businessName = getSetting(db, 'business_name').trim()
+    let stockSnapshot = []
+    try { stockSnapshot = require('./distributorPing').buildStockSnapshot(db) } catch {}
+    let version = '1.0.0'
+    try { version = require('../../package.json').version || version } catch {}
+    pingCentralPortal(db, {
+      hwid, businessName,
+      cuit: getSetting(db, 'business_cuit').trim(),
+      networkCode: getSetting(db, 'network_code').trim(),
+      branchName: getSetting(db, 'branch_name').trim() || businessName,
+      version, stockSnapshot,
+    })
+  } catch (e) { try { console.error('[portal] pingNow:', e.message) } catch {} }
 }
 
 // POST JSON autenticado al VPS.
@@ -153,4 +179,4 @@ function syncRedPrecios(db) {
   } catch (e) { return Promise.resolve({ ok: false, error: e.message }) }
 }
 
-module.exports = { pingCentralPortal, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }
+module.exports = { pingCentralPortal, pingNow, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }

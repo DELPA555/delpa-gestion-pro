@@ -2950,8 +2950,18 @@ function TabPortal() {
     setSavingPin(true)
     try {
       const r = await api.portal.setPin(pin)
-      if (r?.ok) { toast.success('PIN guardado'); reload() }
-      else toast.error(r?.error || 'PIN inválido')
+      if (r?.ok) {
+        toast.success('PIN guardado')
+        reload()
+        // Al guardar el PIN se dispara el ping al servidor; el enlace permanente llega
+        // unos segundos después. Reconsultamos hasta que aparezca (o ~40s).
+        let tries = 0
+        const id = setInterval(async () => {
+          tries++
+          try { const v = await api.settings.get('portal_central_url'); if (v) { setCentralUrl(v); clearInterval(id) } } catch {}
+          if (tries >= 13) clearInterval(id)
+        }, 3000)
+      } else toast.error(r?.error || 'PIN inválido')
     } finally { setSavingPin(false) }
   }
 

@@ -28,6 +28,9 @@ ipcMain.handle('portal:setPin', (_e, pin) => {
   const p = String(pin || '').trim()
   if (!/^\d{4,6}$/.test(p)) return { ok: false, error: 'El PIN debe tener entre 4 y 6 dígitos.' }
   setSetting('portal_pin', p)
+  // Pinguear YA al servidor central para que el enlace permanente aparezca enseguida
+  // (y no haya que esperar al ciclo de 15 min). Fire-and-forget.
+  try { require('../lib/centralPortalPing').pingNow(getDB()) } catch (e) { console.error('[portal:setPin] pingNow:', e.message) }
   return { ok: true }
 })
 
