@@ -181,26 +181,59 @@ function buildApp() {
 }
 
 // ── Túnel Cloudflare ───────────────────────────────────────────────────────────
-async function startTunnel() {
+const MIN_BIN_BYTES = 10 * 1024 * 1024  // un cloudflared válido pesa ~30 MB
+
+// Devuelve el binario de cloudflared, descargándolo si falta o si quedó corrupto.
+async function ensureCloudflaredBin() {
   const cloudflared = require('cloudflared')
   const { app } = require('electron')
   const binPath = path.join(app.getPath('userData'), process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared')
   try { cloudflared.use(binPath) } catch {}
-  if (!fs.existsSync(binPath)) {
-    await cloudflared.install(binPath)  // descarga (~30 MB) una sola vez
+
+  // ¿Existe pero quedó incompleto/corrupto (descarga cortada, bloqueo del antivirus)?
+  let needDownload = !fs.existsSync(binPath)
+  if (!needDownload) {
+    try { if (fs.statSync(binPath).size < MIN_BIN_BYTES) { fs.unlinkSync(binPath); needDownload = true } } catch {}
   }
-  // cloudflared.tunnel() devuelve un EventEmitter (Tunnel): la URL pública llega por
-  // el evento 'url' (NO hay propiedad t.url). Esperamos ese evento, con manejo de
-  // error / salida temprana / timeout.
-  const t = cloudflared.tunnel({ '--url': `http://127.0.0.1:${PORT}` })
+  if (needDownload) {
+    await cloudflared.install(binPath)  // descarga (~30 MB) una sola vez
+    let size = 0
+    try { size = fs.statSync(binPath).size } catch {}
+    if (size < MIN_BIN_BYTES) {
+      // Borrarlo para forzar una descarga limpia el próximo intento.
+      try { fs.unlinkSync(binPath) } catch {}
+      throw new Error('La descarga del componente del túnel falló o quedó incompleta (binario demasiado chico). Revisá tu conexión a internet o el antivirus y probá de nuevo.')
+    }
+  }
+  return { cloudflared, binPath }
+}
+
+async function startTunnel() {
+  const { cloudflared } = await ensureCloudflaredBin()
+
+  // IMPORTANTE: quick tunnel = `cloudflared tunnel --url http://...` (sin cuenta).
+  // Tunnel.quick() arma ESOS args. (Usar cloudflared.tunnel({'--url'}) arma
+  // `tunnel run --url`, que requiere un túnel con credenciales y muere al instante
+  // con código 0xFFFFFFFF.)
+  const t = cloudflared.Tunnel.quick(`http://127.0.0.1:${PORT}`)
   tunnelHandle = t
+
+  // Capturar la salida de cloudflared para diagnosticar si muere antes de dar la URL.
+  let outBuf = ''
+  const onOut = (d) => {
+    outBuf = (outBuf + String(d)).slice(-3000)
+    try { require('./ipc/techLogs').logTech('info', 'portal', '[cloudflared] ' + String(d).trim().slice(0, 300)) } catch {}
+  }
+  try { t.on('stderr', onOut); t.on('stdout', onOut) } catch {}
+  const tail = () => { const s = outBuf.trim(); return s ? ' — Detalle: ' + s.slice(-400) : ' Puede estar bloqueado por el antivirus; permití "cloudflared.exe" y probá de nuevo.' }
+
   const url = await new Promise((resolve, reject) => {
     let settled = false
     const done = (fn, v) => { if (!settled) { settled = true; clearTimeout(timer); fn(v) } }
-    const timer = setTimeout(() => done(reject, new Error('El túnel tardó demasiado en iniciar')), 45000)
+    const timer = setTimeout(() => done(reject, new Error('El túnel tardó demasiado en iniciar.' + tail())), 45000)
     t.once('url', (u) => done(resolve, u))
-    t.once('error', (e) => done(reject, e instanceof Error ? e : new Error(String(e))))
-    t.once('exit', (code) => done(reject, new Error('cloudflared se cerró (código ' + code + ') sin dar una URL')))
+    t.once('error', (e) => done(reject, new Error('No se pudo ejecutar cloudflared: ' + ((e && e.message) || e) + tail())))
+    t.once('exit', (code) => done(reject, new Error('cloudflared se cerró (código ' + code + ').' + tail())))
   })
   // Si cloudflared reconecta y cambia la URL, mantenerla actualizada.
   t.on('url', (u) => { if (u) publicUrl = u })

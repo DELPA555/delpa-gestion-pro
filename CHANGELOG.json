@@ -1,4 +1,11 @@
 {
+  "v1.48.3": {
+    "fecha": "2026-11-25",
+    "titulo": "Corrección: el Portal web ahora abre el túnel correctamente",
+    "novedades": [
+      "Se corrige el Portal web: el túnel se abría mal y cerraba al instante (error 'cloudflared se cerró'). Ahora se crea como corresponde y el enlace aparece. Si algo falla (sin internet o antivirus), el mensaje de error es más claro y el componente del túnel se vuelve a descargar solo si quedó incompleto."
+    ]
+  },
   "v1.48.2": {
     "fecha": "2026-11-25",
     "titulo": "Corrección: el Portal web ahora muestra el enlace",
