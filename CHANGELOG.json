@@ -1,4 +1,11 @@
 {
+  "v1.49.1": {
+    "fecha": "2026-11-26",
+    "titulo": "El cobro de cuenta corriente entra a la caja",
+    "novedades": [
+      "Cuando un cliente paga su deuda de cuenta corriente, ese cobro ahora se registra como ingreso en la caja del día (concepto 'Cobro cuenta corriente - [cliente]'). Aparece en el resumen y en el cierre de caja, y el saldo lo refleja al instante. Si no hay una caja abierta, el pago igual se registra en la cuenta del cliente."
+    ]
+  },
   "v1.49.0": {
     "fecha": "2026-11-26",
     "titulo": "Portal web con enlace permanente",

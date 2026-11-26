@@ -90,12 +90,23 @@ ipcMain.handle('clients:history', (_, clientId) =>
   `).all(clientId)
 )
 
-ipcMain.handle('clients:addPayment', (_, { clientId, amount, notes }) => {
+ipcMain.handle('clients:addPayment', (_, { clientId, amount, notes, paymentMethod }) => {
   const db = getDB()
   return db.transaction(() => {
     db.prepare('UPDATE clients SET balance=balance-? WHERE id=?').run(amount, clientId)
     db.prepare(`INSERT INTO account_movements (client_id,type,amount,notes) VALUES (?,'payment',?,?)`).run(clientId, amount, notes||'Pago de cuenta corriente')
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('PAYMENT','clients',?,?)`).run(clientId, `Pago recibido $${amount}`)
+    // El cobro de la deuda ENTRA a la caja del día: se registra como ingreso en la caja
+    // abierta (si la hay), para que aparezca en el resumen/cierre y el saldo lo refleje.
+    // No duplica: hoy ningún otro flujo crea este movimiento, y cada pago es uno solo.
+    try {
+      const cashbox = db.prepare("SELECT id FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+      if (cashbox && Number(amount) > 0) {
+        const cli = db.prepare('SELECT name FROM clients WHERE id=?').get(clientId)
+        db.prepare(`INSERT INTO cashbox_movements (cashbox_id,type,concept,amount,payment_method) VALUES (?,'ingreso',?,?,?)`)
+          .run(cashbox.id, `Cobro cuenta corriente - ${cli?.name || 'cliente'}`, amount, paymentMethod || 'Efectivo')
+      }
+    } catch (e) { console.error('[clients:addPayment] caja:', e.message) }
     return true
   })()
 })
