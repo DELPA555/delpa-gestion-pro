@@ -110,6 +110,13 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
   CREATE TABLE IF NOT EXISTS email_alerts_sent ( slug TEXT, trigger_type TEXT, fecha TEXT, PRIMARY KEY (slug, trigger_type, fecha) );
+  CREATE TABLE IF NOT EXISTS portal_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT, networkCode TEXT,
+    ventasHoy REAL DEFAULT 0, cajaHoy REAL DEFAULT 0, stockTotal INTEGER DEFAULT 0,
+    timestamp TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_hist_slug ON portal_history (slug, timestamp);
 `)
 // Migración: columnas de alertas en nodes (idempotente).
 for (const col of ['alertEmail TEXT', 'ventaThreshold REAL', 'alertsJson TEXT', 'ventaMaxHoy REAL', 'prevStockJson TEXT']) {
@@ -191,6 +198,22 @@ app.post('/ping', (req, res) => {
     alertEmail: String(b.alertEmail || ''), ventaThreshold: Number(b.ventaThreshold) || 0,
     alertsJson: JSON.stringify(b.alerts || {}), ventaMaxHoy: Number(b.ventaMaxHoy) || 0,
   })
+
+  // Histórico para los gráficos de evolución. Solo guardamos si algún valor cambió
+  // respecto al último registro del día (para no llenar la tabla).
+  try {
+    const ventasHoy = Number(b.ventasHoy) || 0, cajaHoy = Number(b.cajaHoy) || 0
+    let stockTotal = 0
+    try { stockTotal = (b.stockSnapshot || []).reduce((s, p) => s + (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0), 0) } catch {}
+    const hoy = new Date().toISOString().slice(0, 10)
+    const last = db.prepare("SELECT ventasHoy, cajaHoy, stockTotal FROM portal_history WHERE slug=? AND substr(timestamp,1,10)=? ORDER BY id DESC LIMIT 1").get(slug, hoy)
+    const changed = !last || Number(last.ventasHoy) !== ventasHoy || Number(last.cajaHoy) !== cajaHoy || Number(last.stockTotal) !== stockTotal
+    if (changed) {
+      db.prepare('INSERT INTO portal_history (slug,networkCode,ventasHoy,cajaHoy,stockTotal,timestamp) VALUES (?,?,?,?,?,?)')
+        .run(slug, String(b.networkCode || ''), ventasHoy, cajaHoy, stockTotal, new Date().toISOString())
+    }
+  } catch (e) { console.error('[history] ' + e.message) }
+
   res.json({ ok: true, slug, url: 'https://' + req.headers.host + '/portal/' + slug })
 })
 
@@ -263,6 +286,35 @@ app.get('/api/:slug/red', auth, (req, res) => {
     return { nombre: r.branchName || r.businessName || 'Local', online, ventasHoy: Number(r.ventasHoy) || 0, cajaHoy: Number(r.cajaHoy) || 0, unidades: units, esYo: r.slug === req.params.slug }
   })
   res.json({ networkCode: code, nodes })
+})
+
+// Histórico para los gráficos de evolución (agregado por día). Opcional: comparativo
+// por sucursal de la red (7 días). Usa la misma sesión (PIN) que el resto de /api/:slug.
+app.get('/api/:slug/historia', auth, (req, res) => {
+  const dias = Math.min(90, Math.max(1, Number(req.query.dias) || 30))
+  const since = new Date(Date.now() - dias * 86400000).toISOString()
+  // ventasHoy/cajaHoy/stockTotal son acumulados del día → tomamos el MAX por fecha.
+  const historia = db.prepare(`
+    SELECT substr(timestamp,1,10) AS fecha, MAX(ventasHoy) AS ventasHoy, MAX(cajaHoy) AS cajaHoy, MAX(stockTotal) AS stockTotal
+    FROM portal_history WHERE slug=? AND timestamp>=? GROUP BY fecha ORDER BY fecha
+  `).all(req.params.slug, since)
+
+  let red = []
+  const node = db.prepare('SELECT networkCode FROM nodes WHERE slug=?').get(req.params.slug)
+  const code = node && String(node.networkCode || '').trim()
+  if (code) {
+    const since7 = new Date(Date.now() - 7 * 86400000).toISOString()
+    const rows = db.prepare(`
+      SELECT slug, substr(timestamp,1,10) AS fecha, MAX(ventasHoy) AS ventasHoy
+      FROM portal_history WHERE networkCode=? AND timestamp>=? GROUP BY slug, fecha ORDER BY fecha
+    `).all(code, since7)
+    const names = {}
+    for (const n of db.prepare('SELECT slug, branchName, businessName FROM nodes WHERE networkCode=?').all(code)) names[n.slug] = n.branchName || n.businessName || n.slug
+    const bySlug = {}
+    for (const r of rows) { (bySlug[r.slug] = bySlug[r.slug] || []).push({ fecha: r.fecha, ventasHoy: r.ventasHoy }) }
+    red = Object.keys(bySlug).map(s => ({ nombre: names[s] || s, ventas: bySlug[s] }))
+  }
+  res.json({ historia, red })
 })
 
 // ── Sync de red (reemplaza al Apps Script). Auth por secreto compartido ──────────
@@ -447,7 +499,9 @@ function PORTAL_HTML(slug, businessName, hasNet) {
   .row:last-child{border:0} .mut{color:var(--mut)} .neg{color:var(--rd)}
   .err{color:var(--rd);font-size:13px;margin-top:8px;min-height:18px}
   .hide{display:none}
-</style></head>
+  canvas{max-width:100%}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script></head>
 <body><div class="wrap">
   <div id="login" class="card">
     <h1>${biz}</h1>
@@ -500,7 +554,40 @@ function PORTAL_HTML(slug, businessName, hasNet) {
     '<div class="b"><div class="n">'+money(d.ventasHoy)+'</div><div class="l">Ventas del día</div></div>'+
     '<div class="b"><div class="n">'+money(d.cajaHoy)+'</div><div class="l">Caja (efectivo)</div></div>'+
     '</div></div>'+
-    '<div class="card mut" style="font-size:12px">Último dato recibido: '+(d.updatedAt?new Date(d.updatedAt).toLocaleString('es-AR'):'—')+(d.branchName?(' · '+esc(d.branchName)):'')+'</div>'; }
+    '<div class="card"><h2>Ventas — últimos 7 días</h2><canvas id="cV" height="150"></canvas></div>'+
+    '<div class="card"><h2>Stock total — últimos 30 días</h2><canvas id="cS" height="150"></canvas></div>'+
+    '<div id="cRedWrap"></div>'+
+    '<button class="sec" id="btnCsv" style="width:auto;padding:10px 16px">⬇ Exportar a Excel (CSV)</button>'+
+    '<div class="card mut" style="font-size:12px;margin-top:14px">Último dato recibido: '+(d.updatedAt?new Date(d.updatedAt).toLocaleString('es-AR'):'—')+(d.branchName?(' · '+esc(d.branchName)):'')+'</div>';
+    loadCharts(); }
+  var charts=[];
+  function chartOpts(){ return {responsive:true,plugins:{legend:{labels:{color:'#8a8a94'}}},scales:{x:{ticks:{color:'#8a8a94'},grid:{color:'#26262f'}},y:{ticks:{color:'#8a8a94'},grid:{color:'#26262f'},beginAtZero:true}}}; }
+  function loadCharts(){
+    charts.forEach(function(c){try{c.destroy()}catch(e){}}); charts=[];
+    if(typeof Chart==='undefined') return;
+    api('/historia?dias=30').then(function(d){
+      var h=d.historia||[]; window.__hist=h;
+      var last7=h.slice(-7);
+      charts.push(new Chart(document.getElementById('cV'),{type:'bar',data:{labels:last7.map(function(x){return x.fecha.slice(5)}),datasets:[{label:'Ventas $',data:last7.map(function(x){return x.ventasHoy}),backgroundColor:'#6366f1'}]},options:chartOpts()}));
+      charts.push(new Chart(document.getElementById('cS'),{type:'line',data:{labels:h.map(function(x){return x.fecha.slice(5)}),datasets:[{label:'Unidades',data:h.map(function(x){return x.stockTotal}),borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.15)',tension:.3,fill:true}]},options:chartOpts()}));
+      if((d.red||[]).length){
+        document.getElementById('cRedWrap').innerHTML='<div class="card"><h2>Ventas por sucursal — 7 días</h2><canvas id="cR" height="170"></canvas></div>';
+        var fechas={}; (d.red||[]).forEach(function(loc){(loc.ventas||[]).forEach(function(v){fechas[v.fecha]=1})});
+        var labels=Object.keys(fechas).sort();
+        var palette=['#6366f1','#22c55e','#f59e0b','#ef4444','#06b6d4','#a855f7','#ec4899'];
+        var ds=(d.red||[]).map(function(loc,i){var m={};(loc.ventas||[]).forEach(function(v){m[v.fecha]=v.ventasHoy});return {label:loc.nombre,data:labels.map(function(f){return m[f]||0}),backgroundColor:palette[i%palette.length]};});
+        charts.push(new Chart(document.getElementById('cR'),{type:'bar',data:{labels:labels.map(function(f){return f.slice(5)}),datasets:ds},options:chartOpts()}));
+      }
+      document.getElementById('btnCsv').onclick=function(){exportCsv(window.__hist||[])};
+    }).catch(function(){});
+  }
+  function exportCsv(h){
+    var rows=[['Fecha','Ventas','Caja','Stock total']].concat(h.map(function(x){return [x.fecha,x.ventasHoy,x.cajaHoy,x.stockTotal]}));
+    var csv=rows.map(function(r){return r.join(',')}).join('\n');
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+    a.download='historial-'+SLUG+'.csv'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+  }
   function renderStock(){ document.getElementById('view').innerHTML='<div class="card"><input id="sq" placeholder="Buscar producto…"><div id="sl" style="margin-top:10px"></div></div>';
     var inp=document.getElementById('sq'),tmr; inp.addEventListener('input',function(){clearTimeout(tmr);tmr=setTimeout(loadStock,250)}); loadStock(); }
   function loadStock(){ var q=(document.getElementById('sq')||{}).value||''; document.getElementById('sl').innerHTML='<p class="mut">Cargando…</p>';
