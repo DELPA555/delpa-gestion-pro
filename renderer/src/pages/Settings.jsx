@@ -2903,12 +2903,19 @@ function TabPortal() {
   const [savingPin, setSavingPin] = useState(false)
   const [working, setWorking] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [centralUrl, setCentralUrl] = useState('')
+  const [copiedUrl, setCopiedUrl] = useState(false)
 
   const reload = () => api.portal.status().then(setStatus).catch(() => {})
   useEffect(() => {
     reload()
     api.portal.getPin().then(r => setPin(r?.pin || '')).catch(() => {})
+    api.settings.get('portal_central_url').then(v => setCentralUrl(v || '')).catch(() => {})
   }, [])
+  const copyCentral = async () => {
+    if (!centralUrl) return
+    try { await navigator.clipboard.writeText(centralUrl); setCopiedUrl(true); setTimeout(() => setCopiedUrl(false), 1500) } catch {}
+  }
   // Si el portal está activo pero la URL del túnel todavía no llegó (tarda unos
   // segundos), reconsultamos hasta que aparezca.
   useEffect(() => {
@@ -2971,6 +2978,25 @@ function TabPortal() {
           </button>
         </div>
         <p className="text-xs text-zinc-600 mt-1">Quien entre al portal necesita este PIN. Cambialo cuando quieras.</p>
+      </div>
+
+      {/* Enlace permanente (servidor central) */}
+      <div className="bg-card border border-border rounded-xl p-4">
+        <p className="text-white text-sm font-medium">Enlace permanente del portal</p>
+        {centralUrl ? (
+          <>
+            <div className="mt-2 flex items-center gap-2 bg-[#0a0a0a] border border-border rounded-lg px-3 py-2">
+              <Globe size={14} className="text-emerald-400 shrink-0" />
+              <a href={centralUrl} target="_blank" rel="noreferrer" className="text-sm text-emerald-300 hover:underline truncate flex-1">{centralUrl}</a>
+              <button onClick={copyCentral} className="no-drag text-zinc-400 hover:text-white">{copiedUrl ? <CheckCircle size={14} className="text-accent" /> : <Copy size={14} />}</button>
+            </div>
+            <p className="text-[11px] text-zinc-600 mt-2">Esta dirección es fija y no cambia. Compartila con quien quieras; necesita tu PIN para entrar.</p>
+          </>
+        ) : (
+          <p className="text-xs text-zinc-500 mt-1">
+            Se genera sola unos minutos después de guardar un PIN (cuando la app sincroniza con el servidor). Guardá un PIN y esperá un momento.
+          </p>
+        )}
       </div>
 
       {/* Activar / estado */}

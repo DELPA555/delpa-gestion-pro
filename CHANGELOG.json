@@ -1,4 +1,12 @@
 {
+  "v1.49.0": {
+    "fecha": "2026-11-26",
+    "titulo": "Portal web con enlace permanente",
+    "novedades": [
+      "El Portal web ahora tiene un enlace FIJO por negocio (https://portal.delpagestion.com.ar/tu-negocio) que no cambia nunca. Lo ves y lo copiás desde Configuración → Portal web, apenas guardás un PIN. Ideal para dejarle el acceso al dueño sin tener que pasarle una dirección nueva cada vez.",
+      "Sigue siendo de solo lectura y protegido por tu PIN. El acceso rápido por túnel (Cloudflare) queda como opción extra para ver el negocio al instante desde la misma PC/red."
+    ]
+  },
   "v1.48.6": {
     "fecha": "2026-11-26",
     "titulo": "Portal web más robusto + stock de red por código",

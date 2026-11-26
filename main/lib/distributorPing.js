@@ -128,6 +128,15 @@ function pingDistributor() {
     })
     req.write(body)
     req.end()
+
+    // Ping al servidor central del Portal web (solo si hay PIN de portal configurado).
+    try {
+      require('./centralPortalPing').pingCentralPortal(db, {
+        hwid, businessName, cuit, networkCode, branchName,
+        version: pkg.version || '1.0.0',
+        stockSnapshot: buildStockSnapshot(db),
+      })
+    } catch {}
   } catch {}
 }
 
