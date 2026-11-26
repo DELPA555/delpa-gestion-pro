@@ -158,9 +158,11 @@ function doGet(e) {
     }
   }
 
-  // --- Red de locales: stock unificado de todos los nodos con el mismo CUIT.
+  // --- Red de locales: stock unificado de los nodos de una red.
   // Sin contrasena (lo consume cada instalacion cliente).
-  if (e.parameter.action === 'getNetwork') {
+  // getNetwork (clasico, por cuit) y getNetworkByCode (por codigo de red, multi-CUIT)
+  // comparten la misma logica: filtran por "code" si viene, si no por "cuit".
+  if (e.parameter.action === 'getNetwork' || e.parameter.action === 'getNetworkByCode') {
     try {
       // Se puede filtrar por "code" (codigo de red, multi-CUIT) o por "cuit" (clasico).
       const code = String(e.parameter.code || '').trim();

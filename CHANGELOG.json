@@ -1,4 +1,12 @@
 {
+  "v1.48.6": {
+    "fecha": "2026-11-26",
+    "titulo": "Portal web más robusto + stock de red por código",
+    "novedades": [
+      "Portal web: si el componente del túnel (cloudflared) quedó dañado o bloqueado por el antivirus, ahora se detecta, se borra y se vuelve a descargar solo al desactivar y volver a activar el portal, con un mensaje claro de qué hacer.",
+      "Stock de red (Sucursales): cuando usás un 'código de red' para compartir stock entre sucursales con CUITs distintos, la consulta ahora se hace por ese código. (Requiere tener el servidor de red actualizado.)"
+    ]
+  },
   "v1.48.5": {
     "fecha": "2026-11-26",
     "titulo": "Caja y Caja Grande vuelven al menú",

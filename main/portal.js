@@ -209,12 +209,14 @@ async function ensureCloudflaredBin() {
       try { fs.unlinkSync(binPath) } catch {}
       throw new Error('La descarga del componente del túnel falló o quedó incompleta (binario demasiado chico). Revisá tu conexión a internet o el antivirus y probá de nuevo.')
     }
+    // Asegurar permiso de ejecución (clave en Linux/Mac; inocuo en Windows).
+    try { fs.chmodSync(binPath, 0o755) } catch {}
   }
   return { cloudflared, binPath }
 }
 
 async function startTunnel() {
-  const { cloudflared } = await ensureCloudflaredBin()
+  const { cloudflared, binPath } = await ensureCloudflaredBin()
 
   // IMPORTANTE: quick tunnel = `cloudflared tunnel --url http://...` (sin cuenta).
   // Tunnel.quick() arma ESOS args. (Usar cloudflared.tunnel({'--url'}) arma
@@ -237,7 +239,17 @@ async function startTunnel() {
     const done = (fn, v) => { if (!settled) { settled = true; clearTimeout(timer); fn(v) } }
     const timer = setTimeout(() => done(reject, new Error('El túnel tardó demasiado en iniciar.' + tail())), 45000)
     t.once('url', (u) => done(resolve, u))
-    t.once('error', (e) => done(reject, new Error('No se pudo ejecutar cloudflared: ' + ((e && e.message) || e) + tail())))
+    t.once('error', (e) => {
+      // EFTYPE/ENOENT/EACCES = el cloudflared.exe no es ejecutable (corrupto, incompleto
+      // o neutralizado por el antivirus). Lo borramos para que se re-descargue limpio al
+      // volver a activar, y damos un mensaje accionable.
+      const code = e && e.code
+      if (code === 'EFTYPE' || code === 'ENOENT' || code === 'EACCES') {
+        try { fs.unlinkSync(binPath) } catch {}
+        return done(reject, new Error('El componente del portal necesita reinstalarse. Desactivá y volvé a activar el portal para descargarlo de nuevo. (Si vuelve a pasar, revisá que el antivirus no esté bloqueando "cloudflared.exe".)'))
+      }
+      done(reject, new Error('No se pudo ejecutar cloudflared: ' + ((e && e.message) || e) + tail()))
+    })
     t.once('exit', (code) => done(reject, new Error('cloudflared se cerró (código ' + code + ').' + tail())))
   })
   // Si cloudflared reconecta y cambia la URL, mantenerla actualizada.

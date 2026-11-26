@@ -70,8 +70,10 @@ ipcMain.handle('network:getStock', async () => {
   if (!networkCode && !cuit) {
     throw new Error('Configurá un "código de red" (Configuración → Red de locales) o el CUIT del negocio para usar la red de locales.')
   }
+  // Con código de red (multi-CUIT) → getNetworkByCode&code=...; si no, el clásico por CUIT.
+  // OJO: getNetworkByCode requiere el Apps Script actualizado (redeployado).
   const url = networkCode
-    ? `${PING_URL}?action=getNetwork&code=${encodeURIComponent(networkCode)}`
+    ? `${PING_URL}?action=getNetworkByCode&code=${encodeURIComponent(networkCode)}`
     : `${PING_URL}?action=getNetwork&cuit=${encodeURIComponent(cuit)}`
   let res
   try {
@@ -80,7 +82,13 @@ ipcMain.handle('network:getStock', async () => {
     try { require('./techLogs').logTech('error', 'red', 'Error al consultar stock de la red: ' + e.message) } catch {}
     throw e
   }
-  if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo obtener el stock de la red.')
+  if (!res || res.ok === false) {
+    const base = res?.error || 'No se pudo obtener el stock de la red.'
+    // Si usa código de red y el Apps Script viejo no conoce getNetworkByCode, el error
+    // típico es "No autorizado" o "cuit requerido": avisamos que hay que redeployarlo.
+    if (networkCode) throw new Error(base + ' — Si usás código de red, actualizá (redeployá) el Apps Script a la última versión.')
+    throw new Error(base)
+  }
   const { getHardwareId } = require('../ipc/license')
   const thisHwid = String(getHardwareId() || '')
   return {
