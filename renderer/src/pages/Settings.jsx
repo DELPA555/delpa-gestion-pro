@@ -2909,6 +2909,13 @@ function TabPortal() {
     reload()
     api.portal.getPin().then(r => setPin(r?.pin || '')).catch(() => {})
   }, [])
+  // Si el portal está activo pero la URL del túnel todavía no llegó (tarda unos
+  // segundos), reconsultamos hasta que aparezca.
+  useEffect(() => {
+    if (!status?.active || status?.url) return
+    const id = setInterval(reload, 3000)
+    return () => clearInterval(id)
+  }, [status?.active, status?.url])
 
   const savePin = async () => {
     setSavingPin(true)

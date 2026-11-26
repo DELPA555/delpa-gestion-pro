@@ -189,9 +189,21 @@ async function startTunnel() {
   if (!fs.existsSync(binPath)) {
     await cloudflared.install(binPath)  // descarga (~30 MB) una sola vez
   }
+  // cloudflared.tunnel() devuelve un EventEmitter (Tunnel): la URL pública llega por
+  // el evento 'url' (NO hay propiedad t.url). Esperamos ese evento, con manejo de
+  // error / salida temprana / timeout.
   const t = cloudflared.tunnel({ '--url': `http://127.0.0.1:${PORT}` })
-  const url = await t.url
   tunnelHandle = t
+  const url = await new Promise((resolve, reject) => {
+    let settled = false
+    const done = (fn, v) => { if (!settled) { settled = true; clearTimeout(timer); fn(v) } }
+    const timer = setTimeout(() => done(reject, new Error('El túnel tardó demasiado en iniciar')), 45000)
+    t.once('url', (u) => done(resolve, u))
+    t.once('error', (e) => done(reject, e instanceof Error ? e : new Error(String(e))))
+    t.once('exit', (code) => done(reject, new Error('cloudflared se cerró (código ' + code + ') sin dar una URL')))
+  })
+  // Si cloudflared reconecta y cambia la URL, mantenerla actualizada.
+  t.on('url', (u) => { if (u) publicUrl = u })
   publicUrl = url
   return url
 }

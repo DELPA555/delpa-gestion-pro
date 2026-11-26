@@ -1,4 +1,11 @@
 {
+  "v1.48.2": {
+    "fecha": "2026-11-25",
+    "titulo": "Corrección: el Portal web ahora muestra el enlace",
+    "novedades": [
+      "Se corrige el Portal web: al activarlo ya aparece el enlace público (con botón para copiarlo). Antes el túnel se abría pero el enlace no se mostraba."
+    ]
+  },
   "v1.48.1": {
     "fecha": "2026-11-25",
     "titulo": "Corrección: la pantalla de Ventas no abría",
