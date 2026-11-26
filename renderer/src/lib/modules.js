@@ -30,6 +30,13 @@ export const MODULES = [
     desc: 'Apertura y cierre de caja, movimientos de dinero y gastos. Núcleo del sistema.',
   },
   {
+    // Caja Grande (caja central / consolidación de las cajas chicas). Es un módulo
+    // propio: NO depende de Multi-caja (funciona también en un solo local). Visible
+    // por defecto; se puede ocultar desde Ajustes → Módulos activos.
+    key: 'caja_grande', label: 'Caja Grande', default: '1', routes: ['/caja-grande'],
+    desc: 'Caja central que consolida y resume las cajas chicas (apertura, cierre y transferencias).',
+  },
+  {
     key: 'proveedores', label: 'Proveedores', default: '1', routes: ['/proveedores', '/compras', '/reposicion'],
     desc: 'Proveedores, compras y pedidos de reposición de mercadería.',
   },
@@ -56,7 +63,7 @@ export const MODULES = [
     desc: 'Sincronización de productos, stock y pedidos con tu tienda de Tienda Nube.',
   },
   {
-    key: 'multicaja', label: 'Multi-caja', default: '0', routes: ['/caja-grande'], tab: 'multicaja',
+    key: 'multicaja', label: 'Multi-caja', default: '0', routes: [], tab: 'multicaja',
     desc: 'Caja central para varias terminales o sucursales en red local.',
   },
   {

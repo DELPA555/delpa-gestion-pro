@@ -1125,6 +1125,7 @@ function createTables(db) {
     const moduleDefaults = [
       ['mod_clientes',     '1'],
       ['mod_caja',         '1'],
+      ['mod_caja_grande',  '1'],
       ['mod_proveedores',  '1'],
       ['mod_informes',     '1'],
       ['mod_creditos',     credInUse ? '1' : '0'],
