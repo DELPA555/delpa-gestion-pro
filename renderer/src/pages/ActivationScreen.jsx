@@ -4,7 +4,7 @@ import { ShieldCheck, AlertCircle, Copy, Check, MessageCircle, Mail } from 'luci
 import { api } from '@/lib/api'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 
-export default function ActivationScreen({ hardwareId, reason, trialDays, onActivated }) {
+export default function ActivationScreen({ hardwareId, reason, trialDays, expiryDisplay, onActivated }) {
   const dias = trialDays || 14
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
@@ -49,7 +49,9 @@ export default function ActivationScreen({ hardwareId, reason, trialDays, onActi
           <p className="text-sm text-zinc-500 mt-1">
             {reason === 'trial'
               ? 'Para continuar usando DELPA activá tu licencia'
-              : 'Tu suscripción venció. Activá tu licencia para continuar'}
+              : (expiryDisplay
+                  ? `Tu licencia venció el ${expiryDisplay}. Contactá a tu distribuidor para renovarla.`
+                  : 'Tu suscripción venció. Contactá a tu distribuidor para renovarla.')}
           </p>
         </div>
 

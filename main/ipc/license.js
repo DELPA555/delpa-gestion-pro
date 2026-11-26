@@ -2,6 +2,26 @@ const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 const crypto = require('crypto')
 const os = require('os')
+const https = require('https')
+let CENTRAL_BASE = 'https://portal.delpagestion.com.ar'
+try { CENTRAL_BASE = require('../lib/centralPortalPing').CENTRAL_BASE || CENTRAL_BASE } catch {}
+
+// Chequeo de licencia contra el VPS (GET /license/:hwid). Timeout 8s. Rechaza si no
+// se puede contactar (→ el llamador cae al modo gracia / licencia local).
+function vpsLicenseCheck(hwid) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(CENTRAL_BASE + '/license/' + encodeURIComponent(hwid))
+    const req = https.request({ hostname: u.hostname, path: u.pathname, method: 'GET', timeout: 8000 }, (res) => {
+      let d = ''
+      res.on('data', (c) => { d += c })
+      res.on('end', () => { try { resolve(JSON.parse(d || '{}')) } catch { reject(new Error('respuesta inválida')) } })
+    })
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', reject)
+    req.end()
+  })
+}
+const VPS_GRACE_MS = 7 * 24 * 60 * 60 * 1000 // gracia offline: hasta 7 días con la última licencia activa conocida
 
 const LICENSE_SECRET = 'DELPA2024-PRO-LICENSE-KEY-v1'
 const TRIAL_DAYS       = 14  // Instalaciones NUEVAS
@@ -85,10 +105,9 @@ function maybeNotifyExpiry(db, daysDiff, expiryDate) {
   } catch {}
 }
 
-ipcMain.handle('license:status', () => {
-  const db = getDB()
-  const hardwareId = getHardwareId()
-
+// Estado de licencia LOCAL (código/prueba) — el comportamiento clásico, usado como
+// fallback cuando el VPS no está disponible o cuando el equipo no está registrado.
+function localStatus(db, hardwareId) {
   const licRow = db.prepare("SELECT value FROM settings WHERE key='license_code'").get()
   if (licRow?.value) {
     const expiryDate = decodeAndValidate(licRow.value, hardwareId)
@@ -130,6 +149,51 @@ ipcMain.handle('license:status', () => {
     trialDays,
     hardwareId,
     reason: 'trial',
+  }
+}
+
+// license:status — primero consulta el VPS; si no responde, cae al estado local
+// (código/prueba) o a la última licencia activa conocida (gracia offline 7 días).
+// Nunca bloquea por falta de conexión. Un equipo NO registrado conserva su prueba.
+ipcMain.handle('license:status', async () => {
+  const db = getDB()
+  const hardwareId = getHardwareId()
+  try {
+    const r = await vpsLicenseCheck(hardwareId)
+    if (r && r.registered && r.active) {
+      // Licencia activa en el VPS.
+      try {
+        db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_vps_active','1')").run()
+        db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_vps_expires',?)").run(String(r.expiresAt || ''))
+        db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_vps_checked',?)").run(new Date().toISOString())
+      } catch {}
+      const exp = r.expiresAt ? new Date(r.expiresAt) : null
+      return {
+        status: 'active', hardwareId, source: 'vps',
+        daysRemaining: Number(r.daysLeft) || 0,
+        expiryDisplay: exp ? exp.toLocaleDateString('es-AR') : '',
+        plan: r.plan || '', businessName: r.businessName || '',
+      }
+    }
+    if (r && r.registered && !r.active) {
+      // Registrado pero vencido/desactivado → bloqueo (es un cliente que debe renovar).
+      try { db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('license_vps_active','0')").run() } catch {}
+      const exp = r.expiresAt ? new Date(r.expiresAt) : null
+      return { status: 'expired', hardwareId, reason: 'subscription', source: 'vps', expiryDisplay: exp ? exp.toLocaleDateString('es-AR') : '' }
+    }
+    // No registrado en el VPS → se respeta la licencia/prueba local (no se bloquea).
+    return localStatus(db, hardwareId)
+  } catch (e) {
+    // VPS inalcanzable → modo gracia: si la última licencia conocida estaba activa y es
+    // reciente (<7 días), seguimos activos; si no, caemos al estado local.
+    try {
+      const active = db.prepare("SELECT value FROM settings WHERE key='license_vps_active'").get()?.value
+      const checked = db.prepare("SELECT value FROM settings WHERE key='license_vps_checked'").get()?.value
+      if (active === '1' && checked && (Date.now() - new Date(checked).getTime()) < VPS_GRACE_MS) {
+        return { status: 'active', hardwareId, source: 'vps-cache', offline: true, daysRemaining: 0 }
+      }
+    } catch {}
+    return localStatus(db, hardwareId)
   }
 })
 

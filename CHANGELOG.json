@@ -1,4 +1,11 @@
 {
+  "v1.54.0": {
+    "fecha": "2026-11-26",
+    "titulo": "Validación de licencia más confiable",
+    "novedades": [
+      "Mejoramos cómo se verifica la licencia: ahora se valida contra el servidor de DELPA. Importante: si te quedás sin internet o el servidor no responde, la app sigue funcionando normalmente (no te bloquea por falta de conexión). Si tu licencia vence, vas a ver cómo renovarla con tu distribuidor."
+    ]
+  },
   "v1.52.0": {
     "fecha": "2026-11-26",
     "titulo": "Notificaciones por email al dueño",

@@ -241,6 +241,19 @@ function AppContent() {
 
   useEffect(() => { checkLicense() }, [checkLicense])
 
+  // Re-chequeo silencioso cada 24hs. Si la licencia venció mientras la app está abierta,
+  // AVISA pero NO cierra la sesión abruptamente (el bloqueo se aplica al reiniciar).
+  useEffect(() => {
+    const id = setInterval(() => {
+      api.license.status().then(s => {
+        if (s?.status === 'expired' && licenseInfo?.status !== 'expired') {
+          toast.error('Tu licencia venció. Contactá a tu distribuidor. (Podés seguir hasta reiniciar la app.)', { duration: 12000 })
+        }
+      }).catch(() => {})
+    }, 24 * 60 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [licenseInfo?.status])
+
   useEffect(() => {
     const unsubStatus = window.electron.on('updater:status', ({ type, version }) => {
       if (type === 'downloading') {
@@ -270,6 +283,7 @@ function AppContent() {
         hardwareId={licenseInfo.hardwareId || ''}
         reason={licenseInfo.reason || 'subscription'}
         trialDays={licenseInfo.trialDays}
+        expiryDisplay={licenseInfo.expiryDisplay}
         onActivated={checkLicense}
       />
     )

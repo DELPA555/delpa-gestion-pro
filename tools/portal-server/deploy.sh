@@ -72,6 +72,9 @@ const PORT = Number(process.env.PORT || 3000)
 const DB_PATH = path.join(__dirname, 'data.db')
 const BACKUP_DIR = path.join(__dirname, 'backups')
 const PING_SECRET = process.env.DELPA_PING_SECRET || '__PING_SECRET__'
+// Secreto de ADMIN (panel de licencias). Viene por entorno (lo genera deploy.sh y NO
+// está en el repo ni en la app). Si no está seteado, los endpoints admin quedan cerrados.
+const ADMIN_SECRET = process.env.DELPA_ADMIN_SECRET || ''
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 const MAX_FAILS = 8
 const LOCK_MS = 5 * 60 * 1000
@@ -117,6 +120,15 @@ db.exec(`
     timestamp TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_hist_slug ON portal_history (slug, timestamp);
+  CREATE TABLE IF NOT EXISTS licenses (
+    hwid TEXT PRIMARY KEY,
+    businessName TEXT,
+    plan TEXT,
+    activatedAt TEXT,
+    expiresAt TEXT,
+    active INTEGER DEFAULT 0,
+    updatedAt TEXT
+  );
 `)
 // Migración: columnas de alertas en nodes (idempotente).
 for (const col of ['alertEmail TEXT', 'ventaThreshold REAL', 'alertsJson TEXT', 'ventaMaxHoy REAL', 'prevStockJson TEXT']) {
@@ -468,6 +480,76 @@ async function runAlerts() {
 setInterval(runAlerts, 30 * 60 * 1000)
 setTimeout(runAlerts, 60 * 1000)
 
+// ── Licencias (v1.54.0) ──────────────────────────────────────────────────────────
+// CORS para que el panel admin (GitHub Pages, otro origen) pueda llamar estos endpoints.
+// La auth es por el header X-Delpa-Admin (no por cookies), así que Allow-Origin * es seguro.
+app.use('/license', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Delpa-Admin')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+function adminAuth(req, res, next) {
+  if (!ADMIN_SECRET) return res.status(503).json({ error: 'Panel admin no configurado en el servidor.' })
+  if ((req.headers['x-delpa-admin'] || '') !== ADMIN_SECRET) return res.status(401).json({ error: 'No autorizado' })
+  next()
+}
+const PLAN_MONTHS = { '1m': 1, '3m': 3, '6m': 6, '1y': 12 }
+const PLAN_NAME = { '1m': 'mensual', '3m': 'trimestral', '6m': 'semestral', '1y': 'anual' }
+function daysLeft(expiresAt) { if (!expiresAt) return 0; return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000) }
+
+// Admin: lista de clientes (va ANTES de /license/:hwid para no chocar la ruta).
+app.get('/license/list', adminAuth, (_req, res) => {
+  const rows = db.prepare('SELECT hwid,businessName,plan,expiresAt,active FROM licenses').all()
+  const pingBy = {}
+  for (const n of db.prepare('SELECT hwid,updatedAt FROM nodes').all()) pingBy[n.hwid] = n.updatedAt
+  const clients = rows.map(r => {
+    const dl = daysLeft(r.expiresAt)
+    return { hwid: r.hwid, businessName: r.businessName || '', plan: PLAN_NAME[r.plan] || r.plan || '', expiresAt: r.expiresAt || null, active: !!r.active && dl >= 0, daysLeft: dl, lastPing: pingBy[r.hwid] || null }
+  })
+  clients.sort((a, b) => a.daysLeft - b.daysLeft)
+  res.json({ clients })
+})
+
+// Admin: activar o extender una licencia.
+app.post('/license/activate', adminAuth, (req, res) => {
+  const b = req.body || {}
+  const hwid = String(b.hwid || '').trim()
+  if (!hwid) return res.status(400).json({ error: 'hwid requerido' })
+  const months = PLAN_MONTHS[b.plan]
+  if (!months) return res.status(400).json({ error: 'plan inválido (1m|3m|6m|1y)' })
+  // Extiende desde hoy, o desde el vencimiento futuro si la licencia sigue vigente.
+  const existing = db.prepare('SELECT expiresAt,active FROM licenses WHERE hwid=?').get(hwid)
+  let base = Date.now()
+  if (existing && existing.active && existing.expiresAt && new Date(existing.expiresAt).getTime() > base) base = new Date(existing.expiresAt).getTime()
+  const exp = new Date(base); exp.setMonth(exp.getMonth() + months)
+  const expiresAt = exp.toISOString()
+  let businessName = String(b.businessName || '').trim()
+  if (!businessName) { const n = db.prepare('SELECT businessName FROM nodes WHERE hwid=?').get(hwid); businessName = (n && n.businessName) || '' }
+  db.prepare(`INSERT INTO licenses (hwid,businessName,plan,activatedAt,expiresAt,active,updatedAt)
+    VALUES (?,?,?,?,?,1,?)
+    ON CONFLICT(hwid) DO UPDATE SET businessName=excluded.businessName, plan=excluded.plan, expiresAt=excluded.expiresAt, active=1, updatedAt=excluded.updatedAt`)
+    .run(hwid, businessName, String(b.plan), new Date().toISOString(), expiresAt, new Date().toISOString())
+  res.json({ ok: true, expiresAt })
+})
+
+// Admin: desactivar inmediatamente.
+app.post('/license/deactivate', adminAuth, (req, res) => {
+  const hwid = String((req.body && req.body.hwid) || '').trim()
+  if (!hwid) return res.status(400).json({ error: 'hwid requerido' })
+  db.prepare('UPDATE licenses SET active=0, updatedAt=? WHERE hwid=?').run(new Date().toISOString(), hwid)
+  res.json({ ok: true })
+})
+
+// Público: la app consulta su propia licencia por hwid (sin auth).
+app.get('/license/:hwid', (req, res) => {
+  const lic = db.prepare('SELECT businessName,plan,expiresAt,active FROM licenses WHERE hwid=?').get(String(req.params.hwid))
+  if (!lic) return res.json({ active: false, registered: false })
+  const dl = daysLeft(lic.expiresAt)
+  res.json({ active: !!lic.active && dl >= 0, registered: true, plan: PLAN_NAME[lic.plan] || lic.plan || '', expiresAt: lic.expiresAt || null, daysLeft: dl, businessName: lic.businessName || '' })
+})
+
 app.get('/', (_req, res) => res.send('DELPA Portal · OK'))
 
 app.listen(PORT, '127.0.0.1', () => console.log('DELPA Portal escuchando en 127.0.0.1:' + PORT))
@@ -634,9 +716,17 @@ certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${LE_EMAIL}" --
 
 echo "==> 5/5  Iniciando con PM2"
 cd "$APP_DIR"
+# Secreto de ADMIN del panel de licencias: se genera UNA vez y persiste en el server
+# (NO está en el repo ni en la app). Si ya existe, se reusa.
+ADMIN_SECRET_FILE="$APP_DIR/.admin_secret"
+if [ ! -s "$ADMIN_SECRET_FILE" ]; then
+  (openssl rand -hex 24 2>/dev/null || (head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')) > "$ADMIN_SECRET_FILE"
+  chmod 600 "$ADMIN_SECRET_FILE"
+fi
+ADMIN_SECRET="$(cat "$ADMIN_SECRET_FILE")"
 # PING_SECRET ya está embebido en server.js; igual lo exponemos por env por si se quiere rotar.
 pm2 delete delpa-portal >/dev/null 2>&1 || true
-DELPA_PING_SECRET="${PING_SECRET}" pm2 start server.js --name delpa-portal --update-env
+DELPA_PING_SECRET="${PING_SECRET}" DELPA_ADMIN_SECRET="${ADMIN_SECRET}" pm2 start server.js --name delpa-portal --update-env
 pm2 save
 pm2 startup systemd -u root --hp /root | tail -n 1 | bash || true
 
@@ -644,3 +734,7 @@ echo ""
 echo "==> LISTO. Portal en: https://${DOMAIN}/portal/<slug>"
 echo "    Probar salud:   curl -s https://${DOMAIN}/   (debe responder 'DELPA Portal · OK')"
 echo "    Logs:           pm2 logs delpa-portal"
+echo ""
+echo "    >> SECRETO DE ADMIN (pegalo en el panel admin.html, NO lo compartas):"
+echo "       ${ADMIN_SECRET}"
+echo "       (guardado en ${ADMIN_SECRET_FILE})"

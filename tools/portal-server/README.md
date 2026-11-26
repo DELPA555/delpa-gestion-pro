@@ -37,6 +37,28 @@ Verificar: `curl -s https://portal.delpagestion.com.ar/` debe responder `DELPA P
 - El PIN de cada negocio se guarda **hasheado** (scrypt), nunca en texto plano.
 - El login del portal tiene **bloqueo por intentos** (anti fuerza bruta). HTTPS vía Let's Encrypt.
 
+## Licencias y panel admin (v1.54.0)
+
+El servidor valida licencias por `hwid`. La app consulta `GET /license/:hwid` al arrancar
+(fail-open: si el VPS no responde, usa la licencia/prueba local; nunca bloquea por falta de red).
+
+**Panel admin** (`admin.html`): generá/activá licencias y gestioná clientes. Protegido por un
+**secreto de admin** (header `X-Delpa-Admin`) **distinto** del secreto de los pings y que **NO**
+está en la app ni en el código de la página pública.
+
+- El secreto de admin lo **genera `deploy.sh`** (se guarda en `/opt/delpa-portal/.admin_secret`
+  y se **imprime al final del deploy**). Copialo: lo vas a pegar en el panel.
+- **Subir el panel a GitHub Pages** (repo `delpa555.github.io`):
+  ```bash
+  # cloná el repo del sitio si no lo tenés local, copiá el admin.html y pusheá
+  git clone https://github.com/DELPA555/delpa555.github.io.git
+  cp tools/portal-server/admin.html delpa555.github.io/admin.html
+  cd delpa555.github.io && git add admin.html && git commit -m "admin licencias conectado al VPS" && git push
+  ```
+- Abrí `https://delpa555.github.io/admin.html`, pegá el **secreto de admin** y listo: ves la lista
+  de clientes, activás (1/3/6/12 meses) y desactivás. El secreto queda solo en la memoria del
+  navegador (sessionStorage), nunca en el código de la página.
+
 ## Datos
 - SQLite en `/opt/delpa-portal/data.db` (tabla `nodes`, una fila por instalación, por `hwid`).
 - Cada instalación de DELPA que tenga un **PIN de portal configurado** manda un ping cada
