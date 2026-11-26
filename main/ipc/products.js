@@ -419,6 +419,7 @@ ipcMain.handle('products:update', (_, { id, ...data }) => {
   })
   const result = run()
   generateSizeBarcodes(db, id)
+  try { require('../lib/centralPortalPing').syncRedPrecios(db) } catch {}
   return result
 })
 
@@ -448,7 +449,10 @@ ipcMain.handle('products:updatePrice', (_, { id, price } = {}) => {
       .run(id, `Precio actualizado: ${current.name} $${current.price} → $${newPrice} (${changedBy})`)
     return true
   })
-  return run()
+  const result = run()
+  // Sincronizar precios de red al VPS (si hay código de red) — fire-and-forget.
+  try { require('../lib/centralPortalPing').syncRedPrecios(db) } catch {}
+  return result
 })
 
 // ─── Price history ────────────────────────────────────────────────────────────

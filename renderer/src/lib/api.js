@@ -129,6 +129,9 @@ export const api = {
     status: () => inv('network:status'),
     syncNow: () => inv('network:syncNow'),
     getStock: () => inv('network:getStock'),
+    syncStock: () => inv('network:syncStock'),
+    syncPrecios: () => inv('network:syncPrecios'),
+    getPrecios: () => inv('network:getPrecios'),
   },
   techLogs: {
     getAll: (filters) => inv('techLogs:getAll', filters),
@@ -344,6 +347,9 @@ export const api = {
   backup: {
     create:  (password) => inv('backup:create',  { password }),
     restore: (password) => inv('backup:restore', { password }),
+    upload:   () => inv('backup:upload'),
+    download: () => inv('backup:download'),
+    status:   () => inv('backup:status'),
   },
   fiscal: {
     stats:          ()  => inv('fiscal:stats'),

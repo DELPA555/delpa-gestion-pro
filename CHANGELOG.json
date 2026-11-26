@@ -1,4 +1,12 @@
 {
+  "v1.50.0": {
+    "fecha": "2026-11-26",
+    "titulo": "Sincronización de red propia + Backup en la nube",
+    "novedades": [
+      "La sincronización de stock entre sucursales ahora usa el servidor propio de DELPA (más rápido y confiable). Si el servidor no responde, sigue funcionando con el sistema anterior como respaldo. No tenés que hacer nada.",
+      "Backup en la nube (Configuración → Portal web): tu base se respalda sola en el servidor una vez por día (pasadas las 3am), y se guardan los últimos 7. Tenés botones para 'Hacer backup ahora' y 'Restaurar desde la nube'. La restauración reemplaza la base de esta PC (hace una copia de la actual antes y reinicia la app), así que pide confirmación."
+    ]
+  },
   "v1.49.2": {
     "fecha": "2026-11-26",
     "titulo": "Medio de pago al cobrar cuenta corriente + Mi Red en el portal",

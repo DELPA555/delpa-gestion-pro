@@ -137,6 +137,8 @@ function pingDistributor() {
         stockSnapshot: buildStockSnapshot(db),
       })
     } catch {}
+    // Sync del stock de red al VPS (si hay código de red) — reemplaza al Apps Script.
+    try { require('./centralPortalPing').syncRedStock(db) } catch {}
   } catch {}
 }
 

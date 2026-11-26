@@ -2905,13 +2905,35 @@ function TabPortal() {
   const [copied, setCopied] = useState(false)
   const [centralUrl, setCentralUrl] = useState('')
   const [copiedUrl, setCopiedUrl] = useState(false)
+  const [bkp, setBkp] = useState(null)      // { lastAt, configured }
+  const [bkpBusy, setBkpBusy] = useState('')  // '' | 'up' | 'down'
 
   const reload = () => api.portal.status().then(setStatus).catch(() => {})
+  const reloadBkp = () => api.backup.status().then(setBkp).catch(() => {})
   useEffect(() => {
     reload()
     api.portal.getPin().then(r => setPin(r?.pin || '')).catch(() => {})
     api.settings.get('portal_central_url').then(v => setCentralUrl(v || '')).catch(() => {})
+    reloadBkp()
   }, [])
+  const doBackupNow = async () => {
+    setBkpBusy('up')
+    try {
+      const r = await api.backup.upload()
+      if (r?.ok) { toast.success('Backup subido a la nube'); reloadBkp() }
+      else toast.error(r?.error || 'No se pudo hacer el backup')
+    } catch (e) { toast.error(e.message || 'Error') }
+    finally { setBkpBusy('') }
+  }
+  const doRestore = async () => {
+    if (!confirm('⚠️ Restaurar desde la nube REEMPLAZA la base de datos actual de esta PC por el último backup guardado en el servidor. Se hace una copia de seguridad de la base actual antes. La app se va a reiniciar.\n\n¿Continuar?')) return
+    setBkpBusy('down')
+    try {
+      const r = await api.backup.download()
+      if (r?.ok) toast.success('Restaurado. Reiniciando…')
+      else { toast.error(r?.error || 'No se pudo restaurar'); setBkpBusy('') }
+    } catch (e) { toast.error(e.message || 'Error'); setBkpBusy('') }
+  }
   const copyCentral = async () => {
     if (!centralUrl) return
     try { await navigator.clipboard.writeText(centralUrl); setCopiedUrl(true); setTimeout(() => setCopiedUrl(false), 1500) } catch {}
@@ -3035,6 +3057,28 @@ function TabPortal() {
         <p>• La dirección cambia cada vez que reiniciás el portal o la app (es normal del túnel gratuito).</p>
         <p>• La primera activación descarga un componente (~30 MB) una sola vez; puede tardar un momento.</p>
         <p>• Podés desactivarlo cuando quieras: el enlace deja de funcionar al instante.</p>
+      </div>
+
+      {/* Backup en la nube */}
+      <div className="bg-card border border-border rounded-xl p-4">
+        <p className="text-white text-sm font-medium">Backup en la nube</p>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          {bkp?.lastAt
+            ? <>Último backup: <span className="text-zinc-300">{formatDateTime(bkp.lastAt)}</span></>
+            : 'Todavía no se hizo ningún backup en la nube.'}
+        </p>
+        <p className="text-[11px] text-zinc-600 mt-1">Se hace solo cada día pasadas las 3am. Se guardan los últimos 7.</p>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <button onClick={doBackupNow} disabled={bkpBusy !== '' || !bkp?.configured}
+            className="btn-primary no-drag px-4 py-2 text-sm rounded-lg disabled:opacity-50">
+            {bkpBusy === 'up' ? 'Subiendo…' : 'Hacer backup ahora'}
+          </button>
+          <button onClick={doRestore} disabled={bkpBusy !== '' || !bkp?.configured}
+            className="no-drag px-4 py-2 text-sm rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50">
+            {bkpBusy === 'down' ? 'Restaurando…' : 'Restaurar desde la nube'}
+          </button>
+        </div>
+        {!bkp?.configured && <p className="text-[11px] text-amber-400 mt-2">Disponible cuando el equipo esté registrado en el servidor (guardá un PIN de portal y esperá unos minutos).</p>}
       </div>
     </div>
   )

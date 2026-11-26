@@ -37,7 +37,8 @@ cat > "$APP_DIR/package.json" <<'PKG'
   "main": "server.js",
   "dependencies": {
     "better-sqlite3": "^11.10.0",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
   }
 }
 PKG
@@ -62,9 +63,12 @@ const express = require('express')
 const Database = require('better-sqlite3')
 const crypto = require('crypto')
 const path = require('path')
+const fs = require('fs')
+const multer = require('multer')
 
 const PORT = Number(process.env.PORT || 3000)
 const DB_PATH = path.join(__dirname, 'data.db')
+const BACKUP_DIR = path.join(__dirname, 'backups')
 const PING_SECRET = process.env.DELPA_PING_SECRET || '__PING_SECRET__'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 const MAX_FAILS = 8
@@ -86,6 +90,21 @@ db.exec(`
     cajaHoy REAL DEFAULT 0,
     version TEXT,
     updatedAt TEXT
+  );
+  CREATE TABLE IF NOT EXISTS red_stock (
+    networkCode TEXT,
+    hwid TEXT,
+    branchName TEXT,
+    stockJson TEXT DEFAULT '[]',
+    updatedAt TEXT,
+    PRIMARY KEY (networkCode, hwid)
+  );
+  CREATE TABLE IF NOT EXISTS red_precios (
+    networkCode TEXT,
+    hwid TEXT,
+    preciosJson TEXT DEFAULT '[]',
+    updatedAt TEXT,
+    PRIMARY KEY (networkCode, hwid)
   );
 `)
 
@@ -233,6 +252,84 @@ app.get('/api/:slug/red', auth, (req, res) => {
     return { nombre: r.branchName || r.businessName || 'Local', online, ventasHoy: Number(r.ventasHoy) || 0, cajaHoy: Number(r.cajaHoy) || 0, unidades: units, esYo: r.slug === req.params.slug }
   })
   res.json({ networkCode: code, nodes })
+})
+
+// ── Sync de red (reemplaza al Apps Script). Auth por secreto compartido ──────────
+function secretAuth(req, res, next) {
+  if ((req.headers['x-delpa-secret'] || '') !== PING_SECRET) return res.status(401).json({ error: 'No autorizado' })
+  next()
+}
+
+// Stock de red: cada local sube su stock completo; cualquiera de la red lo consulta.
+app.post('/red/stock/:networkCode', secretAuth, (req, res) => {
+  const b = req.body || {}
+  if (!b.hwid) return res.status(400).json({ error: 'hwid requerido' })
+  db.prepare(`INSERT INTO red_stock (networkCode,hwid,branchName,stockJson,updatedAt) VALUES (?,?,?,?,?)
+    ON CONFLICT(networkCode,hwid) DO UPDATE SET branchName=excluded.branchName, stockJson=excluded.stockJson, updatedAt=excluded.updatedAt`)
+    .run(String(req.params.networkCode), String(b.hwid), String(b.branchName || ''), JSON.stringify(b.stock || []), new Date().toISOString())
+  res.json({ ok: true })
+})
+app.get('/red/stock/:networkCode', secretAuth, (req, res) => {
+  const rows = db.prepare('SELECT hwid,branchName,stockJson,updatedAt FROM red_stock WHERE networkCode=? ORDER BY branchName').all(String(req.params.networkCode))
+  const locales = rows.map(r => {
+    let stock = []
+    try { stock = JSON.parse(r.stockJson || '[]') } catch {}
+    return { branchName: r.branchName, hwid: r.hwid, lastUpdate: r.updatedAt, stock }
+  })
+  res.json({ locales })
+})
+
+// Precios de red.
+app.post('/red/precios/:networkCode', secretAuth, (req, res) => {
+  const b = req.body || {}
+  if (!b.hwid) return res.status(400).json({ error: 'hwid requerido' })
+  db.prepare(`INSERT INTO red_precios (networkCode,hwid,preciosJson,updatedAt) VALUES (?,?,?,?)
+    ON CONFLICT(networkCode,hwid) DO UPDATE SET preciosJson=excluded.preciosJson, updatedAt=excluded.updatedAt`)
+    .run(String(req.params.networkCode), String(b.hwid), JSON.stringify(b.precios || []), new Date().toISOString())
+  res.json({ ok: true })
+})
+app.get('/red/precios/:networkCode', secretAuth, (req, res) => {
+  const rows = db.prepare('SELECT preciosJson,updatedAt FROM red_precios WHERE networkCode=?').all(String(req.params.networkCode))
+  const sorted = rows.slice().sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)))
+  const map = new Map() // último precio por código gana
+  for (const r of sorted) {
+    let ps = []
+    try { ps = JSON.parse(r.preciosJson || '[]') } catch {}
+    for (const p of ps) { if (p && p.codigo != null) map.set(String(p.codigo), { codigo: p.codigo, precio: p.precio, precioLista: p.precioLista }) }
+  }
+  res.json({ precios: Array.from(map.values()) })
+})
+
+// ── Backup en la nube (v1.50.0) ──────────────────────────────────────────────────
+try { fs.mkdirSync(path.join(BACKUP_DIR, '_tmp'), { recursive: true }) } catch {}
+const upload = multer({ dest: path.join(BACKUP_DIR, '_tmp'), limits: { fileSize: 200 * 1024 * 1024 } })
+function safeSlug(s) { return String(s || '').replace(/[^a-z0-9-]/gi, '').slice(0, 60) }
+
+app.post('/backup/:slug', secretAuth, upload.single('backup'), (req, res) => {
+  const slug = safeSlug(req.params.slug)
+  if (!slug) return res.status(400).json({ error: 'slug inválido' })
+  if (!req.file) return res.status(400).json({ error: 'falta el archivo "backup"' })
+  const dir = path.join(BACKUP_DIR, slug)
+  fs.mkdirSync(dir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  fs.renameSync(req.file.path, path.join(dir, stamp + '.sqlite.gz'))
+  // Retención: solo los últimos 7.
+  try {
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.sqlite.gz')).sort()
+    while (files.length > 7) { fs.unlinkSync(path.join(dir, files.shift())) }
+  } catch {}
+  res.json({ ok: true, savedAt: new Date().toISOString() })
+})
+app.get('/backup/:slug/latest', secretAuth, (req, res) => {
+  const slug = safeSlug(req.params.slug)
+  const dir = path.join(BACKUP_DIR, slug)
+  let files = []
+  try { files = fs.readdirSync(dir).filter(f => f.endsWith('.sqlite.gz')).sort() } catch {}
+  if (!files.length) return res.status(404).json({ error: 'sin backups' })
+  const latest = files[files.length - 1]
+  res.setHeader('Content-Type', 'application/gzip')
+  res.setHeader('Content-Disposition', 'attachment; filename="' + latest + '"')
+  fs.createReadStream(path.join(dir, latest)).pipe(res)
 })
 
 app.get('/', (_req, res) => res.send('DELPA Portal · OK'))

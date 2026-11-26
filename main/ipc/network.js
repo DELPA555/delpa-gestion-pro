@@ -5,9 +5,52 @@ const { ipcMain } = require('electron')
 const https = require('https')
 const { getDB } = require('../../database/db')
 const { pingDistributor, PING_URL } = require('../lib/distributorPing')
+const { PING_SECRET, CENTRAL_BASE } = require('../lib/centralPortalPing')
 
 function getSetting(key) {
   return getDB().prepare('SELECT value FROM settings WHERE key=?').get(key)?.value || ''
+}
+
+function hwid() { try { return String(require('./license').getHardwareId() || '') } catch { return '' } }
+
+// Request JSON al VPS (GET/POST) con el secreto compartido y timeout. Rechaza si falla.
+function vpsRequest(method, pathUrl, body, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(CENTRAL_BASE + pathUrl)
+    const data = body != null ? Buffer.from(JSON.stringify(body), 'utf8') : null
+    const headers = { 'X-Delpa-Secret': PING_SECRET }
+    if (data) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = data.length }
+    const req = https.request({ hostname: u.hostname, path: u.pathname + u.search, method, timeout: timeoutMs, headers }, (res) => {
+      let d = ''
+      res.on('data', (c) => { d += c })
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error('HTTP ' + res.statusCode))
+        try { resolve(d ? JSON.parse(d) : {}) } catch { reject(new Error('respuesta inválida')) }
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', reject)
+    if (data) req.write(data)
+    req.end()
+  })
+}
+
+// Convierte la respuesta del VPS ({locales:[{...stock plano...}]}) al formato de nodos
+// que espera la pantalla "Stock de red" (stock compacto {b,n,c,cat,s:[[talle,qty]]}).
+function vpsLocalesToNodes(locales, thisHwid) {
+  return (locales || []).map(loc => {
+    const byProd = new Map()
+    for (const it of (loc.stock || [])) {
+      const key = (it.codigo && String(it.codigo).trim()) ? 'b:' + it.codigo : 'n:' + (it.nombre || '') + '|' + (it.color || '')
+      let e = byProd.get(key)
+      if (!e) { e = { b: it.codigo || '', n: it.nombre || '', c: it.color || '', cat: '', s: [] }; byProd.set(key, e) }
+      e.s.push([it.talle, Number(it.cantidad) || 0])
+    }
+    return {
+      hwid: loc.hwid, branchName: loc.branchName || '', branchType: '', version: '',
+      updatedAt: loc.lastUpdate || '', stock: Array.from(byProd.values()),
+    }
+  })
 }
 
 // GET al Apps Script y parseo de JSON. Apps Script (/exec) responde con un
@@ -70,8 +113,25 @@ ipcMain.handle('network:getStock', async () => {
   if (!networkCode && !cuit) {
     throw new Error('Configurá un "código de red" (Configuración → Red de locales) o el CUIT del negocio para usar la red de locales.')
   }
+  const thisHwid = hwid()
+
+  // 1) Primero el VPS propio (si hay código de red). Si falla o tarda >5s, caemos al
+  //    Apps Script (fallback). El VPS devuelve stock plano → lo mapeamos a nodos.
+  if (networkCode) {
+    try {
+      const r = await vpsRequest('GET', '/red/stock/' + encodeURIComponent(networkCode), null, 5000)
+      const nodes = vpsLocalesToNodes(r && r.locales, thisHwid)
+      // Si el VPS ya tiene datos, los usamos. Si viene vacío (todavía ningún local
+      // sincronizó), caemos al Apps Script para no mostrar la red vacía en la migración.
+      if (nodes.length) return { ok: true, cuit, networkCode, thisHwid, nodes, source: 'vps' }
+    } catch (e) {
+      try { require('./techLogs').logTech('warn', 'red', 'VPS no respondió el stock de red, uso Apps Script: ' + e.message) } catch {}
+      // sigue al fallback de abajo
+    }
+  }
+
+  // 2) Fallback: Apps Script (comportamiento clásico).
   // Con código de red (multi-CUIT) → getNetworkByCode&code=...; si no, el clásico por CUIT.
-  // OJO: getNetworkByCode requiere el Apps Script actualizado (redeployado).
   const url = networkCode
     ? `${PING_URL}?action=getNetworkByCode&code=${encodeURIComponent(networkCode)}`
     : `${PING_URL}?action=getNetwork&cuit=${encodeURIComponent(cuit)}`
@@ -89,13 +149,33 @@ ipcMain.handle('network:getStock', async () => {
     if (networkCode) throw new Error(base + ' — Si usás código de red, actualizá (redeployá) el Apps Script a la última versión.')
     throw new Error(base)
   }
-  const { getHardwareId } = require('../ipc/license')
-  const thisHwid = String(getHardwareId() || '')
   return {
     ok: true,
     cuit,
     networkCode,
     thisHwid,
     nodes: Array.isArray(res.nodes) ? res.nodes : [],
+    source: 'apps-script',
   }
+})
+
+// Sube el stock completo de este local al VPS (POST /red/stock/:networkCode).
+// Delega en centralPortalPing.syncRedStock (la misma función del ciclo de 15 min).
+ipcMain.handle('network:syncStock', async () => {
+  return require('../lib/centralPortalPing').syncRedStock(getDB())
+})
+
+// Sube los precios de este local al VPS. Delega en centralPortalPing.syncRedPrecios.
+ipcMain.handle('network:syncPrecios', async () => {
+  return require('../lib/centralPortalPing').syncRedPrecios(getDB())
+})
+
+// Consulta los precios de red consolidados (GET /red/precios/:networkCode).
+ipcMain.handle('network:getPrecios', async () => {
+  const networkCode = getSetting('network_code').trim()
+  if (!networkCode) return { ok: false, error: 'sin código de red', precios: [] }
+  try {
+    const r = await vpsRequest('GET', '/red/precios/' + encodeURIComponent(networkCode), null, 5000)
+    return { ok: true, precios: Array.isArray(r.precios) ? r.precios : [] }
+  } catch (e) { return { ok: false, error: e.message, precios: [] } }
 })

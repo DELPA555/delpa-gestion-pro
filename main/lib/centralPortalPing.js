@@ -14,7 +14,8 @@
  */
 const https = require('https')
 
-const CENTRAL_URL = 'https://portal.delpagestion.com.ar/ping'
+const CENTRAL_BASE = 'https://portal.delpagestion.com.ar'
+const CENTRAL_URL = CENTRAL_BASE + '/ping'
 // Mismo valor que PING_SECRET en tools/portal-server/deploy.sh.
 const PING_SECRET = '0822e42fa23b4f9dd3b79afb29d3a4a4b8489b7709c46276'
 
@@ -93,4 +94,63 @@ function pingCentralPortal(db, base) {
   } catch {}
 }
 
-module.exports = { pingCentralPortal }
+// POST JSON autenticado al VPS.
+function postJson(pathUrl, body, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(CENTRAL_BASE + pathUrl)
+    const data = Buffer.from(JSON.stringify(body), 'utf8')
+    const req = https.request({
+      hostname: u.hostname, path: u.pathname, method: 'POST', timeout: timeoutMs,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': data.length, 'X-Delpa-Secret': PING_SECRET },
+    }, (res) => {
+      let d = ''
+      res.on('data', (c) => { d += c })
+      res.on('end', () => { (res.statusCode >= 200 && res.statusCode < 300) ? resolve(d ? JSON.parse(d) : {}) : reject(new Error('HTTP ' + res.statusCode)) })
+    })
+    req.on('timeout', () => req.destroy(new Error('timeout')))
+    req.on('error', reject)
+    req.write(data); req.end()
+  })
+}
+
+// Stock local en formato plano para los endpoints de red del VPS.
+function buildFlatStock(db) {
+  try {
+    return db.prepare(`
+      SELECT p.barcode AS codigo, p.name AS nombre, ps.size AS talle, p.color AS color, ps.stock AS cantidad
+      FROM products p JOIN product_sizes ps ON ps.product_id = p.id
+      WHERE p.active = 1 AND ps.stock > 0
+    `).all().map(r => ({ codigo: r.codigo || '', nombre: r.nombre || '', talle: r.talle || '', color: r.color || '', cantidad: Number(r.cantidad) || 0 }))
+  } catch { return [] }
+}
+
+// Sube el stock de este local al VPS (si hay código de red). Devuelve Promise<{ok}>.
+function syncRedStock(db) {
+  try {
+    const code = getSetting(db, 'network_code').trim()
+    if (!code) return Promise.resolve({ ok: false, error: 'sin código de red' })
+    const branchName = getSetting(db, 'branch_name').trim() || getSetting(db, 'business_name').trim()
+    let hwid = ''
+    try { hwid = String(require('../ipc/license').getHardwareId() || '') } catch {}
+    return postJson('/red/stock/' + encodeURIComponent(code), { hwid, branchName, stock: buildFlatStock(db) })
+      .then(() => ({ ok: true })).catch(e => ({ ok: false, error: e.message }))
+  } catch (e) { return Promise.resolve({ ok: false, error: e.message }) }
+}
+
+// Sube los precios de este local al VPS (si hay código de red). Devuelve Promise<{ok}>.
+function syncRedPrecios(db) {
+  try {
+    const code = getSetting(db, 'network_code').trim()
+    if (!code) return Promise.resolve({ ok: false, error: 'sin código de red' })
+    let hwid = '', precios = []
+    try { hwid = String(require('../ipc/license').getHardwareId() || '') } catch {}
+    try {
+      precios = db.prepare(`SELECT barcode AS codigo, price AS precio, COALESCE(price_wholesale,0) AS precioLista
+        FROM products WHERE active=1 AND barcode IS NOT NULL AND barcode<>''`).all()
+    } catch {}
+    return postJson('/red/precios/' + encodeURIComponent(code), { hwid, precios })
+      .then(() => ({ ok: true })).catch(e => ({ ok: false, error: e.message }))
+  } catch (e) { return Promise.resolve({ ok: false, error: e.message }) }
+}
+
+module.exports = { pingCentralPortal, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }

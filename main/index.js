@@ -180,7 +180,11 @@ function bootServerOrStandalone(mc, mode) {
   require('./ipc/reset')
   require('./ipc/promotions') // módulo de promociones (v1.48.0)
   require('./ipc/portal') // portal web de solo lectura (túnel Cloudflare)
+  require('./ipc/cloudBackup') // backup en la nube (VPS) (v1.50.0)
   ipcMain.handle = origHandle // fin de la captura del registro de handlers
+
+  // Backup automático diario a la nube (pasadas las 3am, si no se hizo hoy).
+  try { require('./ipc/cloudBackup').startAutoBackup() } catch {}
 
   // Al cerrar la app, bajar el portal/túnel si quedó abierto.
   try {
