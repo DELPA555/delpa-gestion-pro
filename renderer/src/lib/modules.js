@@ -23,8 +23,11 @@ export const MODULES = [
     desc: 'Ficha de clientes, cuentas corrientes y puntos de fidelización.',
   },
   {
-    key: 'caja', label: 'Caja / Movimientos', default: '1', routes: ['/caja', '/gastos'],
-    desc: 'Apertura y cierre de caja, movimientos de dinero y gastos.',
+    // Caja es núcleo del sistema (como Ventas y Productos): SIEMPRE visible, no se
+    // puede desactivar. locked=true hace que isModuleEnabled la dé por activa aunque
+    // en una instalación existente haya quedado mod_caja='0' por un apagado previo.
+    key: 'caja', label: 'Caja / Movimientos', locked: true, default: '1', routes: ['/caja', '/gastos'],
+    desc: 'Apertura y cierre de caja, movimientos de dinero y gastos. Núcleo del sistema.',
   },
   {
     key: 'proveedores', label: 'Proveedores', default: '1', routes: ['/proveedores', '/compras', '/reposicion'],

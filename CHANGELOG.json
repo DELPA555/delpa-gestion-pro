@@ -1,4 +1,11 @@
 {
+  "v1.48.5": {
+    "fecha": "2026-11-26",
+    "titulo": "Caja siempre visible en el menú",
+    "novedades": [
+      "El menú de Caja vuelve a aparecer siempre y ya no se puede desactivar por error: pasa a ser una sección del núcleo del sistema (igual que Ventas y Productos). Si en alguna PC había quedado oculto, con esta actualización reaparece solo."
+    ]
+  },
   "v1.48.4": {
     "fecha": "2026-11-26",
     "titulo": "Portal web: evitar que quede una página en blanco cacheada",
