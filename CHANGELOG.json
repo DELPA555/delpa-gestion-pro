@@ -1,4 +1,13 @@
 {
+  "v1.48.0": {
+    "fecha": "2026-11-25",
+    "titulo": "Rubro del negocio, ajuste manual de inventario y promociones",
+    "novedades": [
+      "Rubro del negocio (Configuración → Rubro del negocio): elegí tu rubro (indumentaria, almacén/dietética, ferretería, farmacia/perfumería u otros). Los rubros sin talles ocultan la grilla de talles al cargar productos y al vender (se maneja una sola cantidad por producto); almacén y ferretería suman un campo de 'unidad de medida' (kg, lt, m…). Indumentaria sigue funcionando igual que siempre.",
+      "Ajuste manual de inventario (Inventario → Ajuste manual): además del escaneo, ahora podés buscar un producto con el teclado y corregir su stock a mano, talle por talle. Cada cambio queda registrado en el historial de movimientos.",
+      "Nuevo módulo de Promociones (se activa en Configuración → Módulos activos): definí promos que se aplican SOLAS en la venta — 2x1, 'lleva N paga M', N por un precio especial, descuento por cantidad y combos de productos. En la venta se muestra la promo aplicada y el descuento se suma al total. Podés ponerles fecha de inicio y fin."
+    ]
+  },
   "v1.47.0": {
     "fecha": "2026-11-25",
     "titulo": "Red por código entre sucursales + Portal web desde el celular",

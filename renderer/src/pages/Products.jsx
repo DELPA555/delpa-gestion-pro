@@ -19,6 +19,7 @@ function useDebounce(value, delay) {
   return debouncedValue
 }
 import { api } from '@/lib/api'
+import { rubroHasSizes, rubroHasUnit, DEFAULT_RUBRO } from '@/lib/rubros'
 import { formatCurrency, cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import Modal from '@/components/shared/Modal'
@@ -55,14 +56,15 @@ function sizesForGroup(group, jeansArr, clothingArr, americanArr = DEFAULT_AMERI
   return [...jeansArr, ...clothingArr]
 }
 
-function emptyForm(allSizes) {
+function emptyForm(allSizes, rubro) {
+  const noSizes = !rubroHasSizes(rubro) // rubros sin talles → producto de talle único por defecto
   return {
     barcode: '', external_barcode: '', name: '', brand: '', category: 'Jeans', color: '',
     cost: '', price: '', price_wholesale: '', price_distributor: '', price_tarjeta: '', min_stock: '5', image_data: '',
     supplier_id: '',
-    tn_sync: 1, no_sizes: 0,
+    tn_sync: 1, no_sizes: noSizes ? 1 : 0, unit_measure: '',
     is_consignment: false, consignment_supplier_id: '', consignment_cost: '',
-    sizes: allSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })),
+    sizes: noSizes ? [{ size: 'Único', stock: 0, min_stock: 0 }] : allSizes.map(s => ({ size: s, stock: 0, min_stock: 0 })),
   }
 }
 
@@ -105,7 +107,7 @@ function genEAN13Client() {
   return base + (10 - sum % 10) % 10
 }
 
-function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothingSizes, americanSizes, shoeSizes, categorySizeGroups, isNew, suppliers, isAdmin = true }) {
+function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothingSizes, americanSizes, shoeSizes, categorySizeGroups, isNew, suppliers, isAdmin = true, rubro = DEFAULT_RUBRO }) {
   const fileRef = useRef()
   const field = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const barcodeRef = useBarcodePreview(form.barcode)
@@ -399,6 +401,15 @@ function ProductForm({ form, setForm, categories, allSizes, jeansSizes, clothing
           </div>
         )}
       </div>
+
+      {rubroHasUnit(rubro) && (
+        <div>
+          <label className={labelCls}>Unidad de medida</label>
+          <input className={inputCls} value={form.unit_measure || ''}
+            onChange={e => field('unit_measure', e.target.value)} placeholder="Ej: kg, lt, m, unidad" />
+          <p className="text-xs text-zinc-600 mt-1">Cómo se mide o vende este producto (texto libre).</p>
+        </div>
+      )}
 
       {isAdmin && form.is_consignment && (
         <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 space-y-3">
@@ -1035,6 +1046,7 @@ export default function Products() {
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [expandedId, setExpandedId] = useState(null)
+  const [rubro, setRubro] = useState(DEFAULT_RUBRO)
 
   // Variant state
   const [variantModal, setVariantModal] = useState(false)
@@ -1100,6 +1112,7 @@ export default function Products() {
       try { setCustomSizes(JSON.parse(all.custom_sizes || '[]')) } catch {}
       try { setCustomCategories(JSON.parse(all.custom_categories || '[]')) } catch {}
       try { setCategorySizeGroups(JSON.parse(all.category_size_groups || '{}')) } catch {}
+      setRubro(all.rubro || DEFAULT_RUBRO)
     }).catch(() => {})
     api.suppliers.list({ limit: 200 }).then(r => setSuppliers(r.suppliers || [])).catch(() => {})
     api.consignment.products.list().then(rows => {
@@ -1136,7 +1149,7 @@ export default function Products() {
   useEffect(() => { load() }, [load])
 
   const openCreate = () => {
-    setForm(emptyForm(allSizes))
+    setForm(emptyForm(allSizes, rubro))
     setEditId(null)
     setModal('create')
   }
@@ -1906,6 +1919,7 @@ export default function Products() {
           isNew={modal === 'create'}
           suppliers={suppliers}
           isAdmin={isAdmin}
+          rubro={rubro}
         />
         <div className="flex justify-between gap-3 mt-6 pt-4 border-t border-border">
           <div>

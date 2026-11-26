@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, Users, CreditCard,
-  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes, Tag, PackageCheck, Vault, Newspaper, Coins, CalendarClock, History,
+  Truck, ShoppingBag, Wallet, Receipt, BarChart3, FileText, Shield, Settings, ClipboardList, Store, ClipboardCheck, LogOut, HandCoins, PackagePlus, FileBox, PackageMinus, Boxes, Tag, PackageCheck, Vault, Newspaper, Coins, CalendarClock, History, Ticket,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
@@ -37,6 +37,7 @@ const NAV_ADMIN = [
   { to: '/remitos',      label: 'Remitos',          Icon: FileBox },
   { to: '/reposicion',   label: 'Ped. Proveedores', Icon: Boxes },
   { to: '/vales',        label: 'Vales Desc.',      Icon: Tag },
+  { to: '/promociones',  label: 'Promociones',      Icon: Ticket },
   { to: '/consignacion', label: 'Consignación',     Icon: PackageCheck },
   { to: '/configuracion', label: 'Configuración',   Icon: Settings },
 ]

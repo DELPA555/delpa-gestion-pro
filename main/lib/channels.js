@@ -48,7 +48,7 @@ const CHANNELS = [
   'afip:certStatus', 'afip:generateCSR', 'afip:loadCert',
   'inventory:start', 'inventory:getCurrent', 'inventory:scan', 'inventory:increment',
   'inventory:updateItem', 'inventory:close', 'inventory:exportPDF', 'inventory:emailReport',
-  'inventory:history', 'inventory:getReport',
+  'inventory:history', 'inventory:getReport', 'inventory:manualAdjust',
   'email:sendTicket', 'email:saveTicketPDF',
   'shell:openPath',
   'tn:connect', 'tn:status', 'tn:disconnect',
@@ -125,6 +125,8 @@ const CHANNELS = [
   'multicaja:get', 'multicaja:set', 'multicaja:testConnection', 'multicaja:regenToken',
   // Portal web (v1.47.0)
   'portal:status', 'portal:start', 'portal:stop', 'portal:setPin', 'portal:getPin',
+  // Promociones (v1.48.0)
+  'promotions:list', 'promotions:create', 'promotions:update', 'promotions:delete', 'promotions:check',
 ]
 
 /* Canales que en modo CLIENTE NO se reenvían por HTTP: operan sobre la propia PC

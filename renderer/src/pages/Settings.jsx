@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Building2, Ruler, Tag, CreditCard, X, Plus, Cloud, RefreshCw, Unlink, Upload, Users, Percent, Mail, ShieldCheck, CheckCircle, AlertCircle, Store, ArrowLeftRight, UserCog, Eye, EyeOff, Trash2, Edit3, ShieldAlert, Gift, Copy, QrCode, Printer, FileText, DollarSign, Send, Lock, FolderOpen, ArrowUpCircle, ExternalLink, Download, MessageCircle, Globe, HelpCircle, GraduationCap, Network, Warehouse, Boxes, ScrollText, ToggleRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { MODULES, moduleKey, isModuleEnabled } from '@/lib/modules'
+import { RUBROS, DEFAULT_RUBRO } from '@/lib/rubros'
 import { cn, formatDateTime } from '@/lib/utils'
 import { SUPPORT, waLink, mailtoLink, openExternal } from '@/lib/support'
 import PageHeader from '@/components/shared/PageHeader'
@@ -31,6 +32,7 @@ const TAB_GROUPS = [
   {
     label: 'Comercial',
     items: [
+      { id: 'rubro',        label: 'Rubro del negocio', Icon: Building2 },
       { id: 'surcharges',   label: 'Recargos',      Icon: Percent },
       { id: 'fidelizacion', label: 'Fidelización',  Icon: Gift },
       { id: 'gastosfijos',  label: 'Gastos Fijos',  Icon: DollarSign },
@@ -2831,6 +2833,7 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
       {/* ── Tab: Multi-caja / red local (solo admin) ── */}
       {tab === 'multicaja' && sessionUser?.role === 'admin' && <TabMultiCaja />}
       {tab === 'portal' && sessionUser?.role === 'admin' && <TabPortal />}
+      {tab === 'rubro' && <TabRubro />}
 
       {/* ── Tab: Datos y reseteo (solo admin) ── */}
       {tab === 'reseteo' && sessionUser?.role === 'admin' && <TabReseteo />}
@@ -2849,6 +2852,46 @@ img{width:280px;height:280px;display:block;margin:0 auto 10px;object-fit:contain
         finishLabel={guide?.finishLabel || '✅ Entendido'}
       />
     </motion.div>
+  )
+}
+
+// ── Rubro del negocio ─────────────────────────────────────────────────────────────
+
+function TabRubro() {
+  const [rubro, setRubro] = useState(DEFAULT_RUBRO)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    api.settings.get('rubro').then(v => { if (v) setRubro(v) }).catch(() => {})
+  }, [])
+  const pick = async (v) => {
+    setRubro(v); setSaving(true)
+    try { await api.settings.set('rubro', v); toast.success('Rubro guardado') }
+    catch { toast.error('No se pudo guardar') }
+    finally { setSaving(false) }
+  }
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div>
+        <h3 className="text-base font-semibold text-white flex items-center gap-2"><Building2 size={16} className="text-accent" /> Rubro del negocio</h3>
+        <p className="text-sm text-zinc-500 mt-1">
+          Elegí tu rubro para adaptar la app. Por ejemplo, los rubros sin talles ocultan la grilla de talles
+          en Productos y en la venta. Cambiarlo no borra nada: solo cambia cómo se cargan y se venden los productos.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {RUBROS.map(r => (
+          <button key={r.v} type="button" onClick={() => pick(r.v)} disabled={saving}
+            className={cn('w-full text-left p-4 rounded-xl border transition-colors no-drag',
+              rubro === r.v ? 'border-accent bg-accent/[0.08]' : 'border-border bg-card hover:border-zinc-600')}>
+            <div className="flex items-center justify-between">
+              <p className={cn('font-medium', rubro === r.v ? 'text-accent' : 'text-white')}>{r.label}</p>
+              {rubro === r.v && <CheckCircle size={16} className="text-accent" />}
+            </div>
+            <p className="text-xs text-zinc-500 mt-0.5">{r.desc}</p>
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

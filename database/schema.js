@@ -895,7 +895,29 @@ function createTables(db) {
     END;
   `)
 
+  // ─── Promociones (v1.48.0) ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS promotions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,                 -- '2x1' | 'nxm' | 'price_bundle' | 'qty_discount' | 'combo'
+      config TEXT NOT NULL,               -- JSON con parámetros según tipo
+      applies_to TEXT DEFAULT 'all',      -- 'all' | 'category' | 'product'
+      applies_value TEXT,                 -- categoría o product_id según applies_to
+      active INTEGER DEFAULT 1,
+      starts_at TEXT,
+      ends_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_promotions_active ON promotions(active);
+  `)
+
   const migrations = [
+    // Promociones aplicadas a una venta (v1.48.0)
+    "ALTER TABLE sales ADD COLUMN promo_discount REAL DEFAULT 0",
+    "ALTER TABLE sales ADD COLUMN promo_applied TEXT DEFAULT ''",
+    // Unidad de medida del producto (rubros almacén/ferretería) (v1.48.0)
+    "ALTER TABLE products ADD COLUMN unit_measure TEXT DEFAULT ''",
     "ALTER TABLE clients ADD COLUMN points INTEGER DEFAULT 0",
     "ALTER TABLE sales ADD COLUMN installments INTEGER DEFAULT 1",
     "ALTER TABLE sales ADD COLUMN surcharge_rate REAL DEFAULT 0",

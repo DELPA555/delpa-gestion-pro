@@ -251,6 +251,7 @@ export const api = {
     emailReport: (id)    => inv('inventory:emailReport', id),
     history:     (p)     => inv('inventory:history', p),
     getReport:   (id)    => inv('inventory:getReport', id),
+    manualAdjust:(d)     => inv('inventory:manualAdjust', d),
   },
   auth: {
     login:              (d)      => inv('auth:login', d),
@@ -481,5 +482,12 @@ export const api = {
     stop:   ()    => inv('portal:stop'),
     setPin: (pin) => inv('portal:setPin', pin),
     getPin: ()    => inv('portal:getPin'),
+  },
+  promotions: {
+    list:   ()    => inv('promotions:list'),
+    create: (d)   => inv('promotions:create', d),
+    update: (d)   => inv('promotions:update', d),
+    delete: (id)  => inv('promotions:delete', id),
+    check:  (items) => inv('promotions:check', items),
   },
 }

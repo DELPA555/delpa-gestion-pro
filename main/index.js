@@ -178,6 +178,7 @@ function bootServerOrStandalone(mc, mode) {
   require('./ipc/pausedsales')
   require('./ipc/training')
   require('./ipc/reset')
+  require('./ipc/promotions') // módulo de promociones (v1.48.0)
   require('./ipc/portal') // portal web de solo lectura (túnel Cloudflare)
   ipcMain.handle = origHandle // fin de la captura del registro de handlers
 

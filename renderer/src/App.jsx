@@ -38,6 +38,7 @@ const Remitos = lazy(() => import('./pages/Remitos'))
 const SupplierOrders = lazy(() => import('./pages/SupplierOrders'))
 const Vouchers = lazy(() => import('./pages/Vouchers'))
 const Consignment = lazy(() => import('./pages/Consignment'))
+const Promotions = lazy(() => import('./pages/Promotions'))
 import { api } from './lib/api'
 import { toast } from 'sonner'
 
@@ -112,6 +113,7 @@ function AnimatedRoutes() {
           <Route path="/remitos"      element={<PageErrorBoundary><Remitos /></PageErrorBoundary>} />
           <Route path="/reposicion"   element={<PageErrorBoundary><SupplierOrders /></PageErrorBoundary>} />
           <Route path="/vales"        element={<PageErrorBoundary><Vouchers /></PageErrorBoundary>} />
+          <Route path="/promociones"  element={<PageErrorBoundary><Promotions /></PageErrorBoundary>} />
           <Route path="/consignacion" element={<PageErrorBoundary><Consignment /></PageErrorBoundary>} />
         </>}
         <Route path="*" element={<Navigate to="/ventas" replace />} />

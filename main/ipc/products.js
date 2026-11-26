@@ -287,18 +287,18 @@ ipcMain.handle('products:getVariants', (_, parentId) => {
 
 ipcMain.handle('products:create', (_, data) => {
   const db = getDB()
-  const { barcode, external_barcode, name, brand, category, color, cost, price, price_wholesale, price_distributor, price_tarjeta, supplier_id, min_stock, image_data, sizes = [], tn_sync = 1, no_sizes = 0 } = data
+  const { barcode, external_barcode, name, brand, category, color, cost, price, price_wholesale, price_distributor, price_tarjeta, supplier_id, min_stock, image_data, sizes = [], tn_sync = 1, no_sizes = 0, unit_measure = '' } = data
   let createdBy = ''
   try { createdBy = require('./auth').getCurrentSession()?.username || '' } catch {}
   const run = db.transaction(() => {
     const { lastInsertRowid: id } = db.prepare(`
-      INSERT INTO products (barcode,external_barcode,name,brand,category,color,cost,price,price_wholesale,price_distributor,price_tarjeta,supplier_id,min_stock,image_data,tn_sync,no_sizes)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO products (barcode,external_barcode,name,brand,category,color,cost,price,price_wholesale,price_distributor,price_tarjeta,supplier_id,min_stock,image_data,tn_sync,no_sizes,unit_measure)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(barcode || null, (external_barcode && String(external_barcode).trim()) || null,
            name, brand || '', category || '', color || '',
            cost || 0, price, Number(price_wholesale) || 0, Number(price_distributor) || 0,
            Number(price_tarjeta) || 0, supplier_id || null,
-           min_stock || 5, image_data || '', tn_sync ? 1 : 0, no_sizes ? 1 : 0)
+           min_stock || 5, image_data || '', tn_sync ? 1 : 0, no_sizes ? 1 : 0, unit_measure || '')
     const ins = db.prepare(`INSERT INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,?,?) ON CONFLICT(product_id,size) DO UPDATE SET stock=excluded.stock,min_stock=excluded.min_stock`)
     for (const s of sizes) if (s.size) ins.run(id, s.size, s.stock || 0, s.min_stock || 2)
     db.prepare(`INSERT INTO audit_log (action,module,entity_id,description,new_data) VALUES ('CREATE','products',?,?,?)`)
@@ -346,7 +346,7 @@ ipcMain.handle('products:createVariant', (_, data) => {
 
 ipcMain.handle('products:update', (_, { id, ...data }) => {
   const db = getDB()
-  const { barcode, external_barcode, name, brand, category, color, cost, price, price_wholesale, price_distributor, price_tarjeta, supplier_id, min_stock, image_data, sizes = [], tn_sync, no_sizes, changedBy } = data
+  const { barcode, external_barcode, name, brand, category, color, cost, price, price_wholesale, price_distributor, price_tarjeta, supplier_id, min_stock, image_data, sizes = [], tn_sync, no_sizes, unit_measure, changedBy } = data
   const extVal = external_barcode !== undefined ? ((external_barcode && String(external_barcode).trim()) || null) : undefined
   const run = db.transaction(() => {
     // Registrar cambio de precio si cambió
@@ -388,12 +388,17 @@ ipcMain.handle('products:update', (_, { id, ...data }) => {
     if (finalNS === undefined) {
       try { finalNS = db.prepare('SELECT no_sizes FROM products WHERE id=?').get(id)?.no_sizes ? 1 : 0 } catch { finalNS = 0 }
     }
+    // Unidad de medida: si el payload no la trae, conservar la actual.
+    let finalUM = unit_measure !== undefined ? String(unit_measure || '') : undefined
+    if (finalUM === undefined) {
+      try { finalUM = db.prepare('SELECT unit_measure FROM products WHERE id=?').get(id)?.unit_measure ?? '' } catch { finalUM = '' }
+    }
     if (image_data !== undefined) {
-      db.prepare(`UPDATE products SET barcode=?,external_barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,price_wholesale=?,price_distributor=?,price_tarjeta=?,supplier_id=?,min_stock=?,image_data=?,tn_sync=?,no_sizes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(barcode || null, finalExt, name, brand || '', category || '', color || '', cost || 0, price, finalPW, finalPD, finalPT, finalSup, min_stock || 5, image_data, tnVal, finalNS, id)
+      db.prepare(`UPDATE products SET barcode=?,external_barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,price_wholesale=?,price_distributor=?,price_tarjeta=?,supplier_id=?,min_stock=?,image_data=?,tn_sync=?,no_sizes=?,unit_measure=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(barcode || null, finalExt, name, brand || '', category || '', color || '', cost || 0, price, finalPW, finalPD, finalPT, finalSup, min_stock || 5, image_data, tnVal, finalNS, finalUM, id)
     } else {
-      db.prepare(`UPDATE products SET barcode=?,external_barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,price_wholesale=?,price_distributor=?,price_tarjeta=?,supplier_id=?,min_stock=?,tn_sync=?,no_sizes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-        .run(barcode || null, finalExt, name, brand || '', category || '', color || '', cost || 0, price, finalPW, finalPD, finalPT, finalSup, min_stock || 5, tnVal, finalNS, id)
+      db.prepare(`UPDATE products SET barcode=?,external_barcode=?,name=?,brand=?,category=?,color=?,cost=?,price=?,price_wholesale=?,price_distributor=?,price_tarjeta=?,supplier_id=?,min_stock=?,tn_sync=?,no_sizes=?,unit_measure=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(barcode || null, finalExt, name, brand || '', category || '', color || '', cost || 0, price, finalPW, finalPD, finalPT, finalSup, min_stock || 5, tnVal, finalNS, finalUM, id)
     }
     if (sizes.length > 0) {
       const validSizes = sizes.filter(s => s.size && String(s.size).trim() !== '')

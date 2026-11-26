@@ -9,6 +9,7 @@ import {
   ArrowLeftRight, RotateCcw, QrCode, Clock, Loader2, Tag, Ruler, Pause, Play,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { rubroHasSizes } from '@/lib/rubros'
 import { formatCurrency, formatDateTime, debounce, cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import Pagination from '@/components/shared/Pagination'
@@ -356,6 +357,7 @@ export default function Sales() {
   const [results, setResults] = useState([])
   const [showResults, setShowResults] = useState(false)
   const [cart, setCart] = useState([])
+  const [promoResult, setPromoResult] = useState({ promos: [], totalDiscount: 0 })
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedSize, setSelectedSize] = useState(null)
   const [qty, setQty] = useState(1)
@@ -381,6 +383,15 @@ export default function Sales() {
   // Espejo del carrito para chequear existencia de un ítem dentro de callbacks memoizados.
   const cartRef = useRef([])
   useEffect(() => { cartRef.current = cart }, [cart])
+  // Promociones (v1.48.0): al cambiar el carrito, consultar qué promos aplican.
+  useEffect(() => {
+    const enabled = biz.mod_promotions === '1'
+    if (!enabled || cart.length === 0) { setPromoResult({ promos: [], totalDiscount: 0 }); return }
+    let on = true
+    const items = cart.map(it => ({ productId: it.productId, quantity: it.qty, unitPrice: Number(it.editedPrice) || 0 }))
+    api.promotions.check(items).then(r => { if (on) setPromoResult(r || { promos: [], totalDiscount: 0 }) }).catch(() => {})
+    return () => { on = false }
+  }, [cart, biz.mod_promotions])
   // Precio de lista (v1.45.0): cuando un producto tiene price_tarjeta>0, se pregunta qué precio usar.
   // { productName, size, normal, tarjeta, onPick(mode) } | null
   const [priceChoice, setPriceChoice] = useState(null)
@@ -834,7 +845,8 @@ export default function Sales() {
       ? sizesArr.find(s => sizeMatches(s.size) && s.stock > 0)?.size || null
       : null
     // Talle único / N/A → preseleccionar la única fila (no hace falta elegir talle).
-    if (!preSize && (p.no_sizes || sizesArr.length === 1)) preSize = sizesArr[0]?.size || null
+    // Rubros sin talles (almacén, ferretería, etc.): no se elige talle, igual que no_sizes.
+    if (!preSize && (p.no_sizes || sizesArr.length === 1 || !rubroHasSizes(biz.rubro))) preSize = sizesArr[0]?.size || 'N/A'
     setSelectedSize(preSize)
     setQty(1)
     setQuery(p.name)
@@ -924,7 +936,12 @@ export default function Sales() {
   const canRedeem = pointsCfg.enabled && clientPoints >= pointsCfg.minRedeem
   const pointsDiscount = redeemPoints && canRedeem ? Math.min(clientPoints * pointsCfg.value, subtotal - discountAmt) : 0
   const computedValeDiscount = valeDiscount > 0 ? Math.min(valeDiscount, subtotal - discountAmt - pointsDiscount) : 0
-  const net = subtotal - discountAmt - pointsDiscount - computedValeDiscount
+  // Descuento por promociones (v1.48.0): tope = lo que queda del subtotal tras los otros descuentos.
+  const promoDiscount = (biz.mod_promotions === '1')
+    ? Math.min(Number(promoResult.totalDiscount) || 0, Math.max(0, subtotal - discountAmt - pointsDiscount - computedValeDiscount))
+    : 0
+  const promoApplied = promoDiscount > 0 ? promoResult.promos.map(p => p.name).join(', ') : ''
+  const net = subtotal - discountAmt - pointsDiscount - computedValeDiscount - promoDiscount
   const surchargeAmt = net * surchargeRate / 100
   const singleTotal = net + surchargeAmt
   const perInstallment = installments > 1 ? singleTotal / installments : 0
@@ -1177,6 +1194,8 @@ export default function Sales() {
         payments:    paymentsPayload,
         mpPaymentId: mpPaymentId || '',
         priceList:   activeList,
+        promoDiscount,
+        promoApplied,
       })
       const saleId = typeof result === 'object' ? result.saleId : result
       const saleData = await api.sales.get(saleId)
@@ -2463,6 +2482,12 @@ export default function Sales() {
                 <div className="flex justify-between text-sm">
                   <span className="text-purple-400 flex items-center gap-1"><Tag size={11} /> Vale {valeCode}</span>
                   <span className="text-purple-400 tabular-nums">-{formatCurrency(computedValeDiscount)}</span>
+                </div>
+              )}
+              {promoDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-emerald-400 flex items-center gap-1">🏷️ Promo{promoApplied ? `: ${promoApplied}` : ''}</span>
+                  <span className="text-emerald-400 tabular-nums">-{formatCurrency(promoDiscount)}</span>
                 </div>
               )}
               {!splitPayment && surchargeRate > 0 && !listaEfectivo && (

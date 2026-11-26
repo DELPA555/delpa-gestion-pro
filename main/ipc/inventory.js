@@ -274,6 +274,30 @@ ipcMain.handle('inventory:close', (_, { sessionId, applyAdjustments }) => {
   return { ok: true }
 })
 
+// ── inventory:manualAdjust ───────────────────────────────────────────────────────
+// Ajuste manual con teclado (sin escanear): setea el stock de los talles de un
+// producto. El trigger de stock_movements registra cada cambio como 'ajuste'.
+ipcMain.handle('inventory:manualAdjust', (_, { productId, sizes } = {}) => {
+  const db = getDB()
+  const prod = db.prepare('SELECT name FROM products WHERE id=?').get(productId)
+  if (!prod) return { ok: false, error: 'Producto no encontrado' }
+  const ins = db.prepare('INSERT OR IGNORE INTO product_sizes (product_id,size,stock,min_stock) VALUES (?,?,0,2)')
+  const upd = db.prepare('UPDATE product_sizes SET stock=?, stock_modified_at=CURRENT_TIMESTAMP WHERE product_id=? AND size=?')
+  let changed = 0
+  db.transaction(() => {
+    setCtx(db, { tipo: 'ajuste', referencia_id: productId, referencia_tipo: 'inventario_manual', detalle: `Ajuste manual de inventario — ${prod.name}` })
+    for (const s of sizes || []) {
+      if (!s.size) continue
+      const stock = Math.max(0, Math.floor(Number(s.stock) || 0))
+      ins.run(productId, s.size)
+      const r = upd.run(stock, productId, s.size)
+      if (r.changes) changed++
+    }
+    resetCtx(db)
+  })()
+  return { ok: true, changed }
+})
+
 // ── inventory:exportPDF ────────────────────────────────────────────────────────
 ipcMain.handle('inventory:exportPDF', async (_, sessionId) => {
   const db = getDB()

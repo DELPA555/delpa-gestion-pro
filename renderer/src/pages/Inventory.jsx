@@ -82,8 +82,16 @@ export default function Inventory() {
   const [supplierExporting, setSupplierExporting] = useState(false)
   const [supplierEmailing, setSupplierEmailing]   = useState(false)
 
+  // ── Ajuste manual con teclado ──
+  const [manualQuery, setManualQuery]     = useState('')
+  const [manualResults, setManualResults] = useState([])
+  const [manualProduct, setManualProduct] = useState(null) // { id, name, color, sizes:[{size,stock}] }
+  const [manualStock, setManualStock]     = useState({})   // size -> value (string)
+  const [manualSaving, setManualSaving]   = useState(false)
+
   const barcodeRef = useRef(null)
   const listRef    = useRef(null)
+  const manualSearchRef = useRef(null)
 
   // ── Init ──────────────────────────────────────────────────────────────────────
   const init = useCallback(async () => {
@@ -324,6 +332,46 @@ export default function Inventory() {
     finally { setSupplierEmailing(false) }
   }
 
+  // ── Ajuste manual: búsqueda con debounce ──
+  useEffect(() => {
+    if (view !== 'manual') return
+    if (!manualQuery.trim()) { setManualResults([]); return }
+    let on = true
+    const t = setTimeout(() => {
+      api.products.search(manualQuery).then(r => { if (on) setManualResults((r || []).slice(0, 10)) }).catch(() => {})
+    }, 250)
+    return () => { on = false; clearTimeout(t) }
+  }, [manualQuery, view])
+
+  const openManual = () => {
+    setView('manual'); setManualQuery(''); setManualResults([]); setManualProduct(null); setManualStock({})
+    setTimeout(() => manualSearchRef.current?.focus(), 80)
+  }
+  const selectManualProduct = async (p) => {
+    try {
+      const full = await api.products.get(p.id)
+      const sizes = (full?.sizes || []).length ? full.sizes : [{ size: 'Único', stock: 0 }]
+      setManualProduct({ id: p.id, name: full?.name || p.name, color: full?.color || p.color || '', sizes })
+      const init = {}; for (const s of sizes) init[s.size] = String(s.stock ?? 0)
+      setManualStock(init)
+      setManualResults([]); setManualQuery('')
+    } catch { toast.error('No se pudo cargar el producto') }
+  }
+  const saveManual = async () => {
+    if (!manualProduct) return
+    setManualSaving(true)
+    try {
+      const sizes = manualProduct.sizes.map(s => ({ size: s.size, stock: Number(manualStock[s.size] ?? 0) }))
+      const r = await api.inventory.manualAdjust({ productId: manualProduct.id, sizes })
+      if (r?.ok) {
+        toast.success(`Stock ajustado (${r.changed} cambio${r.changed === 1 ? '' : 's'})`)
+        setManualProduct(null); setManualStock({})
+        setTimeout(() => manualSearchRef.current?.focus(), 50)
+      } else toast.error(r?.error || 'Error al ajustar')
+    } catch (e) { toast.error(e.message || 'Error') }
+    finally { setManualSaving(false) }
+  }
+
   const totalQty = scanItems.reduce((s, i) => s + i.real_stock, 0)
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -350,6 +398,10 @@ export default function Inventory() {
           actions={
             <div className="flex gap-2">
               <HelpButton module="inventario" label="Inventario" />
+              <button onClick={openManual}
+                className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+                <Hash size={15} /> Ajuste manual
+              </button>
               <button onClick={openSupplierView}
                 className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
                 <Truck size={15} /> Stock por proveedor
@@ -795,6 +847,92 @@ export default function Inventory() {
             <button onClick={() => setCloseModal(false)} className="text-xs text-zinc-600 hover:text-zinc-400 py-1 transition-colors">Cancelar</button>
           </div>
         </Modal>
+      </motion.div>
+    )
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER: ajuste manual (teclado, sin scanner)
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (view === 'manual') {
+    return (
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }} className="p-6 h-full flex flex-col">
+        <PageHeader
+          title="Ajuste manual de stock"
+          subtitle="Buscá un producto y corregí el stock con el teclado"
+          actions={
+            <button onClick={() => { setView('history'); loadHistory() }}
+              className="no-drag flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors">
+              <ArrowLeft size={15} /> Volver
+            </button>
+          }
+        />
+
+        {/* Buscador */}
+        <div className="relative mb-4 max-w-xl">
+          <ScanLine size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input
+            ref={manualSearchRef}
+            value={manualQuery}
+            onChange={e => setManualQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') { setManualQuery(''); setManualResults([]) } }}
+            placeholder="Buscar producto por nombre o código…"
+            className="w-full bg-[#0d0d0d] border border-border rounded-xl pl-9 pr-4 py-3 text-sm text-white placeholder-zinc-600 no-drag focus:border-accent outline-none"
+          />
+          {manualResults.length > 0 && (
+            <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden shadow-xl max-h-72 overflow-y-auto">
+              {manualResults.map(p => (
+                <button key={p.id} onClick={() => selectManualProduct(p)}
+                  className="block w-full text-left px-4 py-2.5 text-sm text-zinc-200 hover:bg-white/5 border-b border-border/50 last:border-0">
+                  {p.name} {p.color ? <span className="text-zinc-500">· {p.color}</span> : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Producto seleccionado: talles editables */}
+        {manualProduct ? (
+          <div className="bg-card border border-border rounded-xl p-5 max-w-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-white font-medium">{manualProduct.name}</p>
+                {manualProduct.color && <p className="text-xs text-zinc-500">{manualProduct.color}</p>}
+              </div>
+              <button onClick={() => { setManualProduct(null); setManualStock({}) }} className="text-zinc-500 hover:text-white"><XCircle size={18} /></button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {manualProduct.sizes.map((s, idx) => (
+                <div key={s.size}>
+                  <label className="text-xs text-zinc-400">{s.size === 'Único' || s.size === 'N/A' ? 'Stock' : `Talle ${s.size}`}</label>
+                  <input
+                    type="number" min="0"
+                    className="w-full mt-1 bg-[#0a0a0a] border border-border rounded-lg px-3 py-2 text-sm text-white tabular-nums"
+                    value={manualStock[s.size] ?? '0'}
+                    onChange={e => setManualStock(m => ({ ...m, [s.size]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') saveManual() }}
+                    autoFocus={idx === 0}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => { setManualProduct(null); setManualStock({}) }}
+                className="px-4 py-2 text-sm rounded-lg border border-border text-zinc-300 hover:text-white">Cancelar</button>
+              <button onClick={saveManual} disabled={manualSaving}
+                className="btn-primary px-5 py-2 text-sm rounded-lg disabled:opacity-50 flex items-center gap-2">
+                <CheckCircle size={14} /> {manualSaving ? 'Guardando…' : 'Guardar ajuste'}
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-600 mt-3">Tab para moverte entre talles · Enter para guardar · Esc para limpiar la búsqueda.</p>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-zinc-600">
+            <Hash size={32} className="mb-3 opacity-40" />
+            <p className="text-sm">Buscá un producto para ajustar su stock</p>
+          </div>
+        )}
       </motion.div>
     )
   }

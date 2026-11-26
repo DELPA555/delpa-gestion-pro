@@ -43,6 +43,10 @@ export const MODULES = [
     desc: 'Mercadería a consignación de proveedores y su liquidación.',
   },
   {
+    key: 'promotions', label: 'Promociones', default: '0', routes: ['/promociones'],
+    desc: 'Promos que se aplican solas en la venta: 2x1, Nx1, combos y descuentos por cantidad.',
+  },
+  {
     // Sin entrada propia en el menú lateral: controla la sincronización y su
     // pestaña de configuración. Las credenciales NO se borran al desactivar.
     key: 'tiendanube', label: 'Tienda Nube (sync)', default: '0', routes: [], tab: 'tiendanube',

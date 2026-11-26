@@ -20,6 +20,8 @@ ipcMain.handle('sales:create', (_, {
   discountType, discountValue,
   // Lista de precios aplicada (publico|mayorista|distribuidor)
   priceList,
+  // Promociones aplicadas (v1.48.0): monto total descontado y nombres de las promos.
+  promoDiscount, promoApplied,
   // Multi-caja: número de la caja de ORIGEN. En modo cliente lo inyecta el proxy con
   // el número local de esa PC; en standalone/servidor cae a la config local.
   numeroCaja,
@@ -52,8 +54,9 @@ ipcMain.handle('sales:create', (_, {
         (client_id,total,subtotal,subtotal_sin_recargo,discount,payment_method,notes,cashbox_id,installments,
          surcharge_rate,voucher_type,seller_name,sale_number,sucursal_id,
          cae,cae_fch_vto,tipo_cbte,cbte_nro,pto_venta,doc_tipo,doc_nro,mp_payment_id,
-         amount_received,change_given,discount_type,discount_value,price_list,numero_caja)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         amount_received,change_given,discount_type,discount_value,price_list,numero_caja,
+         promo_discount,promo_applied)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       clientId || null, total, subtotal || total, pointsBase, discount || 0,
       effectiveMethod, notes || '', cashbox?.id || null,
@@ -63,6 +66,7 @@ ipcMain.handle('sales:create', (_, {
       ptoVenta || 0, docTipo || 99, docNro || '0', mpPaymentId || '',
       amountReceived || 0, changeGiven || 0, discountType || 'amount', discountValue || 0,
       priceList || 'publico', nCaja,
+      promoDiscount || 0, promoApplied || '',
     )
 
     // Insert payment breakdown rows
