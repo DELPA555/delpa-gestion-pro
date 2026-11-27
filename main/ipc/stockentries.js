@@ -178,6 +178,13 @@ ipcMain.handle('stockentry:create', (_, data) => {
 
   const { entryId, processedItems } = run()
 
+  // Alerta en tiempo real (v3.0.0): avisar el ingreso de mercadería al instante por email.
+  try {
+    let totalUnidades = 0
+    for (const it of items) for (const sz of (it.sizes || [])) totalUnidades += Number(sz.qty) || 0
+    require('../lib/centralPortalPing').sendEvento(db, 'ingreso_stock', { productos: items.length, unidades: totalUnidades })
+  } catch {}
+
   // Fire-and-forget TN stock sync for affected products
   try {
     const { syncStockAfterSale } = require('./tiendanube')

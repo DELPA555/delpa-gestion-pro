@@ -1,4 +1,11 @@
 {
+  "v3.0.0": {
+    "fecha": "2026-11-27",
+    "titulo": "Alertas de eventos en tiempo real",
+    "novedades": [
+      "DELPA Gestión PRO v3.0 — Alertas de eventos en tiempo real: anulaciones, diferencias de caja, stock bajo e ingresos de mercadería notifican al instante por email. Antes los avisos se revisaban cada tanto; ahora, apenas pasa algo importante, te llega el mail en el momento al correo configurado en Configuración → Portal web. Diferencia de caja: solo avisa si el descuadre supera los $500. Stock bajo: te avisa cuando un producto queda en su mínimo o por debajo tras una venta."
+    ]
+  },
   "v1.54.2": {
     "fecha": "2026-11-26",
     "titulo": "Portal web: diagnóstico de conexión",

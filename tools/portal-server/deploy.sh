@@ -457,6 +457,59 @@ app.post('/admin/test-email', secretAuth, async (req, res) => {
   res.status(r.ok ? 200 : 502).json(r)
 })
 
+// ── POST /evento — alerta puntual en TIEMPO REAL (v3.0.0) ────────────────────────
+// La app manda un evento concreto y el servidor dispara el email al instante al
+// alertEmail del negocio. Body: { slug, tipo, datos }.
+//   tipo: 'anulacion' | 'cierre_caja' | 'stock_bajo' | 'ingreso_stock'
+// (money() está definido más abajo, en la sección de alertas — hoisting.)
+app.post('/evento', secretAuth, async (req, res) => {
+  const b = req.body || {}
+  const slug = String(b.slug || '').trim()
+  const tipo = String(b.tipo || '').trim()
+  const d = b.datos || {}
+  if (!slug || !tipo) return res.status(400).json({ error: 'slug y tipo requeridos' })
+  const node = db.prepare('SELECT slug, businessName, branchName, alertEmail FROM nodes WHERE slug=?').get(slug)
+  if (!node) return res.status(404).json({ error: 'nodo no encontrado' })
+  if (!node.alertEmail) return res.json({ ok: false, skipped: true, error: 'el negocio no tiene email de alertas' })
+  const nombre = node.branchName || node.businessName || 'tu local'
+  let subject = '', text = ''
+  switch (tipo) {
+    case 'anulacion':
+      subject = '⚠️ Anulación de venta — ' + nombre
+      text = 'Se anuló una venta en ' + nombre + '.\n\n' +
+             'Venta #' + (d.numero || '?') + '\n' +
+             'Total: ' + money(d.total) + '\n' +
+             'Motivo: ' + (d.motivo ? d.motivo : '(sin especificar)')
+      break
+    case 'cierre_caja':
+      subject = '🔴 Diferencia de caja — ' + nombre
+      text = 'El cierre de caja de ' + nombre + ' cerró con diferencia.\n\n' +
+             'Esperado: ' + money(d.esperado) + '\n' +
+             'Declarado: ' + money(d.declarado) + '\n' +
+             'Diferencia: ' + money(d.diferencia)
+      break
+    case 'stock_bajo':
+      subject = '📦 Stock bajo — ' + nombre
+      text = 'Un producto quedó en stock bajo en ' + nombre + '.\n\n' +
+             'Producto: ' + (d.nombre || '?') + (d.talle ? ' — talle ' + d.talle : '') + '\n' +
+             'Stock actual: ' + (d.stock != null ? d.stock : '?') + ' unidades\n' +
+             'Mínimo configurado: ' + (d.min_stock != null ? d.min_stock : '?')
+      break
+    case 'ingreso_stock':
+      subject = '📥 Ingreso de mercadería — ' + nombre
+      text = 'Se registró un ingreso de mercadería en ' + nombre + '.\n\n' +
+             (d.productos != null ? d.productos : '?') + ' productos ingresados\n' +
+             (d.unidades != null ? d.unidades : '?') + ' unidades en total'
+      break
+    default:
+      return res.status(400).json({ error: 'tipo desconocido: ' + tipo })
+  }
+  const r = await resendSend(node.alertEmail, subject, text)
+  if (r.ok) console.log('[evento] ' + tipo + ' -> ' + node.alertEmail + ' (resend id ' + (r.id || '?') + ')')
+  else console.error('[evento] ' + tipo + ' FALLO: ' + (r.error || 'desconocido'))
+  res.status(r.ok ? 200 : 502).json(r)
+})
+
 // Envía un email por la API HTTP de Resend. Devuelve {ok, id?, status?, error?}.
 async function resendSend(to, subject, text) {
   if (!RESEND_API_KEY) return { ok: false, error: 'RESEND_API_KEY no configurada' }

@@ -219,6 +219,8 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
   } catch (e) { console.error('[cashbox:close] transferencia automática a caja grande:', e.message) }
   try { require('./techLogs').logTech(Math.abs(diff) > 0.5 ? 'warn' : 'info', 'caja', `Cierre de caja #${cashboxId} — esperado $${expected.toFixed(2)}, contado $${effectiveRealCash.toFixed(2)}, dif $${diff.toFixed(2)}`) } catch {}
   try { const { sendCashboxReport } = require('./email'); await sendCashboxReport(cashboxId) } catch (e) { try { require('./techLogs').logTech('error', 'email', 'Fallo envío informe de cierre de caja: ' + e.message, e.stack) } catch {} }
+  // Alerta en tiempo real (v3.0.0): si hay un descuadre relevante (>$500), avisar al instante.
+  try { if (Math.abs(diff) > 500) require('../lib/centralPortalPing').sendEvento(db, 'cierre_caja', { esperado: expected, declarado: effectiveRealCash, diferencia: diff }) } catch {}
   return { expectedCash: expected, difference: diff, transfer }
 })
 

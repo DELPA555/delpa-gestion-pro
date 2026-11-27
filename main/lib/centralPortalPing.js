@@ -211,6 +211,21 @@ function postJson(pathUrl, body, timeoutMs = 15000) {
   })
 }
 
+// Envía un EVENTO puntual al servidor central para alerta en TIEMPO REAL (v3.0.0).
+// tipo: 'anulacion' | 'cierre_caja' | 'stock_bajo' | 'ingreso_stock'. datos: objeto libre.
+// Fire-and-forget: nunca bloquea ni rompe el handler que lo llama. Si el negocio no tiene
+// portal configurado (sin slug o sin PIN) no se manda nada (en silencio).
+function sendEvento(db, tipo, datos) {
+  try {
+    const slug = getSetting(db, 'portal_central_slug').trim()
+    const pin = getSetting(db, 'portal_pin').trim()
+    if (!slug || !pin) return // sin portal configurado → no hay a quién/cómo avisar
+    postJson('/evento', { slug, tipo, datos: datos || {} }, 8000)
+      .then(() => { try { console.log('[evento] ' + tipo + ' enviado (slug=' + slug + ')') } catch {} })
+      .catch((e) => { try { console.error('[evento] ' + tipo + ' falló: ' + (e && e.message)) } catch {} })
+  } catch (e) { try { console.error('[evento] sendEvento excepción: ' + (e && e.message)) } catch {} }
+}
+
 // Stock local en formato plano para los endpoints de red del VPS.
 function buildFlatStock(db) {
   try {
@@ -251,4 +266,4 @@ function syncRedPrecios(db) {
   } catch (e) { return Promise.resolve({ ok: false, error: e.message }) }
 }
 
-module.exports = { pingCentralPortal, pingNow, pingForLicense, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }
+module.exports = { pingCentralPortal, pingNow, pingForLicense, sendEvento, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }

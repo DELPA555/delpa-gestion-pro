@@ -206,6 +206,23 @@ ipcMain.handle('sales:create', (_, {
     syncStockAfterSale(result.itemsForSync)
   } catch {}
   invalidateDashCache() // la venta nueva debe reflejarse ya en el dashboard
+  // Alerta de stock bajo en tiempo real (v3.0.0): por cada talle vendido que haya quedado
+  // en <= min_stock (y con mínimo configurado), avisar al instante. Fire-and-forget.
+  try {
+    const { sendEvento } = require('../lib/centralPortalPing')
+    const chk = db.prepare('SELECT ps.stock, ps.min_stock, p.name FROM product_sizes ps JOIN products p ON p.id=ps.product_id WHERE ps.product_id=? AND ps.size=?')
+    const seen = new Set()
+    for (const it of items) {
+      const sz = it.size || 'N/A'
+      const key = it.productId + '|' + sz
+      if (!it.productId || seen.has(key)) continue
+      seen.add(key)
+      const row = chk.get(it.productId, sz)
+      if (row && row.min_stock > 0 && row.stock <= row.min_stock) {
+        sendEvento(db, 'stock_bajo', { nombre: row.name, talle: sz, stock: row.stock, min_stock: row.min_stock })
+      }
+    }
+  } catch {}
   return { saleId: result.saleId, saleNumber: result.saleNumber }
 })
 
@@ -273,5 +290,7 @@ ipcMain.handle('sales:void', (_, payload) => {
   })
   const ok = run()
   invalidateDashCache() // la anulación cambia totales del dashboard
+  // Alerta en tiempo real (v3.0.0): avisar la anulación al instante por email.
+  try { require('../lib/centralPortalPing').sendEvento(db, 'anulacion', { numero: sale.sale_number, total: sale.total, motivo: reason }) } catch {}
   return ok
 })
