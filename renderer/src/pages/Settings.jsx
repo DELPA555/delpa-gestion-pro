@@ -2929,7 +2929,7 @@ function TabPortal() {
       await api.settings.set('portal_alert_email', alertEmail.trim())
       await api.settings.set('portal_venta_threshold', String(Number(ventaThreshold) || 50000))
       await api.settings.set('portal_alerts', JSON.stringify(alerts))
-      try { await api.portal.pingNow() } catch {}
+      try { const pr = await api.portal.pingNow(); console.log('[portal] saveAlerts → ping:', pr); if (pr && !pr.ok && !pr.skipped) toast.error('Guardado, pero el ping al servidor falló: ' + (pr.error || '?'), { duration: 8000 }) } catch {}
       toast.success('Notificaciones guardadas')
     } catch { toast.error('No se pudo guardar') }
     finally { setSavingAlerts(false) }
@@ -2971,6 +2971,10 @@ function TabPortal() {
       const r = await api.portal.setPin(pin)
       if (r?.ok) {
         toast.success('PIN guardado')
+        // Resultado REAL del ping al servidor central (para diagnóstico visible).
+        if (r.ping?.ok) { setCentralUrl(r.ping.url || ''); toast.success('Conectado al servidor ✓ — ' + (r.ping.slug || '')) }
+        else if (r.ping) toast.error('El ping al servidor NO llegó: ' + (r.ping.error || 'error desconocido'), { duration: 9000 })
+        console.log('[portal] setPin → ping:', r.ping)
         reload()
         // Al guardar el PIN se dispara el ping al servidor; el enlace permanente llega
         // unos segundos después. Reconsultamos hasta que aparezca (o ~40s).

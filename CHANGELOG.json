@@ -1,4 +1,11 @@
 {
+  "v1.54.2": {
+    "fecha": "2026-11-26",
+    "titulo": "Portal web: diagnóstico de conexión",
+    "novedades": [
+      "Al guardar el PIN del portal o la configuración de notificaciones, ahora la app te avisa en el momento si se pudo conectar con el servidor (o te muestra el error exacto si no llegó). Esto facilita detectar problemas de conexión del portal web."
+    ]
+  },
   "v1.54.1": {
     "fecha": "2026-11-26",
     "titulo": "Licencia: registro automático al abrir",

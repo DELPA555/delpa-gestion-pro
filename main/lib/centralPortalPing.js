@@ -79,22 +79,30 @@ function pingForLicense(db) {
       }
       const body = JSON.stringify(payload)
       const u = new URL(CENTRAL_URL)
+      console.log('[licencia] ping registro → POST ' + CENTRAL_URL + ' | hwid=' + hwid.slice(0, 10) +
+        ' | negocio="' + payload.businessName + '" | licExpira=' + (payload.licenseExpires || '—'))
       const req = https.request({
         hostname: u.hostname, path: u.pathname, method: 'POST', timeout: 5000,
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'X-Delpa-Secret': PING_SECRET },
-      }, (res) => { res.on('data', () => {}); res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300 })) })
-      req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'timeout' }) })
-      req.on('error', (e) => resolve({ ok: false, error: e && e.message }))
+      }, (res) => { res.on('data', () => {}); res.on('end', () => { const ok = res.statusCode >= 200 && res.statusCode < 300; console.log('[licencia] ping registro ' + (ok ? 'OK' : 'FALLÓ') + ' (HTTP ' + res.statusCode + ')'); resolve({ ok }) }) })
+      req.on('timeout', () => { console.error('[licencia] ping registro TIMEOUT (5s) — ' + CENTRAL_URL); req.destroy(); resolve({ ok: false, error: 'timeout' }) })
+      req.on('error', (e) => { console.error('[licencia] ping registro ERROR de red: ' + (e && e.message) + ' → ' + CENTRAL_URL); resolve({ ok: false, error: e && e.message }) })
       req.write(body); req.end()
-    } catch (e) { resolve({ ok: false, error: e && e.message }) }
+    } catch (e) { console.error('[licencia] pingForLicense EXCEPCIÓN: ' + (e && e.message)); resolve({ ok: false, error: e && e.message }) }
   })
 }
 
 // Envía el ping al servidor central. base = { hwid, businessName, cuit, networkCode, branchName, version, stockSnapshot }.
+// Devuelve Promise<{ok, slug?, url?, error?, status?, skipped?}> con el resultado REAL del
+// ping (para poder mostrarlo en Ajustes). Nunca rechaza. Loguea URL/body/hwid/error completo.
 function pingCentralPortal(db, base) {
+ return new Promise((resolve) => {
   try {
     const pin = getSetting(db, 'portal_pin').trim()
-    if (!pin) return // sin portal configurado → no registrar ni enviar datos
+    if (!pin) {
+      console.warn('[portal] ping OMITIDO: no hay PIN de portal configurado (portal_pin vacío). Sin PIN no se envía nada al servidor central.')
+      return resolve({ ok: false, skipped: true, error: 'Sin PIN de portal configurado' })
+    }
 
     const { ventasHoy, cajaHoy, ventaMaxHoy } = computeVentasCaja(db)
     let alerts = {}
@@ -120,6 +128,9 @@ function pingCentralPortal(db, base) {
     }
     const body = JSON.stringify(payload)
     const u = new URL(CENTRAL_URL)
+    console.log('[portal] ping → POST ' + CENTRAL_URL + ' | hwid=' + String(base.hwid || '').slice(0, 10) +
+      ' | negocio="' + (base.businessName || '') + '" | bytes=' + Buffer.byteLength(body) +
+      ' | secreto=' + (PING_SECRET ? PING_SECRET.slice(0, 6) + '…(' + PING_SECRET.length + ')' : 'VACÍO'))
     const req = https.request({
       hostname: u.hostname,
       path: u.pathname,
@@ -140,20 +151,24 @@ function pingCentralPortal(db, base) {
             // Guardar el slug y la URL fija para mostrarlos en Ajustes → Portal web.
             db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('portal_central_slug',?)").run(String(j.slug))
             db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('portal_central_url',?)").run(String(j.url || ('https://portal.delpagestion.com.ar/portal/' + j.slug)))
-            console.log('[portal] ping OK — slug=' + j.slug)
+            console.log('[portal] ping OK (HTTP ' + res.statusCode + ') — slug=' + j.slug)
+            resolve({ ok: true, status: res.statusCode, slug: j.slug, url: j.url })
           } else {
-            console.error('[portal] ping sin slug (HTTP ' + res.statusCode + '): ' + String(data).slice(0, 200))
+            console.error('[portal] ping SIN slug (HTTP ' + res.statusCode + '): ' + String(data).slice(0, 300))
+            resolve({ ok: false, status: res.statusCode, error: 'Respuesta sin slug: ' + String(data).slice(0, 200) })
           }
         } catch (e) {
-          console.error('[portal] ping respuesta inválida (HTTP ' + res.statusCode + '): ' + e.message)
+          console.error('[portal] ping respuesta inválida (HTTP ' + res.statusCode + '): ' + e.message + ' | body=' + String(data).slice(0, 200))
+          resolve({ ok: false, status: res.statusCode, error: 'Respuesta inválida (HTTP ' + res.statusCode + '): ' + e.message })
         }
       })
     })
-    req.on('timeout', () => { console.error('[portal] ping timeout (VPS no respondió en 15s)'); req.destroy() })
-    req.on('error', (e) => { console.error('[portal] ping error de red: ' + (e && e.message || e) + ' (¿servidor desplegado? ¿DNS/SSL ok?)') })
+    req.on('timeout', () => { console.error('[portal] ping TIMEOUT (VPS no respondió en 15s) — ' + CENTRAL_URL); req.destroy(); resolve({ ok: false, error: 'timeout (15s sin respuesta de ' + CENTRAL_URL + ')' }) })
+    req.on('error', (e) => { console.error('[portal] ping ERROR de red: ' + (e && e.message || e) + ' → ' + CENTRAL_URL + ' (¿DNS/SSL/firewall?)'); resolve({ ok: false, error: 'Error de red: ' + (e && e.message || String(e)) }) })
     req.write(body)
     req.end()
-  } catch (e) { try { console.error('[portal] pingCentralPortal:', e.message) } catch {} }
+  } catch (e) { try { console.error('[portal] pingCentralPortal EXCEPCIÓN:', e.message) } catch {}; resolve({ ok: false, error: 'Excepción: ' + (e && e.message) }) }
+ })
 }
 
 // Reúne los datos del local y pinguea el servidor central YA (no espera a los 15 min).
@@ -167,14 +182,14 @@ function pingNow(db) {
     try { stockSnapshot = require('./distributorPing').buildStockSnapshot(db) } catch {}
     let version = '1.0.0'
     try { version = require('../../package.json').version || version } catch {}
-    pingCentralPortal(db, {
+    return pingCentralPortal(db, {
       hwid, businessName,
       cuit: getSetting(db, 'business_cuit').trim(),
       networkCode: getSetting(db, 'network_code').trim(),
       branchName: getSetting(db, 'branch_name').trim() || businessName,
       version, stockSnapshot,
     })
-  } catch (e) { try { console.error('[portal] pingNow:', e.message) } catch {} }
+  } catch (e) { try { console.error('[portal] pingNow:', e.message) } catch {}; return Promise.resolve({ ok: false, error: 'pingNow: ' + (e && e.message) }) }
 }
 
 // POST JSON autenticado al VPS.

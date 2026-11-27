@@ -24,21 +24,23 @@ ipcMain.handle('portal:stop', async () => {
 })
 
 // PIN de 4 a 6 dígitos. Se guarda en settings (portal_pin).
-ipcMain.handle('portal:setPin', (_e, pin) => {
+ipcMain.handle('portal:setPin', async (_e, pin) => {
   const p = String(pin || '').trim()
   if (!/^\d{4,6}$/.test(p)) return { ok: false, error: 'El PIN debe tener entre 4 y 6 dígitos.' }
   setSetting('portal_pin', p)
   // Pinguear YA al servidor central para que el enlace permanente aparezca enseguida
-  // (y no haya que esperar al ciclo de 15 min). Fire-and-forget.
-  try { require('../lib/centralPortalPing').pingNow(getDB()) } catch (e) { console.error('[portal:setPin] pingNow:', e.message) }
-  return { ok: true }
+  // (y no haya que esperar al ciclo de 15 min). Esperamos el resultado real.
+  let ping = null
+  try { ping = await require('../lib/centralPortalPing').pingNow(getDB()) } catch (e) { console.error('[portal:setPin] pingNow:', e.message); ping = { ok: false, error: e.message } }
+  return { ok: true, ping }
 })
 
 ipcMain.handle('portal:getPin', () => ({ pin: getSetting('portal_pin'), hasPin: !!getSetting('portal_pin').trim() }))
 
-// Dispara un ping inmediato al servidor central (p. ej. al cambiar la config de alertas).
-ipcMain.handle('portal:pingNow', () => {
-  try { require('../lib/centralPortalPing').pingNow(getDB()); return { ok: true } }
+// Dispara un ping inmediato al servidor central y DEVUELVE el resultado real (ok/slug/error)
+// para poder mostrarlo en Ajustes → Portal web.
+ipcMain.handle('portal:pingNow', async () => {
+  try { return await require('../lib/centralPortalPing').pingNow(getDB()) }
   catch (e) { return { ok: false, error: e.message } }
 })
 
