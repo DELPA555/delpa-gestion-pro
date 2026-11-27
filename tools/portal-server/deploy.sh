@@ -183,7 +183,7 @@ app.post('/ping', (req, res) => {
   const b = req.body || {}
   if (!b.hwid) return res.status(400).json({ error: 'hwid requerido' })
 
-  const existing = db.prepare('SELECT slug, pinHash FROM nodes WHERE hwid=?').get(b.hwid)
+  const existing = db.prepare('SELECT * FROM nodes WHERE hwid=?').get(b.hwid)
   const slug = existing?.slug || uniqueSlug(slugify(b.businessName), b.hwid)
 
   // PIN: si el ping trae uno y cambió (o no había), se re-hashea; si no, se conserva.
@@ -193,6 +193,26 @@ app.post('/ping', (req, res) => {
   }
   if (!pinHash) pinHash = hashPin('1234')
 
+  // Un ping MÍNIMO (p. ej. el de registro de licencia) NO trae stock/ventas/caja: en ese
+  // caso conservamos lo que ya había para no pisar los datos del portal.
+  const has = (k) => Object.prototype.hasOwnProperty.call(b, k)
+  const row = {
+    hwid: String(b.hwid), slug,
+    businessName: has('businessName') && String(b.businessName || '') ? String(b.businessName) : (existing?.businessName || ''),
+    cuit: has('cuit') ? String(b.cuit || '') : (existing?.cuit || ''),
+    networkCode: has('networkCode') ? String(b.networkCode || '') : (existing?.networkCode || ''),
+    branchName: has('branchName') ? String(b.branchName || '') : (existing?.branchName || ''),
+    pinHash,
+    stockJson: has('stockSnapshot') ? JSON.stringify(b.stockSnapshot || []) : (existing?.stockJson || '[]'),
+    ventasHoy: has('ventasHoy') ? (Number(b.ventasHoy) || 0) : (Number(existing?.ventasHoy) || 0),
+    cajaHoy: has('cajaHoy') ? (Number(b.cajaHoy) || 0) : (Number(existing?.cajaHoy) || 0),
+    version: has('version') && String(b.version || '') ? String(b.version) : (existing?.version || ''),
+    updatedAt: new Date().toISOString(),
+    alertEmail: has('alertEmail') ? String(b.alertEmail || '') : (existing?.alertEmail || ''),
+    ventaThreshold: has('ventaThreshold') ? (Number(b.ventaThreshold) || 0) : (Number(existing?.ventaThreshold) || 0),
+    alertsJson: has('alerts') ? JSON.stringify(b.alerts || {}) : (existing?.alertsJson || '{}'),
+    ventaMaxHoy: has('ventaMaxHoy') ? (Number(b.ventaMaxHoy) || 0) : (Number(existing?.ventaMaxHoy) || 0),
+  }
   db.prepare(`
     INSERT INTO nodes (hwid,slug,businessName,cuit,networkCode,branchName,pinHash,stockJson,ventasHoy,cajaHoy,version,updatedAt,alertEmail,ventaThreshold,alertsJson,ventaMaxHoy)
     VALUES (@hwid,@slug,@businessName,@cuit,@networkCode,@branchName,@pinHash,@stockJson,@ventasHoy,@cajaHoy,@version,@updatedAt,@alertEmail,@ventaThreshold,@alertsJson,@ventaMaxHoy)
@@ -200,20 +220,28 @@ app.post('/ping', (req, res) => {
       slug=@slug, businessName=@businessName, cuit=@cuit, networkCode=@networkCode, branchName=@branchName,
       pinHash=@pinHash, stockJson=@stockJson, ventasHoy=@ventasHoy, cajaHoy=@cajaHoy, version=@version, updatedAt=@updatedAt,
       alertEmail=@alertEmail, ventaThreshold=@ventaThreshold, alertsJson=@alertsJson, ventaMaxHoy=@ventaMaxHoy
-  `).run({
-    hwid: String(b.hwid), slug,
-    businessName: String(b.businessName || ''), cuit: String(b.cuit || ''),
-    networkCode: String(b.networkCode || ''), branchName: String(b.branchName || ''),
-    pinHash, stockJson: JSON.stringify(b.stockSnapshot || []),
-    ventasHoy: Number(b.ventasHoy) || 0, cajaHoy: Number(b.cajaHoy) || 0,
-    version: String(b.version || ''), updatedAt: new Date().toISOString(),
-    alertEmail: String(b.alertEmail || ''), ventaThreshold: Number(b.ventaThreshold) || 0,
-    alertsJson: JSON.stringify(b.alerts || {}), ventaMaxHoy: Number(b.ventaMaxHoy) || 0,
-  })
+  `).run(row)
+
+  // FIX 2 (v1.54.1): si el cliente no tiene licencia en el VPS pero su ping trae una
+  // licencia local con fecha futura, la importamos como activa (no pisa si ya hay una).
+  try {
+    if (b.licenseExpires) {
+      const exp = new Date(b.licenseExpires)
+      if (!isNaN(exp.getTime()) && exp.getTime() > Date.now()) {
+        const hasLic = db.prepare('SELECT 1 FROM licenses WHERE hwid=?').get(String(b.hwid))
+        if (!hasLic) {
+          db.prepare('INSERT INTO licenses (hwid,businessName,plan,activatedAt,expiresAt,active,updatedAt) VALUES (?,?,?,?,?,1,?)')
+            .run(String(b.hwid), row.businessName, String(b.licensePlan || ''), new Date().toISOString(), exp.toISOString(), new Date().toISOString())
+          console.log('[license-import] importada licencia local de ' + String(b.hwid).slice(0, 8) + ' vence ' + exp.toISOString().slice(0, 10))
+        }
+      }
+    }
+  } catch (e) { console.error('[license-import] ' + e.message) }
 
   // Histórico para los gráficos de evolución. Solo guardamos si algún valor cambió
-  // respecto al último registro del día (para no llenar la tabla).
-  try {
+  // respecto al último registro del día (para no llenar la tabla). Un ping mínimo de
+  // licencia (sin ventas/stock) no genera histórico.
+  if (has('ventasHoy') || has('stockSnapshot')) try {
     const ventasHoy = Number(b.ventasHoy) || 0, cajaHoy = Number(b.cajaHoy) || 0
     let stockTotal = 0
     try { stockTotal = (b.stockSnapshot || []).reduce((s, p) => s + (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0), 0) } catch {}

@@ -45,6 +45,51 @@ function computeVentasCaja(db) {
   return { ventasHoy, cajaHoy, ventaMaxHoy }
 }
 
+// Licencia local del cliente (si activó un código): para importarla al VPS la 1ª vez.
+// Key real en settings: 'license_expiry' = YYYYMMDD (la fija license:activate).
+function localLicenseForPing(db) {
+  try {
+    const exp = getSetting(db, 'license_expiry').trim()
+    if (/^\d{8}$/.test(exp)) {
+      const iso = exp.slice(0, 4) + '-' + exp.slice(4, 6) + '-' + exp.slice(6, 8) + 'T23:59:59.000Z'
+      return { licenseExpires: iso, licensePlan: getSetting(db, 'license_plan').trim() }
+    }
+  } catch {}
+  return { licenseExpires: '', licensePlan: '' }
+}
+
+// Ping MÍNIMO de registro/licencia: va SIEMPRE (haya o no PIN de portal), para que el
+// cliente registre su hwid y el VPS pueda importar su licencia local la 1ª vez. NO envía
+// stock/ventas/caja (el server conserva lo que ya había). Devuelve Promise<{ok}> (nunca rechaza).
+function pingForLicense(db) {
+  return new Promise((resolve) => {
+    try {
+      let hwid = ''
+      try { hwid = String(require('../ipc/license').getHardwareId() || '') } catch {}
+      if (!hwid) return resolve({ ok: false, error: 'sin hwid' })
+      let version = '1.0.0'
+      try { version = require('../../package.json').version || version } catch {}
+      const lic = localLicenseForPing(db)
+      const payload = {
+        hwid,
+        businessName: getSetting(db, 'business_name').trim(),
+        version,
+        licenseExpires: lic.licenseExpires,
+        licensePlan: lic.licensePlan,
+      }
+      const body = JSON.stringify(payload)
+      const u = new URL(CENTRAL_URL)
+      const req = https.request({
+        hostname: u.hostname, path: u.pathname, method: 'POST', timeout: 5000,
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'X-Delpa-Secret': PING_SECRET },
+      }, (res) => { res.on('data', () => {}); res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300 })) })
+      req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'timeout' }) })
+      req.on('error', (e) => resolve({ ok: false, error: e && e.message }))
+      req.write(body); req.end()
+    } catch (e) { resolve({ ok: false, error: e && e.message }) }
+  })
+}
+
 // Envía el ping al servidor central. base = { hwid, businessName, cuit, networkCode, branchName, version, stockSnapshot }.
 function pingCentralPortal(db, base) {
   try {
@@ -54,6 +99,7 @@ function pingCentralPortal(db, base) {
     const { ventasHoy, cajaHoy, ventaMaxHoy } = computeVentasCaja(db)
     let alerts = {}
     try { alerts = JSON.parse(getSetting(db, 'portal_alerts') || '{}') } catch {}
+    const lic = localLicenseForPing(db)
     const payload = {
       hwid: base.hwid,
       businessName: base.businessName || '',
@@ -68,6 +114,9 @@ function pingCentralPortal(db, base) {
       alertEmail: getSetting(db, 'portal_alert_email').trim(),
       ventaThreshold: Number(getSetting(db, 'portal_venta_threshold')) || 50000,
       alerts,
+      // Licencia local (para importarla al VPS la primera vez) — v1.54.1.
+      licenseExpires: lic.licenseExpires,
+      licensePlan: lic.licensePlan,
     }
     const body = JSON.stringify(payload)
     const u = new URL(CENTRAL_URL)
@@ -187,4 +236,4 @@ function syncRedPrecios(db) {
   } catch (e) { return Promise.resolve({ ok: false, error: e.message }) }
 }
 
-module.exports = { pingCentralPortal, pingNow, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }
+module.exports = { pingCentralPortal, pingNow, pingForLicense, PING_SECRET, CENTRAL_BASE, syncRedStock, syncRedPrecios }

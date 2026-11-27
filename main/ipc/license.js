@@ -155,9 +155,33 @@ function localStatus(db, hardwareId) {
 // license:status — primero consulta el VPS; si no responde, cae al estado local
 // (código/prueba) o a la última licencia activa conocida (gracia offline 7 días).
 // Nunca bloquea por falta de conexión. Un equipo NO registrado conserva su prueba.
+function offlineFallback(db, hardwareId) {
+  // VPS inalcanzable → modo gracia: si la última licencia conocida estaba activa y es
+  // reciente (<7 días), seguimos activos; si no, caemos al estado local.
+  try {
+    const active = db.prepare("SELECT value FROM settings WHERE key='license_vps_active'").get()?.value
+    const checked = db.prepare("SELECT value FROM settings WHERE key='license_vps_checked'").get()?.value
+    if (active === '1' && checked && (Date.now() - new Date(checked).getTime()) < VPS_GRACE_MS) {
+      return { status: 'active', hardwareId, source: 'vps-cache', offline: true, daysRemaining: 0 }
+    }
+  } catch {}
+  return localStatus(db, hardwareId)
+}
+
 ipcMain.handle('license:status', async () => {
   const db = getDB()
   const hardwareId = getHardwareId()
+
+  // FIX 1 (v1.54.1): PRIMERO registramos el hwid en el VPS (y éste importa la licencia
+  // local si corresponde), esperando máx. 5s. Recién después verificamos. Si el ping falla,
+  // el VPS está caído → fallback directo sin esperar otro timeout del chequeo.
+  let vpsReachable = true
+  try {
+    const pr = await require('../lib/centralPortalPing').pingForLicense(db)
+    vpsReachable = !!(pr && pr.ok)
+  } catch { vpsReachable = false }
+  if (!vpsReachable) return offlineFallback(db, hardwareId)
+
   try {
     const r = await vpsLicenseCheck(hardwareId)
     if (r && r.registered && r.active) {
@@ -184,16 +208,7 @@ ipcMain.handle('license:status', async () => {
     // No registrado en el VPS → se respeta la licencia/prueba local (no se bloquea).
     return localStatus(db, hardwareId)
   } catch (e) {
-    // VPS inalcanzable → modo gracia: si la última licencia conocida estaba activa y es
-    // reciente (<7 días), seguimos activos; si no, caemos al estado local.
-    try {
-      const active = db.prepare("SELECT value FROM settings WHERE key='license_vps_active'").get()?.value
-      const checked = db.prepare("SELECT value FROM settings WHERE key='license_vps_checked'").get()?.value
-      if (active === '1' && checked && (Date.now() - new Date(checked).getTime()) < VPS_GRACE_MS) {
-        return { status: 'active', hardwareId, source: 'vps-cache', offline: true, daysRemaining: 0 }
-      }
-    } catch {}
-    return localStatus(db, hardwareId)
+    return offlineFallback(db, hardwareId)
   }
 })
 

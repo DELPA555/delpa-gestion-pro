@@ -1,4 +1,11 @@
 {
+  "v1.54.1": {
+    "fecha": "2026-11-26",
+    "titulo": "Licencia: registro automático al abrir",
+    "novedades": [
+      "Ahora, al abrir la app, tu equipo se registra solo en el servidor y tu licencia actual queda reconocida automáticamente, sin que tengas que hacer nada. Si ya tenías una licencia activa, se mantiene tal cual. Como siempre: si te quedás sin internet, la app sigue funcionando normal."
+    ]
+  },
   "v1.54.0": {
     "fecha": "2026-11-26",
     "titulo": "Validación de licencia más confiable",
