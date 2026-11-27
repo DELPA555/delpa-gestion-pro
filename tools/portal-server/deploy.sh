@@ -693,7 +693,7 @@ function PORTAL_HTML(slug, businessName, hasNet) {
   }
   function exportCsv(h){
     var rows=[['Fecha','Ventas','Caja','Stock total']].concat(h.map(function(x){return [x.fecha,x.ventasHoy,x.cajaHoy,x.stockTotal]}));
-    var csv=rows.map(function(r){return r.join(',')}).join('\n');
+    var csv=rows.map(function(r){return r.join(',')}).join('\\n');
     var a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
     a.download='historial-'+SLUG+'.csv'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
