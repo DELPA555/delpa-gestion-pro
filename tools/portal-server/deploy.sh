@@ -76,7 +76,7 @@ const ADMIN_SECRET = process.env.DELPA_ADMIN_SECRET || ''
 // Email por HTTP vía Resend (DigitalOcean bloquea los puertos SMTP permanentemente).
 // La API key viene por entorno (la setea deploy.sh / PM2, NO está en el repo).
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const RESEND_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev'
+const RESEND_FROM = process.env.RESEND_FROM || 'DELPA Alertas <alertas@delpagestion.com.ar>'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 const MAX_FAILS = 8
 const LOCK_MS = 5 * 60 * 1000
