@@ -38,8 +38,7 @@ cat > "$APP_DIR/package.json" <<'PKG'
   "dependencies": {
     "better-sqlite3": "^11.10.0",
     "express": "^4.21.2",
-    "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.16"
+    "multer": "^1.4.5-lts.1"
   }
 }
 PKG
@@ -66,7 +65,6 @@ const crypto = require('crypto')
 const path = require('path')
 const fs = require('fs')
 const multer = require('multer')
-const nodemailer = require('nodemailer')
 
 const PORT = Number(process.env.PORT || 3000)
 const DB_PATH = path.join(__dirname, 'data.db')
@@ -75,6 +73,10 @@ const PING_SECRET = process.env.DELPA_PING_SECRET || '__PING_SECRET__'
 // Secreto de ADMIN (panel de licencias). Viene por entorno (lo genera deploy.sh y NO
 // está en el repo ni en la app). Si no está seteado, los endpoints admin quedan cerrados.
 const ADMIN_SECRET = process.env.DELPA_ADMIN_SECRET || ''
+// Email por HTTP vía Resend (DigitalOcean bloquea los puertos SMTP permanentemente).
+// La API key viene por entorno (la setea deploy.sh / PM2, NO está en el repo).
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const RESEND_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 const MAX_FAILS = 8
 const LOCK_MS = 5 * 60 * 1000
@@ -439,17 +441,36 @@ app.get('/backup/:slug/latest', secretAuth, (req, res) => {
 function getS(key) { const r = db.prepare('SELECT value FROM settings WHERE key=?').get(key); return r ? r.value : '' }
 function setS(key, val) { db.prepare('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)').run(key, String(val)) }
 
-// Configurar el SMTP del servidor (lo hace el dueño/proveedor una vez).
+// Configurar el remitente (from) del email. La API key de Resend va por entorno, no acá.
+// Se mantienen las claves smtp_* por compatibilidad; sólo 'from' se usa hoy.
 app.post('/admin/smtp', secretAuth, (req, res) => {
   const b = req.body || {}
   for (const k of ['host', 'port', 'user', 'pass', 'from']) if (b[k] !== undefined) setS('smtp_' + k, b[k])
   res.json({ ok: true })
 })
 
-function smtpTransport() {
-  const host = getS('smtp_host'), port = Number(getS('smtp_port')) || 587, user = getS('smtp_user'), pass = getS('smtp_pass')
-  if (!host || !user || !pass) return null
-  return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } })
+// Enviar un email de prueba por Resend (verifica el pipeline completo del server).
+app.post('/admin/test-email', secretAuth, async (req, res) => {
+  const b = req.body || {}
+  const to = b.to || getS('smtp_from') || RESEND_FROM
+  const r = await resendSend(to, b.subject || '[DELPA] Prueba de email', b.text || 'Email de prueba desde el portal DELPA (Resend).')
+  res.status(r.ok ? 200 : 502).json(r)
+})
+
+// Envía un email por la API HTTP de Resend. Devuelve {ok, id?, status?, error?}.
+async function resendSend(to, subject, text) {
+  if (!RESEND_API_KEY) return { ok: false, error: 'RESEND_API_KEY no configurada' }
+  const from = getS('smtp_from') || RESEND_FROM
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to, subject, text })
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) return { ok: false, status: r.status, error: (data && (data.message || data.name)) || ('HTTP ' + r.status) }
+    return { ok: true, id: data && data.id }
+  } catch (e) { return { ok: false, error: e.message } }
 }
 function argHour() { try { return Number(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', hour12: false })) } catch { return new Date().getHours() } }
 function today() { return new Date().toISOString().slice(0, 10) }
@@ -460,13 +481,14 @@ function money(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-A
 async function sendAlert(node, trig, subject, text) {
   if (!node.alertEmail) return
   if (alreadySent(node.slug, trig)) return
-  const t = smtpTransport()
-  if (!t) return // SMTP sin configurar → no se manda nada
-  try {
-    await t.sendMail({ from: getS('smtp_from') || getS('smtp_user'), to: node.alertEmail, subject: '[DELPA] ' + subject, text })
+  if (!RESEND_API_KEY) return // Resend sin configurar → no se manda nada
+  const r = await resendSend(node.alertEmail, '[DELPA] ' + subject, text)
+  if (r.ok) {
     markSent(node.slug, trig)
-    console.log('[alerts] enviado ' + trig + ' -> ' + node.alertEmail)
-  } catch (e) { console.error('[alerts] error enviando ' + trig + ': ' + e.message) }
+    console.log('[alerts] enviado ' + trig + ' -> ' + node.alertEmail + ' (resend id ' + (r.id || '?') + ')')
+  } else {
+    console.error('[alerts] error enviando ' + trig + ': ' + (r.error || 'desconocido'))
+  }
 }
 function alertsOn(node) { try { return JSON.parse(node.alertsJson || '{}') } catch { return {} } }
 
@@ -752,9 +774,14 @@ if [ ! -s "$ADMIN_SECRET_FILE" ]; then
   chmod 600 "$ADMIN_SECRET_FILE"
 fi
 ADMIN_SECRET="$(cat "$ADMIN_SECRET_FILE")"
+# Clave de Resend (email por HTTP; DigitalOcean bloquea SMTP). Persiste en el server.
+# Si se pasa RESEND_API_KEY por entorno al correr deploy, se actualiza el archivo.
+RESEND_KEY_FILE="$APP_DIR/.resend_key"
+if [ -n "${RESEND_API_KEY:-}" ]; then printf '%s' "$RESEND_API_KEY" > "$RESEND_KEY_FILE"; chmod 600 "$RESEND_KEY_FILE"; fi
+RESEND_API_KEY="$( [ -s "$RESEND_KEY_FILE" ] && cat "$RESEND_KEY_FILE" || true )"
 # PING_SECRET ya está embebido en server.js; igual lo exponemos por env por si se quiere rotar.
 pm2 delete delpa-portal >/dev/null 2>&1 || true
-DELPA_PING_SECRET="${PING_SECRET}" DELPA_ADMIN_SECRET="${ADMIN_SECRET}" pm2 start server.js --name delpa-portal --update-env
+DELPA_PING_SECRET="${PING_SECRET}" DELPA_ADMIN_SECRET="${ADMIN_SECRET}" RESEND_API_KEY="${RESEND_API_KEY}" pm2 start server.js --name delpa-portal --update-env
 pm2 save
 pm2 startup systemd -u root --hp /root | tail -n 1 | bash || true
 
