@@ -534,11 +534,15 @@ app.post('/evento', secretAuth, async (req, res) => {
 async function resendSend(to, subject, text) {
   if (!RESEND_API_KEY) return { ok: false, error: 'RESEND_API_KEY no configurada' }
   const from = getS('smtp_from') || RESEND_FROM
+  // alertEmail puede traer varios destinatarios separados por coma o punto y coma.
+  // Resend espera un array de emails válidos → partir, limpiar y filtrar vacíos.
+  const toArr = String(to || '').split(/[,;]/).map(s => s.trim()).filter(Boolean)
+  if (!toArr.length) return { ok: false, error: 'destinatario vacío' }
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, subject, text })
+      body: JSON.stringify({ from, to: toArr, subject, text })
     })
     const data = await r.json().catch(() => ({}))
     if (!r.ok) return { ok: false, status: r.status, error: (data && (data.message || data.name)) || ('HTTP ' + r.status) }
@@ -663,6 +667,48 @@ app.post('/license/deactivate', adminAuth, (req, res) => {
   if (!hwid) return res.status(400).json({ error: 'hwid requerido' })
   db.prepare('UPDATE licenses SET active=0, updatedAt=? WHERE hwid=?').run(new Date().toISOString(), hwid)
   res.json({ ok: true })
+})
+
+// CORS para el panel admin (GitHub Pages) sobre /admin/*. Auth por header (no cookies).
+app.use('/admin', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Delpa-Admin, X-Delpa-Secret')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+
+// Admin: registrar un nodo manualmente (antes de que la app haga su primer ping).
+// Crea la fila en nodes y, si viene vencimiento, también la licencia (para que aparezca
+// en el panel). No pisa datos de un nodo que ya existe.
+app.post('/admin/node', adminAuth, (req, res) => {
+  const b = req.body || {}
+  const hwid = String(b.hwid || '').trim()
+  if (!hwid) return res.status(400).json({ error: 'hwid requerido' })
+  const businessName = String(b.businessName || '').trim()
+  const branchName = String(b.branchName || '').trim()
+  const cuit = String(b.cuit || '').trim()
+  // Slug: reusar el del nodo si ya existe; si no, slugify(negocio) + 4 chars random.
+  const existing = db.prepare('SELECT slug FROM nodes WHERE hwid=?').get(hwid)
+  let slug = existing && existing.slug
+  if (!slug) slug = (slugify(businessName) || 'local') + '-' + Math.random().toString(36).slice(2, 6)
+  db.prepare('INSERT OR IGNORE INTO nodes (hwid, slug, businessName, branchName, cuit, pinHash) VALUES (?,?,?,?,?,?)')
+    .run(hwid, slug, businessName, branchName, cuit, hashPin('1234'))
+  // Completar nombre/sucursal/cuit si estaban vacíos (sin pisar datos reales ya reportados).
+  db.prepare("UPDATE nodes SET businessName=COALESCE(NULLIF(businessName,''),?), branchName=COALESCE(NULLIF(branchName,''),?), cuit=COALESCE(NULLIF(cuit,''),?) WHERE hwid=?")
+    .run(businessName, branchName, cuit, hwid)
+  // Si vino vencimiento, crear/actualizar la licencia para que el nodo figure en el panel.
+  const licExp = String(b.licenseExpires || '').trim()
+  if (licExp) {
+    let expIso = licExp
+    const d = new Date(licExp.length === 10 ? licExp + 'T23:59:59' : licExp)
+    if (!isNaN(d.getTime())) expIso = d.toISOString()
+    db.prepare(`INSERT INTO licenses (hwid,businessName,plan,activatedAt,expiresAt,active,updatedAt)
+      VALUES (?,?,?,?,?,1,?)
+      ON CONFLICT(hwid) DO UPDATE SET businessName=excluded.businessName, plan=excluded.plan, expiresAt=excluded.expiresAt, active=1, updatedAt=excluded.updatedAt`)
+      .run(hwid, businessName, String(b.licensePlan || 'trial'), new Date().toISOString(), expIso, new Date().toISOString())
+  }
+  res.json({ ok: true, slug, hwid })
 })
 
 // Público: la app consulta su propia licencia por hwid (sin auth).

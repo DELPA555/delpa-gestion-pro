@@ -23,6 +23,7 @@
   tr.venc{background:rgba(239,68,68,.06)} tr.pronto{background:rgba(245,158,11,.06)}
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end} .row>div{flex:1;min-width:160px}
   .err{color:var(--rd);font-size:13px;min-height:18px;margin-top:6px} .mut{color:var(--mut)} .mono{font-family:ui-monospace,monospace}
+  .copy{background:#20202a;border:0;color:var(--tx);border-radius:7px;padding:3px 8px;font-size:12px;cursor:pointer;margin-left:6px;font-weight:500}
   .hide{display:none}
 </style></head>
 <body><div class="wrap">
@@ -67,6 +68,23 @@
     </div>
 
     <div class="card">
+      <h2>Registrar nodo manualmente</h2>
+      <div class="row">
+        <div><label>HWID *</label><input id="nHwid" placeholder="HWID del equipo"></div>
+        <div><label>Negocio</label><input id="nBiz" placeholder="Nombre del negocio"></div>
+        <div><label>Sucursal</label><input id="nBranch" placeholder="Sucursal (opcional)"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>CUIT</label><input id="nCuit" placeholder="CUIT (opcional)"></div>
+        <div style="max-width:150px"><label>Plan</label>
+          <select id="nPlan"><option value="trial">trial</option><option value="pro">pro</option><option value="vip">vip</option></select></div>
+        <div style="max-width:190px"><label>Vencimiento licencia</label><input id="nExp" type="date"></div>
+        <div style="max-width:150px"><button id="btnNode" style="width:100%">Registrar</button></div>
+      </div>
+      <div class="err" id="nodeMsg"></div>
+    </div>
+
+    <div class="card">
       <h2>Clientes</h2>
       <div style="overflow-x:auto">
       <table><thead><tr><th>Negocio</th><th>HWID</th><th>Plan</th><th>Vence</th><th>Días</th><th>Estado</th><th>Último ping</th><th></th></tr></thead>
@@ -84,6 +102,12 @@
       .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, status:r.status, j:j }; }); });
   }
   function fmtDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('es-AR'); }catch(e){ return '—'; } }
+  function ago(iso){ if(!iso) return 'Nunca'; var m=Math.floor((Date.now()-new Date(iso).getTime())/60000); if(isNaN(m)) return 'Nunca'; if(m<1) return 'recién'; if(m<60) return 'hace '+m+' min'; var h=Math.floor(m/60); if(h<24) return 'hace '+h+' hs'; return 'hace '+Math.floor(h/24)+' días'; }
+  function copyHwid(b){ var hw=b.getAttribute('data-hw'), orig=b.textContent;
+    function done(){ b.textContent='✓ Copiado'; setTimeout(function(){ b.textContent=orig; },2000); }
+    try{ navigator.clipboard.writeText(hw).then(done,function(){ fallbackCopy(hw); done(); }); }
+    catch(e){ fallbackCopy(hw); done(); } }
+  function fallbackCopy(txt){ try{ var ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }catch(e){} }
   function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
 
   document.getElementById('btnLogin').onclick = login;
@@ -117,12 +141,12 @@
       sel.innerHTML += '<option value="'+esc(c.hwid)+'">'+esc(c.businessName||c.hwid.slice(0,8))+'</option>';
       return '<tr class="'+cls+'">'+
         '<td>'+esc(c.businessName||'—')+'</td>'+
-        '<td class="mono mut">'+esc((c.hwid||'').slice(0,8))+'</td>'+
+        '<td class="mono mut">'+esc((c.hwid||'').slice(0,8))+'<button class="copy" data-hw="'+esc(c.hwid)+'">Copiar HWID</button></td>'+
         '<td>'+esc(c.plan||'—')+'</td>'+
         '<td>'+fmtDate(c.expiresAt)+'</td>'+
         '<td>'+(c.daysLeft!=null?c.daysLeft:'—')+'</td>'+
         '<td><span class="pill '+(c.active?'ok':'off')+'">'+(c.active?'Activa':'Vencida')+'</span></td>'+
-        '<td class="mut">'+fmtDate(c.lastPing)+'</td>'+
+        '<td class="mut">'+ago(c.lastPing)+'</td>'+
         '<td>'+(c.active?'<button class="danger" data-hw="'+esc(c.hwid)+'">Desactivar</button>':'')+'</td>'+
         '</tr>';
     }).join('');
@@ -132,7 +156,27 @@
       b.onclick=function(){ if(!confirm('¿Desactivar la licencia de este cliente?')) return;
         call('/license/deactivate','POST',{hwid:b.getAttribute('data-hw')}).then(function(x){ if(x.ok) reload(); else alert(x.j.error||'Error'); }); };
     });
+    Array.prototype.forEach.call(document.querySelectorAll('button.copy'), function(b){ b.onclick=function(){ copyHwid(b); }; });
   }
+
+  document.getElementById('btnNode').onclick = function(){
+    var msg = document.getElementById('nodeMsg'); msg.style.color='var(--rd)'; msg.textContent='';
+    var hwid = document.getElementById('nHwid').value.trim();
+    if(!hwid){ msg.textContent='El HWID es requerido.'; return; }
+    var body = { hwid:hwid,
+      businessName: document.getElementById('nBiz').value.trim(),
+      branchName: document.getElementById('nBranch').value.trim(),
+      cuit: document.getElementById('nCuit').value.trim(),
+      licensePlan: document.getElementById('nPlan').value,
+      licenseExpires: document.getElementById('nExp').value };
+    call('/admin/node','POST',body).then(function(x){
+      if(!x.ok){ msg.textContent = x.j.error||'Error'; return; }
+      msg.style.color='var(--ok)'; msg.textContent='Nodo registrado. Slug: '+x.j.slug;
+      document.getElementById('nHwid').value=''; document.getElementById('nBiz').value='';
+      document.getElementById('nBranch').value=''; document.getElementById('nCuit').value=''; document.getElementById('nExp').value='';
+      reload();
+    }).catch(function(){ msg.textContent='No se pudo conectar.'; });
+  };
 
   document.getElementById('btnActivate').onclick = function(){
     var hwid = (document.getElementById('hwManual').value.trim()) || document.getElementById('selClient').value;
