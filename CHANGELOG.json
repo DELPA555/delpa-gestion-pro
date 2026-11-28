@@ -1,4 +1,13 @@
 {
+  "v3.1.0": {
+    "fecha": "2026-11-27",
+    "titulo": "Selector de sucursal en Stock de red",
+    "novedades": [
+      "Selector de sucursal interactivo: hacé click en cualquier sucursal para ver su stock individual",
+      "Cards de resumen con total de unidades por nodo y total de red",
+      "Vista filtrada por sucursal con buscador y filtro de categoría activos"
+    ]
+  },
   "v3.0.0": {
     "fecha": "2026-11-27",
     "titulo": "Alertas de eventos en tiempo real",
