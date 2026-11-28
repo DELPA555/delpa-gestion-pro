@@ -1,4 +1,14 @@
 {
+  "v3.3.0": {
+    "fecha": "2026-11-27",
+    "titulo": "Fondo de caja configurable",
+    "novedades": [
+      "Nuevo: fondo de caja (cambio inicial) activable desde Configuración",
+      "Al abrir la caja podés declarar el cambio del día anterior",
+      "El cierre descuenta el cambio para mostrar el efectivo real de ventas",
+      "La alerta de diferencia de caja usa el cálculo corregido"
+    ]
+  },
   "v3.1.0": {
     "fecha": "2026-11-27",
     "titulo": "Selector de sucursal en Stock de red",
