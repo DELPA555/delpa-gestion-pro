@@ -178,6 +178,7 @@ export default function CashBox() {
   const [closeModal, setCloseModal] = useState(false)
   const [movementModal, setMovementModal] = useState(false)
   const [openCash, setOpenCash] = useState('')
+  const [openChange, setOpenChange] = useState('')   // cambio inicial (fondo de caja)
   const [openShift, setOpenShift] = useState('')
   const [shiftOptions, setShiftOptions] = useState(['Mañana', 'Tarde'])
   const [paymentRealAmounts, setPaymentRealAmounts] = useState({})
@@ -243,9 +244,9 @@ export default function CashBox() {
   const handleOpen = async () => {
     setProcessing(true)
     try {
-      await api.cashbox.open({ openingCash: Number(openCash) || 0, shift: openShift })
+      await api.cashbox.open({ openingCash: Number(openCash) || 0, shift: openShift, cambioInicial: Number(openChange) || 0 })
       toast.success('Caja abierta' + (openShift ? ` — Turno ${openShift}` : ''))
-      setOpenModal(false); load()
+      setOpenModal(false); setOpenChange(''); load()
     } catch (e) { toast.error(e.message) }
     finally { setProcessing(false) }
   }
@@ -576,6 +577,13 @@ export default function CashBox() {
             <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Efectivo inicial $</label>
             <input type="number" min="0" step="0.01" className={inputCls} value={openCash} onChange={e => setOpenCash(e.target.value)} placeholder="0,00" autoFocus />
           </div>
+          {biz.fondo_caja_enabled === '1' && (
+            <div>
+              <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">💵 Cambio del día anterior $</label>
+              <input type="number" min="0" step="0.01" className={inputCls} value={openChange} onChange={e => setOpenChange(e.target.value)} placeholder="0" />
+              <p className="text-[11px] text-zinc-600 mt-1">Dinero para dar vuelto, no cuenta como venta.</p>
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border">
           <button onClick={() => setOpenModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">Cancelar</button>
@@ -648,28 +656,72 @@ export default function CashBox() {
                   <span>-{formatCurrency((summary.expenses?.total || 0) - (summary.cashExpenses || 0))}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t border-border/50 pt-1.5">
-                <span className="text-zinc-400">Efectivo esperado en caja:</span>
-                <span className="text-white font-bold">{formatCurrency(summary.expectedCash)}</span>
-              </div>
-              {(() => {
+              {summary.fondoCajaEnabled ? (() => {
                 const raw = paymentRealAmounts['Efectivo']
-                if (raw === '' || raw === undefined) return null
-                const diff = Number(raw) - summary.expectedCash
+                const declared = raw !== '' && raw !== undefined ? Number(raw) : null
+                const cambio = Number(summary.cambioInicial) || 0
                 return (
-                  <div className={cn('flex justify-between font-medium', diff >= 0 ? 'text-green-400' : 'text-red-400')}>
-                    <span>Diferencia efectivo:</span>
-                    <span>{diff >= 0 ? '+' : ''}{formatCurrency(diff)}</span>
-                  </div>
+                  <>
+                    {declared !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Efectivo declarado:</span>
+                        <span className="text-white">{formatCurrency(declared)}</span>
+                      </div>
+                    )}
+                    {cambio > 0 && (
+                      <div className="flex justify-between text-zinc-500">
+                        <span>Cambio inicial (restado):</span>
+                        <span>-{formatCurrency(cambio)}</span>
+                      </div>
+                    )}
+                    {declared !== null && (
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Efectivo de ventas neto:</span>
+                        <span className="text-white font-medium">{formatCurrency(declared - cambio)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-border/50 pt-1.5">
+                      <span className="text-zinc-400">Efectivo esperado por ventas:</span>
+                      <span className="text-white font-bold">{formatCurrency(summary.expectedCash)}</span>
+                    </div>
+                    {declared !== null && (() => {
+                      const diff = declared - cambio - summary.expectedCash
+                      return (
+                        <div className={cn('flex justify-between font-medium', diff >= 0 ? 'text-green-400' : 'text-red-400')}>
+                          <span>Diferencia:</span>
+                          <span>{diff >= 0 ? '+' : ''}{formatCurrency(diff)}</span>
+                        </div>
+                      )
+                    })()}
+                  </>
                 )
-              })()}
+              })() : (
+                <>
+                  <div className="flex justify-between border-t border-border/50 pt-1.5">
+                    <span className="text-zinc-400">Efectivo esperado en caja:</span>
+                    <span className="text-white font-bold">{formatCurrency(summary.expectedCash)}</span>
+                  </div>
+                  {(() => {
+                    const raw = paymentRealAmounts['Efectivo']
+                    if (raw === '' || raw === undefined) return null
+                    const diff = Number(raw) - summary.expectedCash
+                    return (
+                      <div className={cn('flex justify-between font-medium', diff >= 0 ? 'text-green-400' : 'text-red-400')}>
+                        <span>Diferencia efectivo:</span>
+                        <span>{diff >= 0 ? '+' : ''}{formatCurrency(diff)}</span>
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
             </div>
           )}
 
           {/* Aviso: transferencia automática a Caja Grande */}
           {summary && (() => {
             const raw = paymentRealAmounts['Efectivo']
-            const contado = raw !== '' && raw !== undefined ? Number(raw) : summary.expectedCash
+            const cambio = summary.fondoCajaEnabled ? (Number(summary.cambioInicial) || 0) : 0
+            const contado = raw !== '' && raw !== undefined ? Number(raw) : (summary.expectedCash + cambio)
             if (!(contado > 0)) return null
             return (
               <div className="flex items-center gap-3 bg-accent/10 border border-accent/30 rounded-xl px-4 py-3">

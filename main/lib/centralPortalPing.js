@@ -25,7 +25,7 @@ function getSetting(db, key) {
 
 // Ventas del día (total facturado, sin anuladas) y efectivo en la caja abierta.
 function computeVentasCaja(db) {
-  let ventasHoy = 0, cajaHoy = 0, ventaMaxHoy = 0
+  let ventasHoy = 0, cajaHoy = 0, ventaMaxHoy = 0, cambioInicial = 0
   try {
     const r = db.prepare(
       "SELECT COALESCE(SUM(total),0) t, COALESCE(MAX(total),0) m FROM sales WHERE voided=0 AND date(created_at,'localtime')=date('now','localtime')"
@@ -34,15 +34,16 @@ function computeVentasCaja(db) {
     ventaMaxHoy = r.m || 0
   } catch {}
   try {
-    const cb = db.prepare("SELECT id, opening_cash FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
+    const cb = db.prepare("SELECT id, opening_cash, cambioInicial FROM cashbox WHERE status='open' ORDER BY id DESC LIMIT 1").get()
     if (cb) {
+      cambioInicial = Number(cb.cambioInicial) || 0
       const mov = db.prepare(
         "SELECT COALESCE(SUM(CASE WHEN type='ingreso' THEN amount ELSE -amount END),0) n FROM cashbox_movements WHERE cashbox_id=?"
       ).get(cb.id)
       cajaHoy = (Number(cb.opening_cash) || 0) + (Number(mov.n) || 0)
     }
   } catch {}
-  return { ventasHoy, cajaHoy, ventaMaxHoy }
+  return { ventasHoy, cajaHoy, ventaMaxHoy, cambioInicial }
 }
 
 // Ventas del día agrupadas por medio de pago (v3.2.0), split-aware (contempla
@@ -133,7 +134,7 @@ function pingCentralPortal(db, base) {
       return resolve({ ok: false, skipped: true, error: 'Sin PIN de portal configurado' })
     }
 
-    const { ventasHoy, cajaHoy, ventaMaxHoy } = computeVentasCaja(db)
+    const { ventasHoy, cajaHoy, ventaMaxHoy, cambioInicial } = computeVentasCaja(db)
     const mediosPago = computeMediosPago(db, cajaHoy)
     let alerts = {}
     try { alerts = JSON.parse(getSetting(db, 'portal_alerts') || '{}') } catch {}
@@ -147,6 +148,7 @@ function pingCentralPortal(db, base) {
       stockSnapshot: base.stockSnapshot || [],
       ventasHoy, cajaHoy, ventaMaxHoy,
       mediosPago,
+      cambioInicial,
       version: base.version || '',
       pin,
       // Config de alertas por email (se configura en Ajustes → Portal web).

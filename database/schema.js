@@ -955,6 +955,8 @@ function createTables(db) {
     "ALTER TABLE sales ADD COLUMN mp_payment_id TEXT DEFAULT ''",
     // v2.2 — EAN-13 per size
     "ALTER TABLE product_sizes ADD COLUMN size_barcode TEXT DEFAULT NULL",
+    // v3.3 — Fondo de caja (cambio inicial del día anterior)
+    "ALTER TABLE cashbox ADD COLUMN cambioInicial REAL DEFAULT 0",
   ]
   for (const sql of migrations) { try { db.exec(sql) } catch {} }
 
@@ -1033,6 +1035,7 @@ function createTables(db) {
     ['barcode_migration_done', '0'],
     ['email_contador',         ''],
     ['cashbox_shifts',         '["Mañana","Tarde"]'],
+    ['fondo_caja_enabled',     '0'],
     ['share_stock_online',    '0'],
     ['stock_access_pin',      ''],
     ['stock_public_file_id',  ''],

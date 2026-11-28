@@ -321,6 +321,7 @@ export default function Settings() {
 
   // Barcode scanner
   const [barcodeScanner, setBarcodeScanner] = useState(false)
+  const [fondoCaja, setFondoCaja] = useState(false)
 
 
 
@@ -402,6 +403,7 @@ export default function Settings() {
         iva_alicuota:       all.iva_alicuota       || '21',
       })
       setBarcodeScanner(all.barcode_scanner === '1')
+      setFondoCaja(all.fondo_caja_enabled === '1')
     } catch {}
   }, [])
 
@@ -953,6 +955,31 @@ export default function Settings() {
               <span className={cn(
                 'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow',
                 barcodeScanner ? 'translate-x-5' : 'translate-x-1'
+              )} />
+            </button>
+          </div>
+
+          {/* Fondo de caja (cambio inicial) toggle */}
+          <div className="flex items-center justify-between p-3 bg-surface border border-border rounded-xl">
+            <div>
+              <p className="text-sm font-medium text-white">Habilitar fondo de caja (cambio inicial)</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Permite declarar el cambio del día anterior al abrir la caja; se descuenta al cerrar para calcular la diferencia real.</p>
+            </div>
+            <button
+              onClick={async () => {
+                const next = !fondoCaja
+                setFondoCaja(next)
+                await api.settings.set('fondo_caja_enabled', next ? '1' : '0')
+                toast.success(next ? 'Fondo de caja activado' : 'Fondo de caja desactivado')
+              }}
+              className={cn(
+                'no-drag relative w-11 h-6 rounded-full transition-colors shrink-0',
+                fondoCaja ? 'bg-accent' : 'bg-zinc-700'
+              )}
+            >
+              <span className={cn(
+                'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow',
+                fondoCaja ? 'translate-x-5' : 'translate-x-1'
               )} />
             </button>
           </div>

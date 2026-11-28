@@ -1,6 +1,11 @@
 const { ipcMain } = require('electron')
 const { getDB } = require('../../database/db')
 
+// Fondo de caja (cambio inicial) habilitado en Configuración (setting fondo_caja_enabled).
+function fondoCajaEnabled(db) {
+  try { return db.prepare("SELECT value FROM settings WHERE key='fondo_caja_enabled'").get()?.value === '1' } catch { return false }
+}
+
 // Returns sales totals grouped by payment method, handling both single-payment (old)
 // and multi-payment (sale_payments table) sales transparently.
 function getSalesByMethod(db, cashboxId) {
@@ -137,13 +142,15 @@ ipcMain.handle('cashbox:todaySummary', () => {
   }
 })
 
-ipcMain.handle('cashbox:open', (_, { openingCash, notes, shift }) => {
+ipcMain.handle('cashbox:open', (_, { openingCash, notes, shift, cambioInicial }) => {
   const db = getDB()
   const shiftVal = shift || ''
   // Allow multiple cashboxes open simultaneously, but not the same shift twice
   if (db.prepare("SELECT id FROM cashbox WHERE status='open' AND shift=?").get(shiftVal))
     throw new Error(shiftVal ? `El turno "${shiftVal}" ya tiene una caja abierta` : 'Ya hay una caja sin turno abierta')
-  const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes,shift) VALUES (?,?,?)').run(openingCash || 0, notes || '', shiftVal)
+  // Cambio inicial (fondo de caja del día anterior): solo se guarda si la función está activa.
+  const cambio = fondoCajaEnabled(db) ? (Number(cambioInicial) || 0) : 0
+  const { lastInsertRowid: id } = db.prepare('INSERT INTO cashbox (opening_cash,notes,shift,cambioInicial) VALUES (?,?,?,?)').run(openingCash || 0, notes || '', shiftVal, cambio)
   const shiftInfo = shiftVal ? ` (turno: ${shiftVal})` : ''
   db.prepare(`INSERT INTO audit_log (action,module,entity_id,description) VALUES ('OPEN','cashbox',?,?)`).run(id, `Caja abierta con $${openingCash || 0}${shiftInfo}`)
   try { require('./techLogs').logTech('info', 'caja', `Apertura de caja #${id}${shiftInfo} — fondo $${openingCash || 0}`) } catch {}
@@ -184,6 +191,9 @@ ipcMain.handle('cashbox:summary', async (_, cashboxId) => {
     // Efectivo esperado = apertura + ventas efectivo + ingresos manuales efectivo
     //                     - gastos EN EFECTIVO - egresos manuales efectivo
     expectedCash: (cashbox?.opening_cash || 0) + cashSales + cashManualIn - cashManualOut - cashExpenses,
+    // Fondo de caja (cambio inicial): para el desglose del cierre si la función está activa.
+    fondoCajaEnabled: fondoCajaEnabled(db),
+    cambioInicial: fondoCajaEnabled(db) ? (Number(cashbox?.cambioInicial) || 0) : 0,
   }
 })
 
@@ -199,8 +209,12 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
   const cashManualOut = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM cashbox_movements WHERE cashbox_id=? AND type='egreso' AND payment_method='Efectivo'").get(cashboxId).total
   // Solo restar los gastos pagados en efectivo (los de otros medios no salen del cajón)
   const expected = cashbox.opening_cash + cashTotal + cashManualIn - cashManualOut - cashExpenses
-  const effectiveRealCash = realCash != null ? Number(realCash) : expected
-  const diff = effectiveRealCash - expected
+  // Fondo de caja (cambio inicial): si está activo, se descuenta del efectivo declarado
+  // para calcular la diferencia REAL de ventas (no es venta, es capital para dar vuelto).
+  const cambio = fondoCajaEnabled(db) ? (Number(cashbox.cambioInicial) || 0) : 0
+  // Sin recuento: se asume que el cajón tiene el esperado + el cambio → diferencia 0.
+  const effectiveRealCash = realCash != null ? Number(realCash) : (expected + cambio)
+  const diff = effectiveRealCash - cambio - expected
   const countsJson = paymentCounts ? JSON.stringify(paymentCounts) : '{}'
   db.prepare("UPDATE cashbox SET real_cash=?,closing_cash=?,difference=?,status='closed',closed_at=CURRENT_TIMESTAMP,notes=?,payment_counts_json=? WHERE id=?")
     .run(effectiveRealCash, expected, diff, notes || '', countsJson, cashboxId)
@@ -220,7 +234,7 @@ ipcMain.handle('cashbox:close', async (_, { cashboxId, realCash, notes, paymentC
   try { require('./techLogs').logTech(Math.abs(diff) > 0.5 ? 'warn' : 'info', 'caja', `Cierre de caja #${cashboxId} — esperado $${expected.toFixed(2)}, contado $${effectiveRealCash.toFixed(2)}, dif $${diff.toFixed(2)}`) } catch {}
   try { const { sendCashboxReport } = require('./email'); await sendCashboxReport(cashboxId) } catch (e) { try { require('./techLogs').logTech('error', 'email', 'Fallo envío informe de cierre de caja: ' + e.message, e.stack) } catch {} }
   // Alerta en tiempo real (v3.0.0): si hay un descuadre relevante (>$500), avisar al instante.
-  try { if (Math.abs(diff) > 500) require('../lib/centralPortalPing').sendEvento(db, 'cierre_caja', { esperado: expected, declarado: effectiveRealCash, diferencia: diff }) } catch {}
+  try { if (Math.abs(diff) > 500) require('../lib/centralPortalPing').sendEvento(db, 'cierre_caja', { esperado: expected + cambio, declarado: effectiveRealCash, diferencia: diff }) } catch {}
   return { expectedCash: expected, difference: diff, transfer }
 })
 
