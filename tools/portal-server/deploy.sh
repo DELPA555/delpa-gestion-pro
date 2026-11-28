@@ -248,12 +248,14 @@ app.post('/ping', (req, res) => {
     const ventasHoy = Number(b.ventasHoy) || 0, cajaHoy = Number(b.cajaHoy) || 0
     let stockTotal = 0
     try { stockTotal = (b.stockSnapshot || []).reduce((s, p) => s + (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0), 0) } catch {}
-    const hoy = new Date().toISOString().slice(0, 10)
+    // Zona horaria Argentina (UTC-3): el VPS corre en UTC, así que el "día" se calcula
+    // restando 3h para que las ventas de la tarde-noche no salten al día siguiente.
+    const hoy = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const last = db.prepare("SELECT ventasHoy, cajaHoy, stockTotal FROM portal_history WHERE slug=? AND substr(timestamp,1,10)=? ORDER BY id DESC LIMIT 1").get(slug, hoy)
     const changed = !last || Number(last.ventasHoy) !== ventasHoy || Number(last.cajaHoy) !== cajaHoy || Number(last.stockTotal) !== stockTotal
     if (changed) {
       db.prepare('INSERT INTO portal_history (slug,networkCode,ventasHoy,cajaHoy,stockTotal,timestamp) VALUES (?,?,?,?,?,?)')
-        .run(slug, String(b.networkCode || ''), ventasHoy, cajaHoy, stockTotal, new Date().toISOString())
+        .run(slug, String(b.networkCode || ''), ventasHoy, cajaHoy, stockTotal, new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString())
     }
   } catch (e) { console.error('[history] ' + e.message) }
 
@@ -298,6 +300,7 @@ function auth(req, res, next) {
 
 app.get('/api/:slug/status', auth, (req, res) => {
   const n = db.prepare('SELECT businessName, branchName, ventasHoy, cajaHoy, ventaMaxHoy, mediosPagoJson, version, updatedAt FROM nodes WHERE slug=?').get(req.params.slug)
+  if (n) n.cajaHoy = Math.max(0, Number(n.cajaHoy) || 0)
   res.json(n || {})
 })
 app.get('/api/:slug/stock', auth, (req, res) => {
@@ -325,8 +328,8 @@ app.get('/api/:slug/red', auth, (req, res) => {
   const nodes = rows.map(r => {
     let units = 0
     try { units = (JSON.parse(r.stockJson || '[]')).reduce((s, p) => s + (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0), 0) } catch {}
-    const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 20 * 60 * 1000) : false
-    return { nombre: r.branchName || r.businessName || 'Local', online, ventasHoy: Number(r.ventasHoy) || 0, cajaHoy: Number(r.cajaHoy) || 0, unidades: units, esYo: r.slug === req.params.slug }
+    const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 8 * 60 * 1000) : false
+    return { nombre: r.branchName || r.businessName || 'Local', online, ventasHoy: Number(r.ventasHoy) || 0, cajaHoy: Math.max(0, Number(r.cajaHoy) || 0), unidades: units, esYo: r.slug === req.params.slug }
   })
   res.json({ networkCode: code, nodes })
 })
@@ -345,7 +348,7 @@ app.get('/api/:slug/red/stock', auth, (req, res) => {
     try { stock = JSON.parse(r.stockJson || '[]') } catch {}
     const productos = stock.map(p => ({ n: p.n || '', c: p.c || '', cat: p.cat || '', total: (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0) }))
     const unidades = productos.reduce((a, p) => a + p.total, 0)
-    const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 20 * 60 * 1000) : false
+    const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 8 * 60 * 1000) : false
     return { slug: r.slug, nombre: r.branchName || r.businessName || 'Local', online, unidades, esYo: r.slug === req.params.slug, productos }
   })
   res.json({ networkCode: code, nodes })
@@ -355,7 +358,7 @@ app.get('/api/:slug/red/stock', auth, (req, res) => {
 // por sucursal de la red (7 días). Usa la misma sesión (PIN) que el resto de /api/:slug.
 app.get('/api/:slug/historia', auth, (req, res) => {
   const dias = Math.min(90, Math.max(1, Number(req.query.dias) || 30))
-  const since = new Date(Date.now() - dias * 86400000).toISOString()
+  const since = new Date(Date.now() - 3 * 60 * 60 * 1000 - dias * 86400000).toISOString()
   // ventasHoy/cajaHoy/stockTotal son acumulados del día → tomamos el MAX por fecha.
   const historia = db.prepare(`
     SELECT substr(timestamp,1,10) AS fecha, MAX(ventasHoy) AS ventasHoy, MAX(cajaHoy) AS cajaHoy, MAX(stockTotal) AS stockTotal
@@ -366,7 +369,7 @@ app.get('/api/:slug/historia', auth, (req, res) => {
   const node = db.prepare('SELECT networkCode FROM nodes WHERE slug=?').get(req.params.slug)
   const code = node && String(node.networkCode || '').trim()
   if (code) {
-    const since7 = new Date(Date.now() - 7 * 86400000).toISOString()
+    const since7 = new Date(Date.now() - 3 * 60 * 60 * 1000 - 7 * 86400000).toISOString()
     const rows = db.prepare(`
       SELECT slug, substr(timestamp,1,10) AS fecha, MAX(ventasHoy) AS ventasHoy
       FROM portal_history WHERE networkCode=? AND timestamp>=? GROUP BY slug, fecha ORDER BY fecha
@@ -551,7 +554,7 @@ async function resendSend(to, subject, text) {
   } catch (e) { return { ok: false, error: e.message } }
 }
 function argHour() { try { return Number(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', hour12: false })) } catch { return new Date().getHours() } }
-function today() { return new Date().toISOString().slice(0, 10) }
+function today() { return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10) }
 function alreadySent(slug, trig) { return !!db.prepare("SELECT 1 FROM email_alerts_sent WHERE slug=? AND trigger_type=? AND fecha=?").get(slug, trig, today()) }
 function markSent(slug, trig) { try { db.prepare('INSERT OR IGNORE INTO email_alerts_sent (slug,trigger_type,fecha) VALUES (?,?,?)').run(slug, trig, today()) } catch {} }
 function money(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-AR') }

@@ -1,4 +1,14 @@
 {
+  "v3.3.2": {
+    "fecha": "2026-11-28",
+    "titulo": "Portal en tiempo real y zona horaria Argentina",
+    "novedades": [
+      "Ping al portal reducido de 15 a 5 minutos para estado más instantáneo",
+      "Umbral de online/offline ajustado a 8 minutos acorde al nuevo ping",
+      "Corregida la fecha del día en el portal (ahora usa zona horaria Argentina UTC-3)",
+      "Corregido el total de efectivo negativo en el tab Red de la red de sucursales"
+    ]
+  },
   "v3.3.0": {
     "fecha": "2026-11-27",
     "titulo": "Fondo de caja configurable",

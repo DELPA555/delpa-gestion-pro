@@ -203,8 +203,8 @@ function bootServerOrStandalone(mc, mode) {
   setupDailyBackup()
   scheduleInformes()
   setTimeout(pingDistributor, 30 * 1000)
-  // Ping (telemetría + snapshot de stock para la red de locales) cada 15 min
-  setInterval(pingDistributor, 15 * 60 * 1000)
+  // Ping (telemetría + snapshot de stock para la red de locales) cada 5 min
+  setInterval(pingDistributor, 5 * 60 * 1000)
   setInterval(() => { try { performBackup() } catch {} }, 24 * 60 * 60 * 1000)
 
   // TN auto-sync every 10 minutes + immediate sync on startup
