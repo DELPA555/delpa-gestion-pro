@@ -22,7 +22,7 @@ PORT="3000"
 # Secreto compartido con la app DELPA (header X-Delpa-Secret). Mismo valor en el cliente.
 PING_SECRET="0822e42fa23b4f9dd3b79afb29d3a4a4b8489b7709c46276"
 # Email para los avisos de Let's Encrypt (renovación/expiración).
-LE_EMAIL="${LE_EMAIL:-delpa555@gmail.com}"
+LE_EMAIL="${LE_EMAIL:?'ERROR: LE_EMAIL no está seteada'}"
 
 echo "==> 1/5  Creando $APP_DIR"
 mkdir -p "$APP_DIR"
