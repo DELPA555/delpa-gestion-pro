@@ -45,6 +45,35 @@ function computeVentasCaja(db) {
   return { ventasHoy, cajaHoy, ventaMaxHoy }
 }
 
+// Ventas del día agrupadas por medio de pago (v3.2.0), split-aware (contempla
+// sale_payments igual que el resto de la app). Devuelve { efectivo, tarjeta, otros }.
+// Si no hay ventas con medio de pago, cae a { efectivo: cajaHoy, tarjeta: 0, otros: 0 }.
+function computeMediosPago(db, cajaHoy) {
+  const fallback = { efectivo: Number(cajaHoy) || 0, tarjeta: 0, otros: 0 }
+  try {
+    const hoy = "date(created_at,'localtime')=date('now','localtime')"
+    // Pagos split (sale_payments) + ventas sin split (payment_method de la venta).
+    const rows = db.prepare(
+      "SELECT pm, SUM(monto) t FROM (" +
+      "  SELECT sp.payment_method pm, sp.final_amount monto FROM sale_payments sp JOIN sales s ON s.id=sp.sale_id WHERE s.voided=0 AND " + hoy.replace(/created_at/g, 's.created_at') +
+      "  UNION ALL " +
+      "  SELECT s.payment_method pm, s.total monto FROM sales s LEFT JOIN sale_payments sp ON sp.sale_id=s.id WHERE s.voided=0 AND sp.id IS NULL AND " + hoy.replace(/created_at/g, 's.created_at') +
+      ") GROUP BY pm"
+    ).all()
+    if (!rows.length) return fallback
+    let efectivo = 0, tarjeta = 0, otros = 0
+    for (const r of rows) {
+      const pm = String(r.pm || '').toLowerCase()
+      const amt = Number(r.t) || 0
+      if (/efectivo/.test(pm)) efectivo += amt
+      else if (/tarjeta|d[eé]bito|cr[eé]dito|visa|master|posnet/.test(pm)) tarjeta += amt
+      else otros += amt
+    }
+    if (efectivo === 0 && tarjeta === 0 && otros === 0) return fallback
+    return { efectivo, tarjeta, otros }
+  } catch { return fallback }
+}
+
 // Licencia local del cliente (si activó un código): para importarla al VPS la 1ª vez.
 // Key real en settings: 'license_expiry' = YYYYMMDD (la fija license:activate).
 function localLicenseForPing(db) {
@@ -105,6 +134,7 @@ function pingCentralPortal(db, base) {
     }
 
     const { ventasHoy, cajaHoy, ventaMaxHoy } = computeVentasCaja(db)
+    const mediosPago = computeMediosPago(db, cajaHoy)
     let alerts = {}
     try { alerts = JSON.parse(getSetting(db, 'portal_alerts') || '{}') } catch {}
     const lic = localLicenseForPing(db)
@@ -116,6 +146,7 @@ function pingCentralPortal(db, base) {
       branchName: base.branchName || '',
       stockSnapshot: base.stockSnapshot || [],
       ventasHoy, cajaHoy, ventaMaxHoy,
+      mediosPago,
       version: base.version || '',
       pin,
       // Config de alertas por email (se configura en Ajustes → Portal web).

@@ -260,24 +260,12 @@ ipcMain.handle('ivabook:emailContador', async (_, { year, month }) => {
   fs.writeFileSync(comprasPath, '﻿' + comprasCSV, 'utf8')
 
   try {
-    const nodemailer = require('nodemailer')
-    const cfgRows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%'").all()
-    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]))
-    const user = cfg.email_user || cfg.email_from
-    if (!user || !cfg.email_pass) return { ok: false, error: 'Configuración de email incompleta' }
+    const { sendEmail, FROM_ADDR, emailConfigured } = require('../lib/mailer')
+    if (!emailConfigured()) return { ok: false, error: 'Configurá la API key de Resend en Ajustes → Email' }
 
     const bizName = db.prepare("SELECT value FROM settings WHERE key='business_name'").get()?.value || 'DELPA'
-    const transporter = nodemailer.createTransport({
-      host: (cfg.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-      port: parseInt(cfg.email_port || '587', 10),
-      secure: cfg.email_port === '465',
-      requireTLS: cfg.email_port !== '465',
-      auth: { user, pass: cfg.email_pass },
-      tls: { minVersion: 'TLSv1.2' },
-    })
-
-    await transporter.sendMail({
-      from: `"${bizName}" <${user}>`,
+    await sendEmail({
+      from: `"${bizName}" <${FROM_ADDR}>`,
       to: emailContador,
       subject: `Libro IVA ${String(month).padStart(2,'0')}/${year} — ${bizName}`,
       text: `Adjunto los archivos de Libro IVA (ventas y compras) correspondientes al período ${String(month).padStart(2,'0')}/${year}.\n\nGenerado por DELPA Gestión PRO.`,

@@ -6,25 +6,29 @@ const { getDB } = require('../../database/db')
 const { getBizContact, bizFooterHtml } = require('../lib/bizFooter')
 const { fmtDateTimeAR, fmtDateAR, fmtTimeAR } = require('../lib/argTime')
 
+const { sendEmail, emailConfigured, FROM_ADDR } = require('../lib/mailer')
+
 function getEmailConfig() {
   const db = getDB()
-  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%'").all()
-  return Object.fromEntries(rows.map(r => [r.key, r.value]))
+  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%' OR key='resend_api_key'").all()
+  const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
+  // v3.2.0: el envío es por Resend (ver ../lib/mailer). El único requisito real es la
+  // API key (resend_api_key). Para no tocar los decenas de guards que chequeaban la
+  // config SMTP (email_user/email_pass/email_host), exponemos proxies truthy cuando hay
+  // API key. El "from" real lo fuerza sendEmail a alertas@delpagestion.com.ar.
+  if (s.resend_api_key) {
+    s.email_user = s.email_user || FROM_ADDR
+    s.email_from = s.email_from || FROM_ADDR
+    s.email_pass = s.email_pass || 'resend'
+    s.email_host = s.email_host || 'resend'
+  }
+  return s
 }
 
-function buildTransporter(s) {
-  const nodemailer = require('nodemailer')
-  const user = s.email_user || s.email_from
-  if (!user || !s.email_pass) throw new Error('Configuración de email incompleta (usuario y contraseña requeridos)')
-  if (!s.email_to) throw new Error('Falta el email destinatario')
-  return nodemailer.createTransport({
-    host: (s.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-    port: parseInt(s.email_port || '587', 10),
-    secure: s.email_port === '465',
-    requireTLS: s.email_port !== '465',
-    auth: { user, pass: s.email_pass },
-    tls: { minVersion: 'TLSv1.2' },
-  })
+// Compat: antes devolvía un transporter de nodemailer; ahora un shim que envía por
+// Resend manteniendo la interfaz .sendMail()/.verify() usada en este archivo.
+function buildTransporter() {
+  return { sendMail: (opts) => sendEmail(opts), verify: () => Promise.resolve(true) }
 }
 
 // Resumen de ventas por medio de pago, split-aware (idéntico a getSalesByMethod de cashbox.js).
@@ -819,16 +823,8 @@ async function sendPointsSummaryAsync({ clientId, saleId, saleNumber, saleTotal,
       minRedeem,
     }, biz)
 
-    // Build transporter directly — client points email doesn't need email_to (operator address)
-    const nodemailer = require('nodemailer')
-    const transporter = nodemailer.createTransport({
-      host: (s.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-      port: parseInt(s.email_port || '587', 10),
-      secure: s.email_port === '465',
-      requireTLS: s.email_port !== '465',
-      auth: { user: smtpUser, pass: s.email_pass },
-      tls: { minVersion: 'TLSv1.2' },
-    })
+    // Envío por Resend (el email de puntos va al cliente; no usa email_to del operador)
+    const transporter = buildTransporter()
     await transporter.sendMail({
       from: `"${biz.business_name}" <${smtpUser}>`,
       to: client.email,

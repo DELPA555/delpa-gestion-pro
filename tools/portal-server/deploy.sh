@@ -214,14 +214,15 @@ app.post('/ping', (req, res) => {
     ventaThreshold: has('ventaThreshold') ? (Number(b.ventaThreshold) || 0) : (Number(existing?.ventaThreshold) || 0),
     alertsJson: has('alerts') ? JSON.stringify(b.alerts || {}) : (existing?.alertsJson || '{}'),
     ventaMaxHoy: has('ventaMaxHoy') ? (Number(b.ventaMaxHoy) || 0) : (Number(existing?.ventaMaxHoy) || 0),
+    mediosPagoJson: has('mediosPago') ? JSON.stringify(b.mediosPago || {}) : (existing?.mediosPagoJson || '{}'),
   }
   db.prepare(`
-    INSERT INTO nodes (hwid,slug,businessName,cuit,networkCode,branchName,pinHash,stockJson,ventasHoy,cajaHoy,version,updatedAt,alertEmail,ventaThreshold,alertsJson,ventaMaxHoy)
-    VALUES (@hwid,@slug,@businessName,@cuit,@networkCode,@branchName,@pinHash,@stockJson,@ventasHoy,@cajaHoy,@version,@updatedAt,@alertEmail,@ventaThreshold,@alertsJson,@ventaMaxHoy)
+    INSERT INTO nodes (hwid,slug,businessName,cuit,networkCode,branchName,pinHash,stockJson,ventasHoy,cajaHoy,version,updatedAt,alertEmail,ventaThreshold,alertsJson,ventaMaxHoy,mediosPagoJson)
+    VALUES (@hwid,@slug,@businessName,@cuit,@networkCode,@branchName,@pinHash,@stockJson,@ventasHoy,@cajaHoy,@version,@updatedAt,@alertEmail,@ventaThreshold,@alertsJson,@ventaMaxHoy,@mediosPagoJson)
     ON CONFLICT(hwid) DO UPDATE SET
       slug=@slug, businessName=@businessName, cuit=@cuit, networkCode=@networkCode, branchName=@branchName,
       pinHash=@pinHash, stockJson=@stockJson, ventasHoy=@ventasHoy, cajaHoy=@cajaHoy, version=@version, updatedAt=@updatedAt,
-      alertEmail=@alertEmail, ventaThreshold=@ventaThreshold, alertsJson=@alertsJson, ventaMaxHoy=@ventaMaxHoy
+      alertEmail=@alertEmail, ventaThreshold=@ventaThreshold, alertsJson=@alertsJson, ventaMaxHoy=@ventaMaxHoy, mediosPagoJson=@mediosPagoJson
   `).run(row)
 
   // FIX 2 (v1.54.1): si el cliente no tiene licencia en el VPS pero su ping trae una
@@ -296,7 +297,7 @@ function auth(req, res, next) {
 }
 
 app.get('/api/:slug/status', auth, (req, res) => {
-  const n = db.prepare('SELECT businessName, branchName, ventasHoy, cajaHoy, ventaMaxHoy, version, updatedAt FROM nodes WHERE slug=?').get(req.params.slug)
+  const n = db.prepare('SELECT businessName, branchName, ventasHoy, cajaHoy, ventaMaxHoy, mediosPagoJson, version, updatedAt FROM nodes WHERE slug=?').get(req.params.slug)
   res.json(n || {})
 })
 app.get('/api/:slug/stock', auth, (req, res) => {
@@ -310,7 +311,7 @@ app.get('/api/:slug/stock', auth, (req, res) => {
   res.json({ productos: out })
 })
 app.get('/api/:slug/ventas', auth, (req, res) => {
-  const n = db.prepare('SELECT ventasHoy, cajaHoy, ventaMaxHoy, updatedAt FROM nodes WHERE slug=?').get(req.params.slug)
+  const n = db.prepare('SELECT ventasHoy, cajaHoy, ventaMaxHoy, mediosPagoJson, updatedAt FROM nodes WHERE slug=?').get(req.params.slug)
   res.json(n || {})
 })
 // "Mi Red": todos los locales con el mismo networkCode. No pide PIN extra (ya está
@@ -760,6 +761,13 @@ function PORTAL_HTML(slug, businessName, hasNet) {
   .proglab{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin:0 0 8px}
   .prog{height:12px;background:#0b0b0d;border-radius:999px;overflow:hidden;border:1px solid var(--bd)}
   .prog>i{display:block;height:100%;background:linear-gradient(90deg,var(--acc2),var(--acc));border-radius:999px;transition:width .6s ease}
+  .mpwrap{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+  .mpchart{width:148px;height:148px;flex:0 0 auto;margin:0 auto}
+  .mpleg{flex:1;min-width:180px}
+  .mprow{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);font-size:14px}
+  .mprow:last-child{border:0}
+  .mprow i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:9px;vertical-align:middle}
+  @media(max-width:480px){.mpchart{width:132px;height:132px}}
   .sbar{height:7px;background:#0b0b0d;border-radius:999px;overflow:hidden}
   .sbar>i{display:block;height:100%;border-radius:999px}
   .cats{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;scrollbar-width:none}
@@ -895,9 +903,24 @@ function PORTAL_HTML(slug, businessName, hasNet) {
       kpi('🔴','Productos críticos',criticos,criticos>0?'crit':'')+
       kpi('🕐','Actualizado',ago(st.updatedAt))+
       '</div>';
-    var prog='<div class="card"><div class="proglab"><span>Efectivo cobrado</span><span>'+pct+'% del total</span></div><div class="prog"><i style="width:'+pct+'%"></i></div><div class="mut" style="font-size:12px;margin-top:9px">'+money(caja)+' en efectivo sobre '+money(ventas)+' vendidos hoy</div></div>';
+    var mp=null; try{ mp=st.mediosPagoJson?JSON.parse(st.mediosPagoJson):null; }catch(e){}
+    var estim=false, segs;
+    if(mp && ((Number(mp.efectivo)||0)+(Number(mp.tarjeta)||0)+(Number(mp.otros)||0))>0){
+      segs=[{l:'Efectivo',v:Number(mp.efectivo)||0,c:'#22c55e'},{l:'Tarjeta',v:Number(mp.tarjeta)||0,c:'#3b82f6'},{l:'Otros',v:Number(mp.otros)||0,c:'#eab308'}];
+    } else {
+      estim=true; segs=[{l:'Efectivo',v:caja,c:'#22c55e'},{l:'Resto (estimado)',v:Math.max(0,ventas-caja),c:'#3b82f6'}];
+    }
+    var totalSeg=segs.reduce(function(a,s){return a+s.v},0);
+    var pago;
+    if(totalSeg<=0){
+      pago='<div class="card"><h2>Medios de pago</h2><p class="mut" style="text-align:center;margin:10px 0 2px">Sin ventas registradas hoy.</p></div>';
+    } else {
+      var legend=segs.map(function(s){var p=Math.round(s.v/totalSeg*100);return '<div class="mprow"><span><i style="background:'+s.c+'"></i>'+s.l+'</span><span>'+money(s.v)+' <span class="mut">'+p+'%</span></span></div>';}).join('');
+      pago='<div class="card"><h2>Medios de pago'+(estim?' · estimado':'')+'</h2><div class="mpwrap"><div class="mpchart"><canvas id="cMP"></canvas></div><div class="mpleg">'+legend+'</div></div></div>';
+    }
     var chart='<div class="card"><h2>Ventas — últimos 7 días</h2><div style="height:210px"><canvas id="cV"></canvas></div><div id="cVnote"></div><div id="cVmini" style="margin-top:16px"></div></div>';
-    setView(cards+prog+chart);
+    setView(cards+pago+chart);
+    if(totalSeg>0){ var elMP=document.getElementById('cMP'); if(elMP&&typeof Chart!=='undefined'){ charts.push(new Chart(elMP,{type:'doughnut',data:{labels:segs.map(function(s){return s.l}),datasets:[{data:segs.map(function(s){return s.v}),backgroundColor:segs.map(function(s){return s.c}),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:false},tooltip:{displayColors:false,callbacks:{label:function(c){return c.label+': '+money(c.parsed)}}}}}})); } }
     api('/historia?dias=30').then(function(d){
       var h=(d.historia||[]).slice(-7);
       if(!h.length){var nn=document.getElementById('cVnote');if(nn)nn.innerHTML='<p class="mut" style="text-align:center;margin:12px 0 0">Todavía no hay ventas registradas.</p>';return}

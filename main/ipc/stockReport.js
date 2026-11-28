@@ -16,10 +16,15 @@ function getBiz() {
   return Object.fromEntries(rows.map(r => [r.key, r.value]))
 }
 
+const { sendEmail, FROM_ADDR } = require('../lib/mailer')
+
 function getEmailConfig() {
   const db = getDB()
-  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%'").all()
-  return Object.fromEntries(rows.map(r => [r.key, r.value]))
+  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%' OR key='resend_api_key'").all()
+  const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
+  // v3.2.0: envío por Resend. Proxies truthy si hay API key, para los guards SMTP viejos.
+  if (s.resend_api_key) { s.email_user = s.email_user || FROM_ADDR; s.email_from = s.email_from || FROM_ADDR; s.email_pass = s.email_pass || 'resend'; s.email_host = s.email_host || 'resend' }
+  return s
 }
 
 function isAdminSession() {
@@ -317,22 +322,12 @@ ipcMain.handle('stockReport:email', async (_, filters = {}) => {
     let pdf = null
     try { pdf = await htmlToPDF(html) } catch (e) { console.error('[stockReport] PDF error:', e.message) }
 
-    const nodemailer = require('nodemailer')
-    const transporter = nodemailer.createTransport({
-      host: (s.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-      port: parseInt(s.email_port || '587', 10),
-      secure: s.email_port === '465',
-      requireTLS: s.email_port !== '465',
-      auth: { user: smtpUser, pass: s.email_pass },
-      tls: { minVersion: 'TLSv1.2' },
-    })
-
     const bodyText = toSupplier
       ? `Hola, te enviamos el reporte de stock actual de tus productos en ${bizName}.`
       : `Adjuntamos el reporte de stock (${label}) generado el ${dateStr}.`
 
     const mailOpts = {
-      from: `"${bizName}" <${smtpUser}>`,
+      from: `"${bizName}" <${FROM_ADDR}>`,
       to: recipient,
       subject: `Reporte de Stock — ${label} — ${dateStr}`,
       html: `<div style="font-family:sans-serif;max-width:560px;color:#333">
@@ -349,7 +344,7 @@ ipcMain.handle('stockReport:email', async (_, filters = {}) => {
         contentType: 'application/pdf',
       }]
     }
-    await transporter.sendMail(mailOpts)
+    await sendEmail(mailOpts)
     return { ok: true, email: recipient }
   } catch (e) {
     return { ok: false, error: e.message }

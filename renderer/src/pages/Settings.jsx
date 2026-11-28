@@ -240,7 +240,7 @@ export default function Settings() {
   const [sellers, setSellers] = useState([])
   const [surcharges, setSurcharges] = useState(DEFAULT_SURCHARGES)
   const [priceDisplayMode, setPriceDisplayMode] = useState('0')
-  const [emailForm, setEmailForm] = useState({ email_smtp: 'smtp.gmail.com', email_port: '587', email_user: '', email_from: '', email_pass: '', email_to: '',
+  const [emailForm, setEmailForm] = useState({ resend_api_key: '', email_to: '',
     report_weekly_enabled: '1', report_monthly_enabled: '1', report_email_to: '', report_email_cc: '',
     report_weekly_dow: '1', report_weekly_hour: '19', report_monthly_day: '1', report_monthly_hour: '19' })
   const [emailTesting, setEmailTesting] = useState(false)
@@ -383,11 +383,7 @@ export default function Settings() {
       })
       api.network.status().then(setNetInfo).catch(() => {})
       setEmailForm({
-        email_smtp: all.email_smtp || 'smtp.gmail.com',
-        email_port: all.email_port || '587',
-        email_user: all.email_user || '',
-        email_from: all.email_from || '',
-        email_pass: all.email_pass || '',
+        resend_api_key: all.resend_api_key || '',
         email_to:   all.email_to   || '',
         report_weekly_enabled:  all.report_weekly_enabled  ?? '1',
         report_monthly_enabled: all.report_monthly_enabled ?? '1',
@@ -665,8 +661,7 @@ export default function Settings() {
 
   const testEmail = async () => {
     if (!emailForm.email_to) return toast.error('Completá el email destinatario primero')
-    if (!emailForm.email_user && !emailForm.email_from) return toast.error('Completá el usuario de Gmail primero')
-    if (!emailForm.email_pass) return toast.error('Completá la contraseña de aplicación primero')
+    if (!emailForm.resend_api_key) return toast.error('Pegá la API key de Resend primero')
     setEmailTesting(true)
     try {
       await saveEmail()
@@ -1146,24 +1141,12 @@ export default function Settings() {
         <div className="max-w-lg space-y-5">
           <p className="text-sm text-zinc-500">Al cerrar la caja se enviará automáticamente un resumen por email. También podés enviarlo manualmente desde el módulo de Caja.</p>
 
-          {/* Instrucciones Gmail */}
+          {/* Envío por Resend */}
           <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
-            <p className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Configuración para Gmail</p>
+            <p className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Envío de emails por Resend</p>
             <p className="text-xs text-blue-400 leading-relaxed">
-              Para Gmail necesitás una <strong>Contraseña de Aplicación</strong> (no la contraseña normal de tu cuenta).
+              Los emails se envían con <strong>Resend</strong> desde <span className="font-mono bg-blue-500/10 px-1 rounded">alertas@delpagestion.com.ar</span>. Solo necesitás pegar la <strong>API key</strong> de Resend acá abajo — no hace falta Gmail, contraseñas ni SMTP.
             </p>
-            <ol className="text-xs text-blue-400 space-y-0.5 list-decimal list-inside leading-relaxed">
-              <li>Activá la <strong>verificación en dos pasos</strong> en <span className="font-mono bg-blue-500/10 px-1 rounded">myaccount.google.com → Seguridad</span></li>
-              <li>En esa misma página buscá <strong>Contraseñas de aplicaciones</strong></li>
-              <li>Generá una nueva para "DELPA" → copiá las 16 letras que te da Google</li>
-              <li>Pegá esas 16 letras en el campo "Contraseña de aplicación" de abajo</li>
-            </ol>
-            <button
-              onClick={() => setGuide(EMAIL_GUIDE)}
-              className="no-drag mt-1 inline-flex items-center gap-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/25 transition-colors"
-            >
-              📧 ¿Cómo configuro el email? — Guía paso a paso
-            </button>
           </div>
 
           {/* Destinatario */}
@@ -1176,57 +1159,15 @@ export default function Settings() {
             <p className="text-xs text-zinc-600 mt-1">A esta dirección llegan los resúmenes de caja.</p>
           </div>
 
-          {/* Usuario + remitente */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Usuario Gmail <span className="text-red-400">*</span></label>
-              <input type="email" className={inputCls}
-                value={emailForm.email_user}
-                onChange={e => setEmailForm(f => ({ ...f, email_user: e.target.value }))}
-                placeholder="tucuenta@gmail.com" />
-              <p className="text-xs text-zinc-600 mt-1">Tu cuenta de Gmail para autenticación.</p>
-            </div>
-            <div>
-              <label className={labelCls}>Nombre remitente</label>
-              <input className={inputCls}
-                value={emailForm.email_from}
-                onChange={e => setEmailForm(f => ({ ...f, email_from: e.target.value }))}
-                placeholder="tucuenta@gmail.com" />
-              <p className="text-xs text-zinc-600 mt-1">Puede ser igual al usuario.</p>
-            </div>
-          </div>
-
-          {/* Contraseña */}
+          {/* API key de Resend */}
           <div>
-            <label className={labelCls}>Contraseña de aplicación <span className="text-red-400">*</span></label>
+            <label className={labelCls}>API key de Resend <span className="text-red-400">*</span></label>
             <input type="password" className={inputCls}
-              value={emailForm.email_pass}
-              onChange={e => setEmailForm(f => ({ ...f, email_pass: e.target.value }))}
-              placeholder="16 letras generadas por Google (sin espacios)" />
+              value={emailForm.resend_api_key}
+              onChange={e => setEmailForm(f => ({ ...f, resend_api_key: e.target.value }))}
+              placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxx" />
+            <p className="text-xs text-zinc-600 mt-1">Se genera en resend.com → API Keys. Se guarda solo en esta PC.</p>
           </div>
-
-          {/* SMTP avanzado */}
-          <details className="group">
-            <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300 select-none">
-              Configuración avanzada SMTP (solo si no usás Gmail)
-            </summary>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Servidor SMTP</label>
-                <input className={inputCls}
-                  value={emailForm.email_smtp}
-                  onChange={e => setEmailForm(f => ({ ...f, email_smtp: e.target.value }))}
-                  placeholder="smtp.gmail.com" />
-              </div>
-              <div>
-                <label className={labelCls}>Puerto</label>
-                <input className={inputCls}
-                  value={emailForm.email_port}
-                  onChange={e => setEmailForm(f => ({ ...f, email_port: e.target.value }))}
-                  placeholder="587" />
-              </div>
-            </div>
-          </details>
 
           {/* ── Informes automáticos ── */}
           <div className="pt-2 border-t border-border space-y-4">

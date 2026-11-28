@@ -320,24 +320,13 @@ ipcMain.handle('credits:emailStatement', async (_, { clientId }) => {
   const client = res.client
   if (!client.email) return { ok: false, noEmail: true, error: 'El cliente no tiene email cargado en su ficha.' }
 
-  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%'").all()
-  const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
-  const smtpUser = s.email_user || s.email_from
-  if (!smtpUser || !s.email_pass) return { ok: false, error: 'Configurá el email en Configuración → Email.' }
+  const { sendEmail, FROM_ADDR, emailConfigured } = require('../lib/mailer')
+  if (!emailConfigured()) return { ok: false, error: 'Configurá la API key de Resend en Ajustes → Email.' }
 
   try {
-    const nodemailer = require('nodemailer')
-    const transporter = nodemailer.createTransport({
-      host: (s.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-      port: parseInt(s.email_port || '587', 10),
-      secure: s.email_port === '465',
-      requireTLS: s.email_port !== '465',
-      auth: { user: smtpUser, pass: s.email_pass },
-      tls: { minVersion: 'TLSv1.2' },
-    })
     const biz = getBiz(db)
-    await transporter.sendMail({
-      from: `"${biz.name}" <${smtpUser}>`,
+    await sendEmail({
+      from: `"${biz.name}" <${FROM_ADDR}>`,
       to: client.email,
       subject: `Estado de cuenta — ${client.name} — ${fmtDMY(todayStr())}`,
       html: res.html,

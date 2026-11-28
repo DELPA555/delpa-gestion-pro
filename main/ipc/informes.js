@@ -34,10 +34,15 @@ function setSetting(key, value) {
     if (r.changes === 0) db.prepare('INSERT INTO settings (key,value) VALUES (?,?)').run(key, String(value))
   } catch (e) { console.error('[DELPA] setSetting', key, e.message) }
 }
+const { sendEmail, FROM_ADDR } = require('../lib/mailer')
+
 function getEmailConfig() {
   const db = getDB()
-  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%' OR key='business_name' OR key LIKE 'report_%' OR key IN ('afip_cond_fiscal','mono_categoria','iva_alicuota')").all()
-  return Object.fromEntries(rows.map(r => [r.key, r.value]))
+  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%' OR key='business_name' OR key LIKE 'report_%' OR key='resend_api_key' OR key IN ('afip_cond_fiscal','mono_categoria','iva_alicuota')").all()
+  const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
+  // v3.2.0: envío por Resend. Proxies truthy si hay API key, para los guards SMTP viejos.
+  if (s.resend_api_key) { s.email_user = s.email_user || FROM_ADDR; s.email_from = s.email_from || FROM_ADDR; s.email_pass = s.email_pass || 'resend'; s.email_host = s.email_host || 'resend' }
+  return s
 }
 
 // ── Helpers de formato ────────────────────────────────────────────────────────
@@ -680,18 +685,6 @@ function saveReport(data, html, bizName) {
 
 // ── Envío por email ───────────────────────────────────────────────────────────
 
-async function createTransporter(cfg) {
-  const nodemailer = require('nodemailer')
-  return nodemailer.createTransport({
-    host: (cfg.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-    port: parseInt(cfg.email_port || '587', 10),
-    secure: cfg.email_port === '465',
-    requireTLS: cfg.email_port !== '465',
-    auth: { user: cfg.email_user || cfg.email_from, pass: cfg.email_pass },
-    tls: { minVersion: 'TLSv1.2' },
-  })
-}
-
 async function sendReportEmail(kind, reportId, html, label) {
   const cfg = getEmailConfig()
   const user = cfg.email_user || cfg.email_from
@@ -699,9 +692,8 @@ async function sendReportEmail(kind, reportId, html, label) {
   const bizName = cfg.business_name || 'DELPA'
   const to = cfg.report_email_to || cfg.email_to || user
   const cc = (cfg.report_email_cc || '').trim()
-  const transporter = await createTransporter(cfg)
   const subject = `${kind === 'month' ? 'Informe mensual' : 'Informe semanal'} ${bizName} — ${label}`
-  await transporter.sendMail({ from: `"${bizName}" <${user}>`, to, cc: cc || undefined, subject, html })
+  await sendEmail({ from: `"${bizName}" <${FROM_ADDR}>`, to, cc: cc || undefined, subject, html })
   try {
     getDB().prepare('UPDATE saved_reports SET sent_at=CURRENT_TIMESTAMP, sent_to=? WHERE id=?')
       .run([to, cc].filter(Boolean).join(', '), reportId)

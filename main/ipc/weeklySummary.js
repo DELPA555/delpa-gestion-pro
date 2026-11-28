@@ -4,10 +4,15 @@ const TZ = 'America/Argentina/Buenos_Aires'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const { sendEmail, FROM_ADDR } = require('../lib/mailer')
+
 function getEmailConfig() {
   const db = getDB()
-  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%' OR key='business_name'").all()
-  return Object.fromEntries(rows.map(r => [r.key, r.value]))
+  const rows = db.prepare("SELECT key,value FROM settings WHERE key LIKE 'email%' OR key='business_name' OR key='resend_api_key'").all()
+  const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
+  // v3.2.0: envío por Resend. Proxies truthy si hay API key, para los guards SMTP viejos.
+  if (s.resend_api_key) { s.email_user = s.email_user || FROM_ADDR; s.email_from = s.email_from || FROM_ADDR; s.email_pass = s.email_pass || 'resend'; s.email_host = s.email_host || 'resend' }
+  return s
 }
 
 function getSetting(key) {
@@ -435,31 +440,18 @@ function gatherMonthData() {
 
 // ── Envíos ────────────────────────────────────────────────────────────────────
 
-async function createTransporter(cfg) {
-  const nodemailer = require('nodemailer')
-  return nodemailer.createTransport({
-    host: (cfg.email_smtp || 'smtp.gmail.com').replace(/^smtps?:\/\//i, '').trim(),
-    port: parseInt(cfg.email_port || '587', 10),
-    secure: cfg.email_port === '465',
-    requireTLS: cfg.email_port !== '465',
-    auth: { user: cfg.email_user || cfg.email_from, pass: cfg.email_pass },
-    tls: { minVersion: 'TLSv1.2' },
-  })
-}
-
 async function sendWeeklySummary() {
   const cfg = getEmailConfig()
   const user = cfg.email_user || cfg.email_from
   if (!user || !cfg.email_pass) return
 
-  const transporter = await createTransporter(cfg)
   const data = gatherWeekData()
   const bizName = cfg.business_name || 'DELPA'
   const html = buildWeeklyHTML(data, bizName)
   const dateStr = new Date().toLocaleDateString('es-AR', { timeZone: TZ })
 
-  await transporter.sendMail({
-    from: `"${bizName}" <${user}>`,
+  await sendEmail({
+    from: `"${bizName}" <${FROM_ADDR}>`,
     to: cfg.email_to || 'delpa555@gmail.com',
     subject: `Resumen semanal ${bizName} — ${dateStr}`,
     html,
@@ -472,7 +464,6 @@ async function sendMonthlySummary() {
   const user = cfg.email_user || cfg.email_from
   if (!user || !cfg.email_pass) return
 
-  const transporter = await createTransporter(cfg)
   const data = gatherMonthData()
   const bizName = cfg.business_name || 'DELPA'
 
@@ -483,8 +474,8 @@ async function sendMonthlySummary() {
 
   const html = buildMonthlyHTML(data, bizName, monthLabel)
 
-  await transporter.sendMail({
-    from: `"${bizName}" <${user}>`,
+  await sendEmail({
+    from: `"${bizName}" <${FROM_ADDR}>`,
     to: cfg.email_to || 'delpa555@gmail.com',
     subject: `Resumen mensual ${bizName} — ${monthLabel}`,
     html,
