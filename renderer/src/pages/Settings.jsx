@@ -240,7 +240,7 @@ export default function Settings() {
   const [sellers, setSellers] = useState([])
   const [surcharges, setSurcharges] = useState(DEFAULT_SURCHARGES)
   const [priceDisplayMode, setPriceDisplayMode] = useState('0')
-  const [emailForm, setEmailForm] = useState({ resend_api_key: '', email_to: '',
+  const [emailForm, setEmailForm] = useState({ email_to: '',
     report_weekly_enabled: '1', report_monthly_enabled: '1', report_email_to: '', report_email_cc: '',
     report_weekly_dow: '1', report_weekly_hour: '19', report_monthly_day: '1', report_monthly_hour: '19' })
   const [emailTesting, setEmailTesting] = useState(false)
@@ -384,7 +384,6 @@ export default function Settings() {
       })
       api.network.status().then(setNetInfo).catch(() => {})
       setEmailForm({
-        resend_api_key: all.resend_api_key || '',
         email_to:   all.email_to   || '',
         report_weekly_enabled:  all.report_weekly_enabled  ?? '1',
         report_monthly_enabled: all.report_monthly_enabled ?? '1',
@@ -663,7 +662,6 @@ export default function Settings() {
 
   const testEmail = async () => {
     if (!emailForm.email_to) return toast.error('Completá el email destinatario primero')
-    if (!emailForm.resend_api_key) return toast.error('Pegá la API key de Resend primero')
     setEmailTesting(true)
     try {
       await saveEmail()
@@ -1172,28 +1170,18 @@ export default function Settings() {
           <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
             <p className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Envío de emails por Resend</p>
             <p className="text-xs text-blue-400 leading-relaxed">
-              Los emails se envían con <strong>Resend</strong> desde <span className="font-mono bg-blue-500/10 px-1 rounded">alertas@delpagestion.com.ar</span>. Solo necesitás pegar la <strong>API key</strong> de Resend acá abajo — no hace falta Gmail, contraseñas ni SMTP.
+              Los emails se envían automáticamente desde <span className="font-mono bg-blue-500/10 px-1 rounded">alertas@delpagestion.com.ar</span> — no hace falta configurar Gmail, contraseñas ni SMTP. Solo indicá a qué dirección querés recibirlos.
             </p>
           </div>
 
           {/* Destinatario */}
           <div>
-            <label className={labelCls}>Email destinatario <span className="text-red-400">*</span></label>
+            <label className={labelCls}>Email para las alertas <span className="text-red-400">*</span></label>
             <input type="email" className={inputCls}
               value={emailForm.email_to}
               onChange={e => setEmailForm(f => ({ ...f, email_to: e.target.value }))}
               placeholder="donde-llegan-los-reportes@gmail.com" />
-            <p className="text-xs text-zinc-600 mt-1">A esta dirección llegan los resúmenes de caja.</p>
-          </div>
-
-          {/* API key de Resend */}
-          <div>
-            <label className={labelCls}>API key de Resend <span className="text-red-400">*</span></label>
-            <input type="password" className={inputCls}
-              value={emailForm.resend_api_key}
-              onChange={e => setEmailForm(f => ({ ...f, resend_api_key: e.target.value }))}
-              placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxx" />
-            <p className="text-xs text-zinc-600 mt-1">Se genera en resend.com → API Keys. Se guarda solo en esta PC.</p>
+            <p className="text-xs text-zinc-600 mt-1">A esta dirección llegan los resúmenes de caja y las alertas.</p>
           </div>
 
           {/* ── Informes automáticos ── */}

@@ -1,4 +1,11 @@
 {
+  "v3.3.3": {
+    "fecha": "2026-11-28",
+    "titulo": "Ajustes de configuración",
+    "novedades": [
+      "Ocultado el campo de Resend API Key en Ajustes (el cliente solo configura su email de alertas)"
+    ]
+  },
   "v3.3.2": {
     "fecha": "2026-11-28",
     "titulo": "Portal en tiempo real y zona horaria Argentina",
