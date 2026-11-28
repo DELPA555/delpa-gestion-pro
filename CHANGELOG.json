@@ -9,6 +9,16 @@
       "La alerta de diferencia de caja usa el cálculo corregido"
     ]
   },
+  "v3.2.0": {
+    "fecha": "2026-11-27",
+    "titulo": "Emails por Resend y medios de pago",
+    "novedades": [
+      "Envío de emails de clientes migrado a Resend (ya no requiere Gmail SMTP)",
+      "Configuración de email simplificada: solo se necesita la API key de Resend",
+      "Portal web: gráfico de dona con desglose de medios de pago (efectivo, tarjeta, otros)",
+      "Ping al portal incluye medios de pago del día"
+    ]
+  },
   "v3.1.0": {
     "fecha": "2026-11-27",
     "titulo": "Selector de sucursal en Stock de red",

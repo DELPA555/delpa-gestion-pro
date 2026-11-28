@@ -207,11 +207,19 @@ ${expenses && expenses.length > 0 ? `
   <div class="sr"><span>Ingresos manuales (efectivo):</span><span class="grn">+${fmt(cbk.cashManualIn)}</span></div>
   <div class="sr"><span>Gastos en efectivo:</span><span class="red">-${fmt(cbk.cashExpenses)}</span></div>
   <div class="sr"><span>Egresos manuales (efectivo):</span><span class="red">-${fmt(cbk.cashManualOut)}</span></div>
+  ${cbk.fondoCajaEnabled ? `
+  <div class="sr bold"><span>Efectivo esperado por ventas:</span><span>${fmt(expectedCash)}</span></div>
+  <div class="sr" style="margin-top:6px;border-top:1px dashed #ccc;padding-top:6px"><span>Efectivo declarado (contado):</span><span>${fmt(cbk.counted)}</span></div>
+  <div class="sr"><span>Cambio inicial (restado):</span><span class="red">-${fmt(cbk.cambioInicial)}</span></div>
+  <div class="sr bold"><span>Efectivo de ventas neto:</span><span>${fmt((cbk.counted || 0) - (cbk.cambioInicial || 0))}</span></div>
+  <div class="sr bold ${cbDiff >= 0 ? 'grn' : 'red'}">
+    <span>Diferencia:</span><span>${cbDiff === 0 ? '✓ ' : ''}${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span>
+  </div>` : `
   <div class="sr bold"><span>Efectivo esperado:</span><span>${fmt(expectedCash)}</span></div>
   <div class="sr"><span>Efectivo contado:</span><span>${fmt(cbk.counted)}</span></div>
   <div class="sr bold ${cbDiff >= 0 ? 'grn' : 'red'}">
     <span>Diferencia:</span><span>${cbDiff === 0 ? '✓ ' : ''}${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span>
-  </div>
+  </div>`}
   ${cbk.transferredToMain > 0 ? `<div class="sr" style="margin-top:8px;border-top:1px dashed #ccc;padding-top:6px"><span>Transferido a Caja Grande:</span><span class="grn">${fmt(cbk.transferredToMain)}</span></div>` : ''}
 </div>
 
@@ -293,9 +301,15 @@ function buildSummaryEmailHtml(data, biz) {
       <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Ingresos manuales (efectivo)</span><span style="color:#059669">+${fmt(cbk.cashManualIn)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Gastos en efectivo</span><span style="color:#dc2626">-${fmt(cbk.cashExpenses)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Egresos manuales (efectivo)</span><span style="color:#dc2626">-${fmt(cbk.cashManualOut)}</span></div>
+      ${cbk.fondoCajaEnabled ? `
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid #ddd;margin-top:4px;font-weight:bold"><span>Efectivo esperado por ventas</span><span>${fmt(expectedCash)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:7px 0 3px;border-top:1px dashed #ccc;margin-top:6px"><span style="color:#555">Efectivo declarado (contado)</span><span style="font-weight:bold">${fmt(cbk.counted)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Cambio inicial (restado)</span><span style="color:#dc2626">-${fmt(cbk.cambioInicial)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:3px 0;font-weight:bold"><span>Efectivo de ventas neto</span><span>${fmt((cbk.counted || 0) - (cbk.cambioInicial || 0))}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid ${cbDiff >= 0 ? '#059669' : '#dc2626'};margin-top:4px;font-weight:bold;font-size:15px;color:${cbDiff >= 0 ? '#059669' : '#dc2626'}"><span>Diferencia ${cbDiff === 0 ? '✓' : '⚠️'}</span><span>${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span></div>` : `
       <div style="display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid #ddd;margin-top:4px;font-weight:bold"><span>Efectivo esperado</span><span>${fmt(expectedCash)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#555">Efectivo contado</span><span style="font-weight:bold">${fmt(cbk.counted)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid ${cbDiff >= 0 ? '#059669' : '#dc2626'};margin-top:4px;font-weight:bold;font-size:15px;color:${cbDiff >= 0 ? '#059669' : '#dc2626'}"><span>Diferencia ${cbDiff === 0 ? '✓' : '⚠️'}</span><span>${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid ${cbDiff >= 0 ? '#059669' : '#dc2626'};margin-top:4px;font-weight:bold;font-size:15px;color:${cbDiff >= 0 ? '#059669' : '#dc2626'}"><span>Diferencia ${cbDiff === 0 ? '✓' : '⚠️'}</span><span>${cbDiff >= 0 ? '+' : ''}${fmt(cbDiff)}</span></div>`}
       ${cbk.transferredToMain > 0 ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px dashed #ccc;margin-top:6px"><span style="color:#555">Transferido a Caja Grande</span><span style="color:#059669;font-weight:bold">${fmt(cbk.transferredToMain)}</span></div>` : ''}
     </div>
 
@@ -354,6 +368,10 @@ async function sendCashboxReport(cashboxId) {
   let paymentCounts = {}
   try { paymentCounts = JSON.parse(cashbox.payment_counts_json || '{}') } catch {}
 
+  // Fondo de caja (cambio inicial): solo afecta el desglose si la función está activa.
+  const fondoCajaEnabled = db.prepare("SELECT value FROM settings WHERE key='fondo_caja_enabled'").get()?.value === '1'
+  const cambioInicial = fondoCajaEnabled ? (Number(cashbox.cambioInicial) || 0) : 0
+
   const biz = {
     business_name:    db.prepare("SELECT value FROM settings WHERE key='business_name'").get()?.value || 'DELPA',
     business_address: db.prepare("SELECT value FROM settings WHERE key='business_address'").get()?.value || '',
@@ -385,6 +403,8 @@ async function sendCashboxReport(cashboxId) {
       counted: cashbox.real_cash,
       difference: cashbox.difference,
       transferredToMain,
+      fondoCajaEnabled,
+      cambioInicial,
     },
   }
   const summaryHtml = buildSummaryEmailHtml(reportData, biz)
