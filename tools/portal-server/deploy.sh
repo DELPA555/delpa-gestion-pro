@@ -133,7 +133,7 @@ db.exec(`
   );
 `)
 // Migración: columnas de alertas en nodes (idempotente).
-for (const col of ['alertEmail TEXT', 'ventaThreshold REAL', 'alertsJson TEXT', 'ventaMaxHoy REAL', 'prevStockJson TEXT']) {
+for (const col of ['alertEmail TEXT', 'ventaThreshold REAL', 'alertsJson TEXT', 'ventaMaxHoy REAL', 'prevStockJson TEXT', 'mediosPagoJson TEXT']) {
   try { db.exec('ALTER TABLE nodes ADD COLUMN ' + col) } catch {}
 }
 
@@ -326,6 +326,26 @@ app.get('/api/:slug/red', auth, (req, res) => {
     try { units = (JSON.parse(r.stockJson || '[]')).reduce((s, p) => s + (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0), 0) } catch {}
     const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 20 * 60 * 1000) : false
     return { nombre: r.branchName || r.businessName || 'Local', online, ventasHoy: Number(r.ventasHoy) || 0, cajaHoy: Number(r.cajaHoy) || 0, unidades: units, esYo: r.slug === req.params.slug }
+  })
+  res.json({ networkCode: code, nodes })
+})
+
+// Stock COMPLETO de cada nodo de la red (para el tab "Stock por sucursal" del portal).
+// Si no hay networkCode, devuelve solo el nodo propio. Auth por PIN (igual que el resto).
+app.get('/api/:slug/red/stock', auth, (req, res) => {
+  const me = db.prepare('SELECT networkCode FROM nodes WHERE slug=?').get(req.params.slug)
+  const code = String((me && me.networkCode) || '').trim()
+  const rows = code
+    ? db.prepare('SELECT slug, businessName, branchName, stockJson, updatedAt FROM nodes WHERE networkCode=? ORDER BY branchName, businessName').all(code)
+    : db.prepare('SELECT slug, businessName, branchName, stockJson, updatedAt FROM nodes WHERE slug=?').all(req.params.slug)
+  const now = Date.now()
+  const nodes = rows.map(r => {
+    let stock = []
+    try { stock = JSON.parse(r.stockJson || '[]') } catch {}
+    const productos = stock.map(p => ({ n: p.n || '', c: p.c || '', cat: p.cat || '', total: (p.s || []).reduce((a, x) => a + (Number(x[1]) || 0), 0) }))
+    const unidades = productos.reduce((a, p) => a + p.total, 0)
+    const online = r.updatedAt ? (now - new Date(r.updatedAt).getTime() < 20 * 60 * 1000) : false
+    return { slug: r.slug, nombre: r.branchName || r.businessName || 'Local', online, unidades, esYo: r.slug === req.params.slug, productos }
   })
   res.json({ networkCode: code, nodes })
 })
@@ -665,31 +685,49 @@ function PORTAL_HTML(slug, businessName, hasNet) {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>${biz} — Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0b0b0f;--card:#15151c;--bd:#26262f;--tx:#e7e7ea;--mut:#8a8a94;--acc:#6366f1;--ok:#22c55e;--rd:#ef4444}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
-  .wrap{max-width:720px;margin:0 auto;padding:16px}
+  :root{--bg:#0f0f0f;--card:#17171a;--bd:#262629;--tx:#e8e8ea;--mut:#8a8a94;--acc:#22c55e;--rd:#ef4444;--am:#f59e0b}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 Inter,system-ui,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:16px}
   .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
-  h1{font-size:18px;margin:0 0 2px} h2{font-size:14px;color:var(--mut);margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em}
-  input{width:100%;background:#0e0e14;border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-size:16px}
-  button{background:var(--acc);border:0;color:#fff;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;width:100%}
-  button.sec{background:#20202a}
-  .tabs{display:flex;gap:6px;margin-bottom:12px}
-  .tabs button{background:#16161d;border:1px solid var(--bd);color:var(--mut);font-weight:500}
-  .tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
-  .kpi{display:flex;gap:10px;flex-wrap:wrap}
-  .kpi .b{flex:1;min-width:120px;background:#0e0e14;border:1px solid var(--bd);border-radius:12px;padding:12px}
-  .kpi .n{font-size:22px;font-weight:700} .kpi .l{color:var(--mut);font-size:12px}
-  .row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
-  .row:last-child{border:0} .mut{color:var(--mut)} .neg{color:var(--rd)}
+  h1{font-size:18px;margin:0 0 2px} h2{font-size:12px;color:var(--mut);margin:0 0 12px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  input{width:100%;background:#0b0b0d;border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-size:16px;font-family:inherit}
+  button{background:var(--acc);border:0;color:#05140b;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;width:100%;font-family:inherit}
+  button.sec{background:#222228;color:var(--tx)}
+  .logo{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:20px;letter-spacing:.01em}
+  .logo .dot{width:11px;height:11px;border-radius:3px;background:var(--acc);box-shadow:0 0 12px rgba(34,197,94,.6)}
+  .tabs{display:flex;gap:6px;margin-bottom:14px}
+  .tabs button{flex:1;min-width:0;padding:10px 6px;background:#141417;border:1px solid var(--bd);color:var(--mut);font-weight:500;font-size:14px}
+  .tabs button.on{background:var(--acc);color:#05140b;border-color:var(--acc)}
+  .kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+  .kpis .b{flex:1;min-width:150px;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px}
+  .kpis .ic{font-size:17px;line-height:1} .kpis .n{font-size:21px;font-weight:700;margin-top:7px} .kpis .l{color:var(--mut);font-size:12px;margin-top:3px}
+  .row{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--bd);font-size:14px}
+  .row:last-child{border:0} .mut{color:var(--mut)} .neg{color:var(--rd)} .r{text-align:right}
+  .tb{width:100%;border-collapse:collapse;font-size:14px}
+  .tb th{text-align:left;color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px;border-bottom:1px solid var(--bd);white-space:nowrap}
+  .tb td{padding:10px 8px;border-bottom:1px solid var(--bd)}
+  .tb tr:last-child td{border-bottom:0}
+  .tb tr.me td{background:rgba(34,197,94,.08)}
+  .bd{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;font-weight:600;white-space:nowrap}
+  .bd.rd{background:rgba(239,68,68,.16);color:#fca5a5} .bd.am{background:rgba(245,158,11,.16);color:#fcd34d}
+  .bd.ok{background:rgba(34,197,94,.16);color:#86efac} .bd.of{background:#26262c;color:var(--mut)}
+  .dotg{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;background:var(--acc)}
+  .dotx{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;background:#555}
+  .br{border:1px solid var(--bd);border-radius:12px;margin-bottom:8px;overflow:hidden}
+  .brh{display:flex;justify-content:space-between;align-items:center;background:#131316;color:var(--tx);font-weight:500;text-align:left;border-radius:0}
+  .brb{padding:2px 14px 10px}
+  .tfoot{display:flex;justify-content:space-between;padding-top:12px;margin-top:4px;border-top:1px solid var(--bd);font-weight:600}
   .err{color:var(--rd);font-size:13px;margin-top:8px;min-height:18px}
   .hide{display:none}
   canvas{max-width:100%}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script></head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script></head>
 <body><div class="wrap">
-  <div id="login" class="card">
-    <h1>${biz}</h1>
+  <div id="login" class="card" style="max-width:380px;margin:48px auto">
+    <div class="logo" style="margin-bottom:16px"><span class="dot"></span> DELPA</div>
     <p class="mut" style="margin:0 0 14px">Ingresá el PIN para ver tu negocio.</p>
     <input id="pin" type="password" inputmode="numeric" placeholder="PIN" autocomplete="off">
     <div class="err" id="loginErr"></div>
@@ -697,18 +735,33 @@ function PORTAL_HTML(slug, businessName, hasNet) {
   </div>
   <div id="app" class="hide">
     <div class="card" style="display:flex;justify-content:space-between;align-items:center">
-      <div><h1 id="biz" style="margin:0">${biz}</h1><span class="mut" style="font-size:12px">Solo lectura</span></div>
+      <div><div class="logo" style="font-size:16px"><span class="dot"></span> ${biz}</div><span class="mut" style="font-size:12px">Portal · solo lectura</span></div>
       <button class="sec" style="width:auto;padding:8px 12px" id="btnOut">Salir</button>
     </div>
-    <div class="tabs"><button data-t="dash" class="on">Resumen</button><button data-t="stock">Stock</button>${hasNet ? '<button data-t="red">Mi Red</button>' : ''}</div>
+    <div class="tabs">
+      <button data-t="hoy" class="on">Hoy</button>
+      <button data-t="stock">Stock</button>
+      <button data-t="red">Red</button>
+      <button data-t="historia">Historia</button>
+    </div>
     <div id="view"></div>
   </div>
 </div>
 <script>
   var SLUG=${JSON.stringify(slug)}, token='';
-  function api(p){return fetch('/api/'+SLUG+p,{headers:{Authorization:'Bearer '+token}}).then(function(r){if(!r.ok)throw 0;return r.json()})}
-  function money(n){return '$'+(Number(n)||0).toLocaleString('es-AR')}
+  var fmt=new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});
+  function money(n){return fmt.format(Number(n)||0)}
   function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+  function api(p){return fetch('/api/'+SLUG+p,{headers:{Authorization:'Bearer '+token}}).then(function(r){if(!r.ok)throw 0;return r.json()})}
+  function ago(ts){ if(!ts) return '—'; var m=Math.floor((Date.now()-new Date(ts).getTime())/60000); if(m<1)return 'recién'; if(m<60)return 'hace '+m+' min'; var h=Math.floor(m/60); if(h<24)return 'hace '+h+' h'; return 'hace '+Math.floor(h/24)+' d'; }
+  var charts=[];
+  function clearCharts(){ charts.forEach(function(c){try{c.destroy()}catch(e){}}); charts=[]; }
+  function mkChart(id,type,labels,datasets,pesos){
+    var el=document.getElementById(id); if(!el||typeof Chart==='undefined') return;
+    var yTicks={color:'#8a8a94'}; if(pesos){ yTicks.callback=function(v){return money(v)}; }
+    charts.push(new Chart(el,{type:type,data:{labels:labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8a8a94'},grid:{color:'#1f1f27'}},y:{beginAtZero:true,ticks:yTicks,grid:{color:'#1f1f27'}}}}}));
+  }
+  // ── Login ──
   document.getElementById('btnLogin').onclick=login;
   document.getElementById('pin').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
   function login(){
@@ -716,69 +769,91 @@ function PORTAL_HTML(slug, businessName, hasNet) {
     fetch('/api/'+SLUG+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:pin})})
       .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})
       .then(function(x){ if(!x.ok){document.getElementById('loginErr').textContent=x.j.error||'Error';return}
-        token=x.j.token; document.getElementById('login').classList.add('hide'); document.getElementById('app').classList.remove('hide'); show('dash'); })
+        token=x.j.token; document.getElementById('login').classList.add('hide'); document.getElementById('app').classList.remove('hide'); show('hoy'); })
       .catch(function(){document.getElementById('loginErr').textContent='No se pudo conectar'});
   }
   document.getElementById('btnOut').onclick=function(){token='';location.reload()};
   Array.prototype.forEach.call(document.querySelectorAll('.tabs button'),function(b){ b.onclick=function(){
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'),function(x){x.classList.remove('on')}); b.classList.add('on'); show(b.getAttribute('data-t')); }; });
-  function show(t){ var v=document.getElementById('view'); v.innerHTML='<p class="mut">Cargando…</p>';
-    if(t==='dash') api('/status').then(renderDash).catch(fail);
-    if(t==='stock') renderStock();
-    if(t==='red') api('/red').then(renderRed).catch(fail); }
-  function renderRed(d){ var ns=d.nodes||[];
-    if(!ns.length){document.getElementById('view').innerHTML='<div class="card mut">Todavía no hay locales reportando en tu red.</div>';return}
-    var tv=ns.reduce(function(s,n){return s+(Number(n.ventasHoy)||0)},0), tc=ns.reduce(function(s,n){return s+(Number(n.cajaHoy)||0)},0);
-    var rows=ns.map(function(n){ var dot=n.online?'<span style="color:var(--ok)">●</span>':'<span style="color:var(--mut)">●</span>';
-      return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>'+esc(n.nombre)+'</b>'+(n.esYo?' <span class="mut" style="font-size:11px">(este local)</span>':'')+'</div><div style="font-size:12px">'+dot+' '+(n.online?'Online':'Offline')+'</div></div>'+
-        '<div class="kpi" style="margin-top:10px"><div class="b"><div class="n">'+money(n.ventasHoy)+'</div><div class="l">Ventas hoy</div></div><div class="b"><div class="n">'+money(n.cajaHoy)+'</div><div class="l">Caja</div></div><div class="b"><div class="n">'+n.unidades+'</div><div class="l">Unid. en stock</div></div></div></div>'; }).join('');
-    document.getElementById('view').innerHTML='<div class="card"><h2>Total de la red</h2><div class="kpi"><div class="b"><div class="n">'+money(tv)+'</div><div class="l">Ventas hoy</div></div><div class="b"><div class="n">'+money(tc)+'</div><div class="l">Caja</div></div><div class="b"><div class="n">'+ns.length+'</div><div class="l">Locales</div></div></div></div>'+rows; }
   function fail(){document.getElementById('view').innerHTML='<p class="neg">No se pudo cargar.</p>'}
-  function renderDash(d){ document.getElementById('view').innerHTML=
-    '<div class="card"><h2>Hoy</h2><div class="kpi">'+
-    '<div class="b"><div class="n">'+money(d.ventasHoy)+'</div><div class="l">Ventas del día</div></div>'+
-    '<div class="b"><div class="n">'+money(d.cajaHoy)+'</div><div class="l">Caja (efectivo)</div></div>'+
-    '</div></div>'+
-    '<div class="card"><h2>Ventas — últimos 7 días</h2><canvas id="cV" height="150"></canvas></div>'+
-    '<div class="card"><h2>Stock total — últimos 30 días</h2><canvas id="cS" height="150"></canvas></div>'+
-    '<div id="cRedWrap"></div>'+
-    '<button class="sec" id="btnCsv" style="width:auto;padding:10px 16px">⬇ Exportar a Excel (CSV)</button>'+
-    '<div class="card mut" style="font-size:12px;margin-top:14px">Último dato recibido: '+(d.updatedAt?new Date(d.updatedAt).toLocaleString('es-AR'):'—')+(d.branchName?(' · '+esc(d.branchName)):'')+'</div>';
-    loadCharts(); }
-  var charts=[];
-  function chartOpts(){ return {responsive:true,plugins:{legend:{labels:{color:'#8a8a94'}}},scales:{x:{ticks:{color:'#8a8a94'},grid:{color:'#26262f'}},y:{ticks:{color:'#8a8a94'},grid:{color:'#26262f'},beginAtZero:true}}}; }
-  function loadCharts(){
-    charts.forEach(function(c){try{c.destroy()}catch(e){}}); charts=[];
-    if(typeof Chart==='undefined') return;
+  function show(t){ clearCharts(); var v=document.getElementById('view'); v.innerHTML='<p class="mut">Cargando…</p>';
+    if(t==='hoy') Promise.all([api('/status'),api('/stock')]).then(function(a){renderHoy(a[0],a[1])}).catch(fail);
+    if(t==='stock') renderStock();
+    if(t==='red') api('/red').then(renderRed).catch(fail);
+    if(t==='historia') api('/historia?dias=30').then(renderHistoria).catch(fail); }
+  // ── TAB HOY ──
+  function kpi(ic,label,val){ return '<div class="b"><div class="ic">'+ic+'</div><div class="n">'+val+'</div><div class="l">'+label+'</div></div>'; }
+  function renderHoy(st,stk){
+    var conStock=(stk.productos||[]).filter(function(p){return (Number(p.total)||0)>0}).length;
+    document.getElementById('view').innerHTML=
+      '<div class="kpis">'+
+      kpi('💰','Ventas del día',money(st.ventasHoy))+
+      kpi('💵','Efectivo en caja',money(st.cajaHoy))+
+      kpi('📦','Productos con stock',conStock)+
+      kpi('🕐','Última actualización',ago(st.updatedAt))+
+      '</div>'+
+      '<div class="card"><h2>Ventas — últimos 7 días</h2><div style="height:200px"><canvas id="cV"></canvas></div></div>';
     api('/historia?dias=30').then(function(d){
-      var h=d.historia||[]; window.__hist=h;
-      var last7=h.slice(-7);
-      charts.push(new Chart(document.getElementById('cV'),{type:'bar',data:{labels:last7.map(function(x){return x.fecha.slice(5)}),datasets:[{label:'Ventas $',data:last7.map(function(x){return x.ventasHoy}),backgroundColor:'#6366f1'}]},options:chartOpts()}));
-      charts.push(new Chart(document.getElementById('cS'),{type:'line',data:{labels:h.map(function(x){return x.fecha.slice(5)}),datasets:[{label:'Unidades',data:h.map(function(x){return x.stockTotal}),borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.15)',tension:.3,fill:true}]},options:chartOpts()}));
-      if((d.red||[]).length){
-        document.getElementById('cRedWrap').innerHTML='<div class="card"><h2>Ventas por sucursal — 7 días</h2><canvas id="cR" height="170"></canvas></div>';
-        var fechas={}; (d.red||[]).forEach(function(loc){(loc.ventas||[]).forEach(function(v){fechas[v.fecha]=1})});
-        var labels=Object.keys(fechas).sort();
-        var palette=['#6366f1','#22c55e','#f59e0b','#ef4444','#06b6d4','#a855f7','#ec4899'];
-        var ds=(d.red||[]).map(function(loc,i){var m={};(loc.ventas||[]).forEach(function(v){m[v.fecha]=v.ventasHoy});return {label:loc.nombre,data:labels.map(function(f){return m[f]||0}),backgroundColor:palette[i%palette.length]};});
-        charts.push(new Chart(document.getElementById('cR'),{type:'bar',data:{labels:labels.map(function(f){return f.slice(5)}),datasets:ds},options:chartOpts()}));
-      }
-      document.getElementById('btnCsv').onclick=function(){exportCsv(window.__hist||[])};
+      var h=(d.historia||[]).slice(-7);
+      mkChart('cV','bar',h.map(function(x){return x.fecha.slice(5)}),[{label:'Ventas',data:h.map(function(x){return Number(x.ventasHoy)||0}),backgroundColor:'#22c55e',borderRadius:6}],true);
     }).catch(function(){});
   }
-  function exportCsv(h){
-    var rows=[['Fecha','Ventas','Caja','Stock total']].concat(h.map(function(x){return [x.fecha,x.ventasHoy,x.cajaHoy,x.stockTotal]}));
-    var csv=rows.map(function(r){return r.join(',')}).join('\\n');
-    var a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
-    a.download='historial-'+SLUG+'.csv'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
+  // ── TAB STOCK ──
+  function keyOf(p){ return (p.n||'').toLowerCase()+'|'+(p.c||'').toLowerCase(); }
+  function renderStock(){
+    document.getElementById('view').innerHTML=
+      '<div class="card"><h2>Stock unificado (toda la red)</h2><input id="sq" placeholder="Buscar producto…"><div id="sl" style="margin-top:12px"><p class="mut">Cargando…</p></div></div>'+
+      '<div class="card"><h2>Stock por sucursal</h2><div id="bl"><p class="mut">Cargando…</p></div></div>';
+    api('/red/stock').then(function(d){
+      window.__rs=d.nodes||[]; buildUnified(); buildBranches(window.__rs);
+      var inp=document.getElementById('sq'),tmr; inp.addEventListener('input',function(){clearTimeout(tmr);tmr=setTimeout(buildUnified,200)});
+    }).catch(function(){document.getElementById('sl').innerHTML='<p class="neg">Error.</p>';document.getElementById('bl').innerHTML='';});
   }
-  function renderStock(){ document.getElementById('view').innerHTML='<div class="card"><input id="sq" placeholder="Buscar producto…"><div id="sl" style="margin-top:10px"></div></div>';
-    var inp=document.getElementById('sq'),tmr; inp.addEventListener('input',function(){clearTimeout(tmr);tmr=setTimeout(loadStock,250)}); loadStock(); }
-  function loadStock(){ var q=(document.getElementById('sq')||{}).value||''; document.getElementById('sl').innerHTML='<p class="mut">Cargando…</p>';
-    api('/stock?q='+encodeURIComponent(q)).then(function(d){ document.getElementById('sl').innerHTML=(d.productos||[]).map(function(p){
-      return '<div class="row"><span>'+esc(p.n)+(p.c?' <span class="mut">'+esc(p.c)+'</span>':'')+'</span><span'+(p.total>0?'':' class="neg"')+'>'+p.total+'</span></div>'; }).join('')||'<p class="mut">Sin resultados.</p>'; })
-      .catch(function(){document.getElementById('sl').innerHTML='<p class="neg">Error.</p>'}); }
+  function buildUnified(){
+    var nodes=window.__rs||[]; var q=((document.getElementById('sq')||{}).value||'').toLowerCase().trim();
+    var map={};
+    nodes.forEach(function(nd){ (nd.productos||[]).forEach(function(p){ var k=keyOf(p); if(!map[k])map[k]={n:p.n,c:p.c,cat:p.cat,total:0}; map[k].total+=Number(p.total)||0; }); });
+    var list=Object.keys(map).map(function(k){return map[k]}).filter(function(p){ return !q || (p.n||'').toLowerCase().indexOf(q)>=0 || (p.cat||'').toLowerCase().indexOf(q)>=0; });
+    list.sort(function(a,b){return (a.n||'').localeCompare(b.n||'')});
+    var rows=list.map(function(p){
+      var badge=''; if(p.total===0)badge=' <span class="bd rd">Sin stock</span>'; else if(p.total<=3)badge=' <span class="bd am">Crítico</span>';
+      return '<tr><td>'+esc(p.n)+(p.c?' <span class="mut">'+esc(p.c)+'</span>':'')+'</td><td class="mut">'+esc(p.cat||'—')+'</td><td class="r">'+p.total+badge+'</td></tr>';
+    }).join('');
+    document.getElementById('sl').innerHTML=rows?('<table class="tb"><thead><tr><th>Producto</th><th>Categoría</th><th class="r">Total</th></tr></thead><tbody>'+rows+'</tbody></table>'):'<p class="mut">Sin resultados.</p>';
+  }
+  function buildBranches(nodes){
+    if(!nodes.length){document.getElementById('bl').innerHTML='<p class="mut">Sin sucursales.</p>';return}
+    var html=nodes.map(function(nd,i){
+      var dot=nd.online?'<span class="dotg"></span>':'<span class="dotx"></span>';
+      var prods=(nd.productos||[]).slice().sort(function(a,b){return (Number(b.total)||0)-(Number(a.total)||0)});
+      var inner=prods.map(function(p){ return '<div class="row"><span>'+esc(p.n)+(p.c?' <span class="mut">'+esc(p.c)+'</span>':'')+'</span><span'+((Number(p.total)||0)>0?'':' class="neg"')+'>'+p.total+'</span></div>'; }).join('')||'<p class="mut">Sin stock.</p>';
+      return '<div class="br"><button class="brh" data-i="'+i+'"><span>'+dot+'<b>'+esc(nd.nombre)+'</b>'+(nd.esYo?' <span class="mut" style="font-size:11px">(este)</span>':'')+'</span><span class="mut">'+nd.unidades+' u. ▾</span></button><div class="brb hide" id="brb'+i+'">'+inner+'</div></div>';
+    }).join('');
+    document.getElementById('bl').innerHTML=html;
+    Array.prototype.forEach.call(document.querySelectorAll('.brh'),function(b){ b.onclick=function(){ document.getElementById('brb'+b.getAttribute('data-i')).classList.toggle('hide'); }; });
+  }
+  // ── TAB RED ──
+  function renderRed(d){
+    var ns=d.nodes||[];
+    if(!ns.length){document.getElementById('view').innerHTML='<div class="card mut">Todavía no hay locales reportando en tu red.</div>';return}
+    var tv=0,tc=0;
+    var rows=ns.map(function(n){
+      tv+=Number(n.ventasHoy)||0; tc+=Number(n.cajaHoy)||0;
+      var badge=n.online?'<span class="bd ok">EN LÍNEA</span>':'<span class="bd of">OFFLINE</span>';
+      return '<tr class="'+(n.esYo?'me':'')+'"><td>'+esc(n.nombre)+(n.esYo?' <span class="mut" style="font-size:11px">(vos)</span>':'')+'</td><td>'+badge+'</td><td class="r">'+money(n.ventasHoy)+'</td><td class="r">'+money(n.cajaHoy)+'</td><td class="r">'+(n.unidades||0)+'</td></tr>';
+    }).join('');
+    document.getElementById('view').innerHTML='<div class="card"><h2>Sucursales de la red</h2><div style="overflow-x:auto"><table class="tb"><thead><tr><th>Sucursal</th><th>Estado</th><th class="r">Ventas hoy</th><th class="r">Efectivo</th><th class="r">Unidades</th></tr></thead><tbody>'+rows+'</tbody></table></div><div class="tfoot"><span>Total de la red ('+ns.length+')</span><span>'+money(tv)+' · '+money(tc)+'</span></div></div>';
+  }
+  // ── TAB HISTORIA ──
+  function renderHistoria(d){
+    var h=d.historia||[];
+    document.getElementById('view').innerHTML=
+      '<div class="card"><h2>Ventas — últimos 30 días</h2><div style="height:220px"><canvas id="cH"></canvas></div></div>'+
+      '<div class="card"><h2>Detalle diario</h2><div style="overflow-x:auto"><table class="tb"><thead><tr><th>Fecha</th><th class="r">Ventas</th><th class="r">Caja</th><th class="r">Stock</th></tr></thead><tbody>'+
+      (h.slice().reverse().map(function(x){return '<tr><td>'+esc(x.fecha)+'</td><td class="r">'+money(x.ventasHoy)+'</td><td class="r">'+money(x.cajaHoy)+'</td><td class="r">'+(x.stockTotal||0)+'</td></tr>'}).join('')||'<tr><td colspan="4" class="mut">Sin datos todavía.</td></tr>')+
+      '</tbody></table></div></div>';
+    mkChart('cH','line',h.map(function(x){return x.fecha.slice(5)}),[{label:'Ventas',data:h.map(function(x){return Number(x.ventasHoy)||0}),borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.15)',tension:.3,fill:true,pointRadius:2}],true);
+  }
 </script></body></html>`
 }
 SERVER
