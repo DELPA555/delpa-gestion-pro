@@ -100,6 +100,7 @@ export default function Sucursales() {
   const [netCategory, setNetCategory] = useState('')
   const [netExpanded, setNetExpanded] = useState(null)  // product key
   const [netSyncing, setNetSyncing] = useState(false)
+  const [selectedNodeHwid, setSelectedNodeHwid] = useState(null)  // nodo seleccionado → filtra la vista
 
   const loadNetwork = useCallback(async () => {
     setNetLoading(true); setNetError(null)
@@ -136,6 +137,20 @@ export default function Sucursales() {
     return p.name.toLowerCase().includes(q) || p.color.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)
   })
   const netNodes = netData?.nodes || []
+
+  // Totales por nodo y total de red (para el resumen y el filtro por sucursal).
+  const nodeTotals = {}
+  for (const n of netNodes) nodeTotals[n.hwid] = 0
+  for (const p of netProducts) for (const n of netNodes) {
+    const m = p.perNode[n.hwid] || {}
+    for (const s in m) nodeTotals[n.hwid] += Number(m[s]) || 0
+  }
+  const networkTotal = netProducts.reduce((a, p) => a + p.total, 0)
+  // Nodo seleccionado (si ya no está en la data tras recargar, se trata como sin selección).
+  const selectedNode = selectedNodeHwid ? netNodes.find(n => n.hwid === selectedNodeHwid) : null
+  const singleNodeProducts = selectedNode
+    ? netFiltered.filter(p => Object.values(p.perNode[selectedNode.hwid] || {}).some(q => (Number(q) || 0) > 0))
+    : netFiltered
 
   const loadSucursales = useCallback(async () => {
     setLoading(true)
@@ -291,15 +306,46 @@ export default function Sucursales() {
                 const st = nodeStatus(n.updatedAt)
                 const Icon = NODE_ICON[n.branchType] || Store
                 const isThis = n.hwid === netData?.thisHwid
+                const isSel = n.hwid === selectedNodeHwid
                 return (
-                  <div key={n.hwid} className={cn('flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm',
-                    isThis ? 'border-accent/50 bg-accent/[0.06]' : 'border-border bg-card')}>
+                  <button key={n.hwid} type="button"
+                    onClick={() => setSelectedNodeHwid(h => h === n.hwid ? null : n.hwid)}
+                    title={isSel ? 'Quitar el filtro' : 'Ver solo el stock de ' + (n.branchName || 'esta sucursal')}
+                    className={cn('no-drag cursor-pointer flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors',
+                      isSel ? 'border-accent bg-accent/15 ring-1 ring-accent/40'
+                        : isThis ? 'border-accent/50 bg-accent/[0.06] hover:bg-accent/[0.1]'
+                        : 'border-border bg-card hover:bg-white/[0.05]')}>
                     <span className={cn('w-2 h-2 rounded-full', st.dot)} />
                     <Icon size={13} className="text-zinc-400" />
                     <span className="text-white">{n.branchName || 'Sin nombre'}</span>
                     {isThis && <span className="text-[10px] text-accent uppercase tracking-wider">este</span>}
                     <span className={cn('text-xs', st.tone)}>· {st.text}</span>
-                  </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Resumen de stock de la red (total + por nodo). Las cards por nodo también filtran. */}
+          {!netLoading && !netError && netProducts.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <div className="px-4 py-2 rounded-xl border border-accent/40 bg-accent/[0.08]">
+                <p className="text-[11px] text-zinc-400 uppercase tracking-wider">Total red</p>
+                <p className="text-lg font-semibold text-accent tabular-nums">{networkTotal} <span className="text-xs text-zinc-500 font-normal">unidades</span></p>
+              </div>
+              {netNodes.map(n => {
+                const isSel = n.hwid === selectedNodeHwid
+                const Icon = NODE_ICON[n.branchType] || Store
+                return (
+                  <button key={n.hwid} type="button"
+                    onClick={() => setSelectedNodeHwid(h => h === n.hwid ? null : n.hwid)}
+                    className={cn('no-drag cursor-pointer text-left px-4 py-2 rounded-xl border transition-colors',
+                      isSel ? 'border-accent bg-accent/15 ring-1 ring-accent/40' : 'border-border bg-card hover:bg-white/[0.05]')}>
+                    <p className="text-[11px] text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                      <Icon size={11} className="text-zinc-500" />{n.branchName || 'Sin nombre'}
+                    </p>
+                    <p className="text-lg font-semibold text-white tabular-nums">{nodeTotals[n.hwid] || 0} <span className="text-xs text-zinc-500 font-normal">u.</span></p>
+                  </button>
                 )
               })}
             </div>
@@ -322,11 +368,56 @@ export default function Sucursales() {
               subtitle="Cuando las sucursales suban su stock (cada 15 min), vas a ver acá el inventario unificado. Tocá 'Subir mi stock' para enviar el de este nodo ahora." />
           ) : (
             <>
-              <p className="text-xs text-zinc-500">
-                {netFiltered.length} producto{netFiltered.length !== 1 ? 's' : ''} · {netNodes.length} nodo{netNodes.length !== 1 ? 's' : ''} en la red
-                {netStatus?.lastSyncAt && <> · tu último envío: {formatDateTime(netStatus.lastSyncAt)}</>}
-              </p>
-              <div className="space-y-2">
+              {selectedNode ? (
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    📦 Stock de {selectedNode.branchName || 'sucursal'}
+                    <span className="text-xs text-zinc-500 font-normal">· {nodeTotals[selectedNode.hwid] || 0} unidades</span>
+                  </h3>
+                  <button onClick={() => setSelectedNodeHwid(null)}
+                    className="no-drag text-xs px-3 py-1.5 rounded-lg border border-border text-zinc-300 hover:text-white hover:bg-white/[0.05]">
+                    ← Ver toda la red
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500">
+                  {netFiltered.length} producto{netFiltered.length !== 1 ? 's' : ''} · {netNodes.length} nodo{netNodes.length !== 1 ? 's' : ''} en la red
+                  {netStatus?.lastSyncAt && <> · tu último envío: {formatDateTime(netStatus.lastSyncAt)}</>}
+                </p>
+              )}
+
+              {selectedNode ? (
+                <div className="space-y-2">
+                  {singleNodeProducts.map(p => {
+                    const m = p.perNode[selectedNode.hwid] || {}
+                    const nodeTotal = p.sizeList.reduce((a, s) => a + (m[s] || 0), 0)
+                    const sizesWithStock = p.sizeList.filter(s => (m[s] || 0) > 0)
+                    return (
+                      <div key={p.key} className="bg-card border border-border rounded-xl px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-white">{p.name}</span>
+                            {p.color && <span className="text-zinc-500 ml-2 text-xs">{p.color}</span>}
+                            {p.category && <span className="text-zinc-600 ml-2 text-xs">· {p.category}</span>}
+                          </div>
+                          <span className="text-accent font-semibold tabular-nums shrink-0">{nodeTotal}</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {sizesWithStock.map(s => {
+                            const q = m[s] || 0
+                            const tone = q <= 2 ? 'text-amber-400 border-amber-500/30' : 'text-emerald-400 border-emerald-500/30'
+                            return <span key={s} className={cn('text-xs px-2 py-0.5 rounded border tabular-nums', tone)}>{s}: {q}</span>
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {singleNodeProducts.length === 0 && (
+                    <EmptyState icon={Search} title="Sin stock en esta sucursal" subtitle="Este nodo no tiene productos con stock que coincidan con el filtro actual" />
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
                 {netFiltered.map(p => {
                   const open = netExpanded === p.key
                   return (
@@ -392,7 +483,8 @@ export default function Sucursales() {
                 {netFiltered.length === 0 && (
                   <EmptyState icon={Search} title="Sin resultados" subtitle="Probá con otro nombre o categoría" />
                 )}
-              </div>
+                </div>
+              )}
             </>
           )}
         </div>
